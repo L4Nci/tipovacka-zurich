@@ -266,47 +266,49 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
         {!isFinished && (
           <div className="flex flex-col gap-3">
-            <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-around gap-2">
-              <div className="flex flex-col items-center gap-2">
-                <button 
-                  onClick={() => setHome(h => Math.max(0, h + 1))}
-                  disabled={isLocked}
-                  className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm active:scale-90 disabled:opacity-50"
-                >
-                  <ChevronUp className="w-5 h-5 text-slate-600" />
-                </button>
-                <div className="w-16 h-16 bg-white rounded-2xl border-2 border-slate-100 flex items-center justify-center text-3xl font-black text-slate-900 shadow-sm">
-                  {home}
+            <div className="bg-slate-50 rounded-2xl p-3 flex flex-col items-center justify-center">
+              <div className="flex items-center justify-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <button 
+                    onClick={() => setHome(h => Math.max(0, h - 1))}
+                    disabled={isLocked}
+                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    <ChevronDown className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <div className="w-10 h-10 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-2xl font-black text-slate-900 shadow-sm">
+                    {home}
+                  </div>
+                  <button 
+                    onClick={() => setHome(h => Math.max(0, h + 1))}
+                    disabled={isLocked}
+                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    <ChevronUp className="w-4 h-4 text-slate-600" />
+                  </button>
                 </div>
-                <button 
-                  onClick={() => setHome(h => Math.max(0, h - 1))}
-                  disabled={isLocked}
-                  className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm active:scale-90 disabled:opacity-50"
-                >
-                  <ChevronDown className="w-5 h-5 text-slate-600" />
-                </button>
-              </div>
 
-              <span className="text-slate-300 font-black text-3xl mb-8">:</span>
+                <span className="text-slate-300 font-black text-xl">:</span>
 
-              <div className="flex flex-col items-center gap-2">
-                <button 
-                  onClick={() => setAway(h => Math.max(0, h + 1))}
-                  disabled={isLocked}
-                  className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm active:scale-90 disabled:opacity-50"
-                >
-                  <ChevronUp className="w-5 h-5 text-slate-600" />
-                </button>
-                <div className="w-16 h-16 bg-white rounded-2xl border-2 border-slate-100 flex items-center justify-center text-3xl font-black text-slate-900 shadow-sm">
-                  {away}
+                <div className="flex items-center gap-1.5">
+                  <button 
+                    onClick={() => setAway(h => Math.max(0, h - 1))}
+                    disabled={isLocked}
+                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    <ChevronDown className="w-4 h-4 text-slate-600" />
+                  </button>
+                  <div className="w-10 h-10 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-2xl font-black text-slate-900 shadow-sm">
+                    {away}
+                  </div>
+                  <button 
+                    onClick={() => setAway(h => Math.max(0, h + 1))}
+                    disabled={isLocked}
+                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    <ChevronUp className="w-4 h-4 text-slate-600" />
+                  </button>
                 </div>
-                <button 
-                  onClick={() => setAway(h => Math.max(0, h - 1))}
-                  disabled={isLocked}
-                  className="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-sm active:scale-90 disabled:opacity-50"
-                >
-                  <ChevronDown className="w-5 h-5 text-slate-600" />
-                </button>
               </div>
             </div>
             
@@ -477,6 +479,9 @@ export default function App() {
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
+  const [adminMatchFilter, setAdminMatchFilter] = useState<'scheduled' | 'finished'>('scheduled');
+  const [adminGroupFilter, setAdminGroupFilter] = useState<'all' | 'A' | 'B' | 'playoffs'>('all');
+  const [showCreatePlayer, setShowCreatePlayer] = useState(false);
   const [newUserData, setNewUserData] = useState({ username: '', password: '' });
   const [createUserMsg, setCreateUserMsg] = useState('');
 
@@ -990,52 +995,112 @@ export default function App() {
                  <ShieldCheck className="w-4 h-4" /> {t.adminControls}
               </h2>
 
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-8">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
-                   <UserPlus className="w-4 h-4" /> {t.createUser}
-                 </h3>
-                 <form onSubmit={handleAdminCreateUser} className="space-y-3">
-                   <div>
-                     <input 
-                       type="text"
-                       required
-                       placeholder={t.newUsername}
-                       value={newUserData.username}
-                       onChange={e => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
-                       className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600"
-                     />
-                   </div>
-                   <div>
-                     <input 
-                       type="password"
-                       required
-                       placeholder={t.newPassword}
-                       value={newUserData.password}
-                       onChange={e => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
-                       className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600"
-                     />
-                   </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-8 overflow-hidden">
+                 <div className="flex items-center justify-between mb-4">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
+                     <UserPlus className="w-4 h-4" /> {t.createUser}
+                   </h3>
                    <button 
-                     type="submit"
-                     className="w-full py-3 bg-red-600 text-white rounded-xl font-bold shadow-md shadow-red-100 transition-transform active:scale-95"
+                     onClick={() => setShowCreatePlayer(!showCreatePlayer)}
+                     className="p-1 rounded-full hover:bg-slate-50 transition-colors"
                    >
-                     {t.create}
+                     {showCreatePlayer ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                    </button>
-                   {createUserMsg && (
-                     <p className={`text-[10px] font-bold uppercase text-center mt-2 ${createUserMsg.includes('!') ? 'text-green-600' : 'text-red-500'}`}>
-                       {createUserMsg}
-                     </p>
+                 </div>
+                 <AnimatePresence>
+                   {showCreatePlayer && (
+                     <motion.form 
+                       initial={{ height: 0, opacity: 0 }}
+                       animate={{ height: 'auto', opacity: 1 }}
+                       exit={{ height: 0, opacity: 0 }}
+                       onSubmit={handleAdminCreateUser} 
+                       className="space-y-3 overflow-hidden"
+                     >
+                       <div>
+                         <input 
+                           type="text"
+                           required
+                           placeholder={t.newUsername}
+                           value={newUserData.username}
+                           onChange={e => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
+                           className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600"
+                         />
+                       </div>
+                       <div>
+                         <input 
+                           type="password"
+                           required
+                           placeholder={t.newPassword}
+                           value={newUserData.password}
+                           onChange={e => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
+                           className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600"
+                         />
+                       </div>
+                       <button 
+                         type="submit"
+                         className="w-full py-3 bg-red-600 text-white rounded-xl font-bold shadow-md shadow-red-100 transition-transform active:scale-95"
+                       >
+                         {t.create}
+                       </button>
+                       {createUserMsg && (
+                         <p className={`text-[10px] font-bold uppercase text-center mt-2 ${createUserMsg.includes('!') ? 'text-green-600' : 'text-red-500'}`}>
+                           {createUserMsg}
+                         </p>
+                       )}
+                     </motion.form>
                    )}
-                 </form>
+                 </AnimatePresence>
               </div>
-              {matches.map(m => (
-                <AdminMatchCard 
-                  key={m.id} 
-                  match={m} 
-                  t={t} 
-                  onUpdate={(h, a) => updateMatchResult(m.id, h, a)} 
-                />
-              ))}
+
+               <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
+                 <button 
+                    onClick={() => setAdminMatchFilter('scheduled')}
+                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${adminMatchFilter === 'scheduled' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                 >
+                    {t.upcoming}
+                 </button>
+                 <button 
+                    onClick={() => setAdminMatchFilter('finished')}
+                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${adminMatchFilter === 'finished' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                 >
+                    {t.finished}
+                 </button>
+               </div>
+
+               <div className="flex gap-1 overflow-x-auto pb-4 no-scrollbar mb-4">
+                {[
+                  { id: 'all', label: t.all },
+                  { id: 'A', label: t.groupA },
+                  { id: 'B', label: t.groupB },
+                  { id: 'playoffs', label: t.playoffs },
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => setAdminGroupFilter(f.id as any)}
+                    className={`flex-none px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${
+                      adminGroupFilter === f.id ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-100'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {matches
+                 .filter(m => {
+                    if (m.status !== adminMatchFilter) return false;
+                    if (adminGroupFilter === 'all') return true;
+                    if (adminGroupFilter === 'playoffs') return !m.stage?.includes('Group');
+                    return m.stage?.includes(`Group ${adminGroupFilter}`);
+                 })
+                 .map(m => (
+                    <AdminMatchCard 
+                      key={m.id} 
+                      match={m} 
+                      t={t} 
+                      onUpdate={(h, a) => updateMatchResult(m.id, h, a)} 
+                    />
+                  ))}
 
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 mt-8">
                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">{t.setFinalWinner}</h3>
