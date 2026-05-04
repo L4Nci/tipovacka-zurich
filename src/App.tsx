@@ -5,6 +5,7 @@ import {
   Calendar, 
   CheckCircle2, 
   User, 
+  UserPlus,
   ShieldCheck, 
   ChevronRight, 
   Trophy as TrophyIcon,
@@ -45,14 +46,14 @@ const translations = {
     exactScores: "Přesné skóre",
     langSelect: "Jazyk / Language",
     logout: "Odhlásit se",
-    loginTitle: "Tipovačka MS 2026",
+    loginTitle: "MS V HOKEJI 2026",
     signin: "Přihlásit se",
     register: "Registrovat se",
     noAccount: "Nemáš účet? Registruj se",
     hasAccount: "Máš účet? Přihlas se",
     username: "Uživatelské jméno",
     password: "Heslo",
-    worldChampionship: "Mistrovství světa",
+    worldChampionship: "ZURICH & FRIBOURG, SWITZERLAND",
     othersTip: "tipy ostatních",
     hide: "Skrýt",
     show: "Zobrazit",
@@ -68,7 +69,13 @@ const translations = {
     groupB: "Skupina B",
     playoffs: "Play-off",
     all: "Vše",
-    tipsCount: "tipů"
+    tipsCount: "tipů",
+    createUser: "Vytvořit nového hráče",
+    newUsername: "Nové uživatelské jméno",
+    newPassword: "Heslo pro nového hráče",
+    create: "Vytvořit účet",
+    userCreated: "Hráč byl úspěšně vytvořen!",
+    officialWinner: "Oficiální vítěz turnaje",
   },
   en: {
     matches: "Matches",
@@ -121,7 +128,13 @@ const translations = {
     groupB: "Group B",
     playoffs: "Playoffs",
     all: "All",
-    tipsCount: "tips"
+    tipsCount: "tips",
+    createUser: "Create New Player",
+    newUsername: "New Username",
+    newPassword: "New User Password",
+    create: "Create Account",
+    userCreated: "Player created successfully!",
+    officialWinner: "Official Tournament Winner",
   }
 };
 
@@ -179,14 +192,12 @@ const MatchCard: React.FC<MatchCardProps> = ({
       className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-4"
     >
       <div className="p-4">
-        <div className="flex justify-between items-start mb-3">
-          <div className="flex flex-col gap-1">
-             <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
-               <Clock className="w-3 h-3" />
-               {new Date(match.start_time_utc).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
-             </span>
-             <span className="text-[10px] items-center bg-slate-50 px-2 py-0.5 rounded-full font-bold text-slate-400 self-start">{match.stage}</span>
-          </div>
+        <div className="flex justify-between items-center mb-3">
+          <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
+            <Clock className="w-3 h-3" />
+            {new Date(match.start_time_utc).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+          </span>
+          <span className="text-[10px] bg-slate-50 px-2 py-0.5 rounded-full font-bold text-slate-400 uppercase tracking-tighter">{match.stage}</span>
         </div>
 
         <div className="flex items-center justify-between gap-4 mb-6">
@@ -324,9 +335,14 @@ const MatchCard: React.FC<MatchCardProps> = ({
                         'bg-white border-slate-200 text-slate-500'
                       }`}
                     >
-                      <span className={`text-[10px] font-bold uppercase truncate max-w-[60px] ${p.player_id === userId ? 'text-blue-600' : ''}`}>
-                        {p.player_id === userId ? 'VY' : p.username}
-                      </span>
+                      <div className="flex items-center gap-1 mb-1">
+                        <span className={`text-[10px] font-bold uppercase truncate max-w-[60px] ${p.player_id === userId ? 'text-blue-600' : ''}`}>
+                          {p.player_id === userId ? 'VY' : p.username}
+                        </span>
+                        {(p as any).winner_flag && (
+                          <span className="text-[10px] grayscale-[0.5] opacity-80">{(p as any).winner_flag}</span>
+                        )}
+                      </div>
                       <span className="text-xs font-black">{p.predicted_home_score}:{p.predicted_away_score}</span>
                     </div>
                   ))}
@@ -405,6 +421,8 @@ export default function App() {
   const [loginData, setLoginData] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
+  const [newUserData, setNewUserData] = useState({ username: '', password: '' });
+  const [createUserMsg, setCreateUserMsg] = useState('');
 
   useEffect(() => {
     localStorage.setItem('lang', lang);
@@ -491,6 +509,27 @@ export default function App() {
     }
   };
 
+  const handleAdminCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateUserMsg('');
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUserData)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCreateUserMsg(t.userCreated);
+        setNewUserData({ username: '', password: '' });
+      } else {
+        setCreateUserMsg(data.error || 'Error');
+      }
+    } catch (err) {
+      setCreateUserMsg('Network error');
+    }
+  };
+
   const setTournamentWinner = async (teamId: string) => {
     const res = await fetch('/api/admin/set-tournament-winner', {
       method: 'POST',
@@ -509,6 +548,11 @@ export default function App() {
       body: JSON.stringify({ userId: user?.id, teamId })
     });
     if (res.ok) {
+      if (user) {
+        const updatedUser = { ...user, tournament_winner_id: teamId };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
       fetchAll();
     } else {
       const data = await res.json();
@@ -577,20 +621,23 @@ export default function App() {
   }, [matches, user, leaderboard]);
 
   if (!user) {
-    const loginT = translations.cz; // Always CZ for login initially
+    const loginT = translations.cz; 
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-sm bg-white rounded-3xl shadow-xl p-8"
+          className="w-full max-w-sm bg-white rounded-[40px] shadow-2xl p-8 border border-slate-100"
         >
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg mb-4">
-              <Trophy className="text-white w-8 h-8" />
-            </div>
-            <h1 className="text-2xl font-black text-slate-900">{loginT.loginTitle}</h1>
-            <p className="text-slate-400 font-medium">Predictor App</p>
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/en/thumb/2/22/2026_IIHF_World_Championship_logo.png/220px-2026_IIHF_World_Championship_logo.png" 
+              alt="IIHF 2026 Logo"
+              className="w-24 h-24 mb-4 object-contain"
+              onError={(e) => (e.currentTarget.src = "https://www.iihf.com/Content/img/iihf-logo.svg")}
+            />
+            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{loginT.loginTitle}</h1>
+            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mt-1">{loginT.worldChampionship}</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -624,13 +671,6 @@ export default function App() {
               {isRegistering ? loginT.register : loginT.signin}
             </button>
           </form>
-
-          <button 
-            onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
-            className="w-full mt-6 text-sm font-bold text-slate-400 hover:text-blue-600 transition-colors"
-          >
-            {isRegistering ? loginT.hasAccount : loginT.noAccount}
-          </button>
         </motion.div>
       </div>
     );
@@ -643,8 +683,8 @@ export default function App() {
       <header className="bg-white p-6 sticky top-0 z-10 border-b border-slate-100">
         <div className="flex justify-between items-center">
           <div>
-             <h1 className="text-2xl font-black text-slate-900 leading-tight">IIHF 2026</h1>
-             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t.worldChampionship}</p>
+             <h1 className="text-2xl font-black text-slate-900 leading-tight">MS V HOKEJI 2026</h1>
+             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Zurich & Fribourg, Switzerland</p>
           </div>
           <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
             <LogOut className="w-5 h-5" />
@@ -756,23 +796,24 @@ export default function App() {
                  <Trophy className="w-4 h-4" /> {t.globalStandings}
               </h2>
 
-              {/* Your Winner Display */}
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden mb-6">
-                  <TrophyIcon className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 rotate-12" />
-                  <div className="relative z-10 flex flex-col items-center text-center">
-                    <p className="text-xs font-bold uppercase opacity-80 mb-2">{t.tournamentWinner}</p>
-                    {user.tournament_winner_id ? (
-                      <div className="flex flex-col items-center">
-                        <span className="text-6xl mb-2">{teams.find(tm => tm.id === user.tournament_winner_id)?.flag_code}</span>
-                        <span className="text-2xl font-black">{teams.find(tm => tm.id === user.tournament_winner_id)?.name}</span>
-                      </div>
-                    ) : (
-                      <div className="py-4 opacity-50 italic font-bold">
-                        {t.notPicked}
-                      </div>
-                    )}
-                  </div>
-              </div>
+              {/* Official Winner Display - Only if decided */}
+              {teams.find(tm => tm.is_final_winner === 1) && (
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden mb-6">
+                    <TrophyIcon className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 rotate-12" />
+                    <div className="relative z-10 flex flex-col items-center text-center">
+                      <p className="text-xs font-bold uppercase opacity-80 mb-2">{t.officialWinner}</p>
+                      {(() => {
+                        const officialWinner = teams.find(tm => tm.is_final_winner === 1);
+                        return (
+                          <div className="flex flex-col items-center">
+                            <span className="text-6xl mb-2">{officialWinner?.flag_code}</span>
+                            <span className="text-2xl font-black">{officialWinner?.name}</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                </div>
+              )}
 
               <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                 <table className="w-full text-left">
@@ -828,8 +869,13 @@ export default function App() {
               className="space-y-6"
             >
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center">
-                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-md">
-                   <User className="w-10 h-10 text-slate-400" />
+                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-md overflow-hidden bg-white">
+                   {(() => {
+                     const team = teams.find(tm => tm.id === user.tournament_winner_id);
+                     if (team) return <span className="text-5xl leading-none">{team.flag_code}</span>;
+                     if (user.winner_flag) return <span className="text-5xl leading-none">{user.winner_flag}</span>;
+                     return <User className="w-10 h-10 text-slate-400" />;
+                   })()}
                  </div>
                  <h2 className="text-xl font-black text-slate-900 uppercase">{user.username}</h2>
                  {currentUserStats.currentStreak >= 3 && (
@@ -866,16 +912,25 @@ export default function App() {
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t.pickWinner}</h3>
                  <div className="grid grid-cols-4 gap-2">
-                   {teams.map(t => (
+                   {teams.filter(t => t.id !== 'tba').map(t => (
                      <button
                        key={t.id}
                        onClick={() => pickWinner(t.id)}
-                       className={`p-2 rounded-xl flex flex-col items-center border transition-all ${
-                         user.tournament_winner_id === t.id ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-transparent hover:border-slate-200'
+                       className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${
+                         user.tournament_winner_id === t.id 
+                         ? 'bg-blue-600 border-blue-600 scale-105 shadow-lg shadow-blue-100 z-[1]' 
+                         : 'bg-slate-50 border-transparent hover:border-slate-200'
                        }`}
                      >
+                       {user.tournament_winner_id === t.id && (
+                         <div className="absolute -top-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
+                           <CheckCircle2 className="w-3 h-3 text-blue-600" />
+                         </div>
+                       )}
                        <span className="text-2xl">{t.flag_code}</span>
-                       <span className="text-[10px] font-bold text-slate-600">{t.id.toUpperCase()}</span>
+                       <span className={`text-[10px] font-black ${user.tournament_winner_id === t.id ? 'text-white' : 'text-slate-400'}`}>
+                         {t.id.toUpperCase()}
+                       </span>
                      </button>
                    ))}
                  </div>
@@ -912,6 +967,45 @@ export default function App() {
                <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                  <ShieldCheck className="w-4 h-4" /> {t.adminControls}
               </h2>
+
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-8">
+                 <h3 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
+                   <UserPlus className="w-4 h-4" /> {t.createUser}
+                 </h3>
+                 <form onSubmit={handleAdminCreateUser} className="space-y-3">
+                   <div>
+                     <input 
+                       type="text"
+                       required
+                       placeholder={t.newUsername}
+                       value={newUserData.username}
+                       onChange={e => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
+                       className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                     />
+                   </div>
+                   <div>
+                     <input 
+                       type="password"
+                       required
+                       placeholder={t.newPassword}
+                       value={newUserData.password}
+                       onChange={e => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
+                       className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                     />
+                   </div>
+                   <button 
+                     type="submit"
+                     className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md shadow-blue-100 transition-transform active:scale-95"
+                   >
+                     {t.create}
+                   </button>
+                   {createUserMsg && (
+                     <p className={`text-[10px] font-bold uppercase text-center mt-2 ${createUserMsg.includes('!') ? 'text-green-600' : 'text-red-500'}`}>
+                       {createUserMsg}
+                     </p>
+                   )}
+                 </form>
+              </div>
               {matches.map(m => (
                 <AdminMatchCard 
                   key={m.id} 
@@ -924,7 +1018,7 @@ export default function App() {
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 mt-8">
                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">{t.setFinalWinner}</h3>
                  <div className="grid grid-cols-4 gap-2 mb-4">
-                   {teams.map(t => (
+                   {teams.filter(t => t.id !== 'tba').map(t => (
                      <button
                        key={t.id}
                        onClick={() => setSelectedWinner(t.id)}
@@ -970,7 +1064,14 @@ export default function App() {
           </button>
         )}
         <button onClick={() => setTab('profile')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'profile' ? 'text-blue-600 scale-110' : 'text-slate-400'}`}>
-          <User className="w-6 h-6" />
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden bg-slate-50 ${user.tournament_winner_id && tab === 'profile' ? 'ring-2 ring-blue-600' : ''}`}>
+             {(() => {
+               const team = teams.find(tm => tm.id === user.tournament_winner_id);
+               if (team) return <span className="text-lg leading-none">{team.flag_code}</span>;
+               if (user.winner_flag) return <span className="text-lg leading-none">{user.winner_flag}</span>;
+               return <User className="w-4 h-4" />;
+             })()}
+          </div>
           <span className="text-[10px] font-bold uppercase">{t.profile}</span>
         </button>
       </nav>

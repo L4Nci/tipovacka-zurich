@@ -78,14 +78,24 @@ async function initDb() {
   `);
 
   // Admin seeding
-  const playersCheck = await db.execute("SELECT COUNT(*) as count FROM players");
-  if (Number(playersCheck.rows[0].count) === 0) {
-    const adminHash = await bcrypt.hash("admin2026", 10);
-    await db.execute({
-      sql: "INSERT INTO players (id, username, password_hash, role) VALUES (?, ?, ?, ?)",
-      args: ['admin-1', 'admin', adminHash, 'admin']
-    });
-    console.log("Admin seeded.");
+  const playersCheck = await db.execute("SELECT COUNT(*) as count FROM players WHERE role = 'admin'");
+  if (Number(playersCheck.rows[0].count) === 0 || (await db.execute("SELECT id FROM players WHERE id = 'admin-1'")).rows.length > 0) {
+    // Delete legacy admin if exists
+    await db.execute("DELETE FROM players WHERE id = 'admin-1'");
+
+    const usersToSeed = [
+      { id: 'u-viktor', user: 'Viktor', pass: 'viktorviktor', role: 'admin' },
+      { id: 'u-hana', user: 'Hana', pass: 'HanKa123', role: 'admin' }
+    ];
+
+    for (const u of usersToSeed) {
+      const hash = await bcrypt.hash(u.pass, 10);
+      await db.execute({
+        sql: "INSERT OR IGNORE INTO players (id, username, password_hash, role) VALUES (?, ?, ?, ?)",
+        args: [u.id, u.user, hash, u.role]
+      });
+    }
+    console.log("New admins seeded.");
   }
 
   // Teams seeding
@@ -218,7 +228,7 @@ async function startServer() {
         sql: "INSERT INTO players (id, username, password_hash) VALUES (?, ?, ?)",
         args: [id, username, hash]
       });
-      res.json({ id, username, role: 'player' });
+      res.json({ id, username, role: 'player', tournament_winner_id: null });
     } catch (err: any) {
       if (err.message?.includes("UNIQUE")) {
         return res.status(400).json({ error: "Username already exists" });
@@ -243,7 +253,8 @@ async function startServer() {
       res.json({
         id: player.id,
         username: player.username,
-        role: player.role
+        role: player.role,
+        tournament_winner_id: player.tournament_winner_id
       });
     } catch (err: any) {
       console.error("Login error:", err);
@@ -279,9 +290,10 @@ async function startServer() {
   app.get("/api/matches/:id/predictions", async (req, res) => {
     const matchId = req.params.id;
     const result = await db.execute(`
-      SELECT p.*, pl.username
+      SELECT p.*, pl.username, t.flag_code as winner_flag
       FROM predictions p
       JOIN players pl ON p.player_id = pl.id
+      LEFT JOIN teams t ON pl.tournament_winner_id = t.id
       WHERE p.match_id = ?
     `, [matchId]);
     res.json(result.rows);
