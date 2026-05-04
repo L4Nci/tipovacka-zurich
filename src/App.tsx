@@ -651,9 +651,10 @@ export default function App() {
         >
           <div className="flex flex-col items-center mb-8">
             <img 
-              src="https://upload.wikimedia.org/wikipedia/en/thumb/2/22/2026_IIHF_World_Championship_logo.png/220px-2026_IIHF_World_Championship_logo.png" 
+              src="https://upload.wikimedia.org/wikipedia/en/thumb/6/62/2026_IIHF_World_Championship_logo.svg/960px-2026_IIHF_World_Championship_logo.svg.png" 
               alt="IIHF 2026 Logo"
-              className="w-24 h-24 mb-4 object-contain"
+              className="w-32 h-32 mb-4 object-contain drop-shadow-sm"
+              referrerPolicy="no-referrer"
               onError={(e) => (e.currentTarget.src = "https://www.iihf.com/Content/img/iihf-logo.svg")}
             />
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{loginT.loginTitle}</h1>
