@@ -16,6 +16,16 @@ import {
   ChevronUp
 } from 'lucide-react';
 import { Player, Team, Match, Prediction } from './types.ts';
+import { 
+  fetchAllData, 
+  loginUser, 
+  registerUser, 
+  savePrediction as savePredDB, 
+  fetchMatchPredictions,
+  updateMatchResult as updateMatchResDB,
+  setTournamentWinner as setWinnerDB,
+  pickTournamentWinner as pickWinnerDB
+} from './lib/db.ts';
 
 const translations = {
   cz: {
@@ -76,6 +86,7 @@ const translations = {
     create: "Vytvořit účet",
     userCreated: "Hráč byl úspěšně vytvořen!",
     officialWinner: "Oficiální vítěz turnaje",
+    noDraws: "Remíza není povolena. Jeden tým musí vyhrát!",
   },
   en: {
     matches: "Matches",
@@ -135,6 +146,7 @@ const translations = {
     create: "Create Account",
     userCreated: "Player created successfully!",
     officialWinner: "Official Tournament Winner",
+    noDraws: "Draws are not allowed. One team must win!",
   }
 };
 
@@ -166,9 +178,12 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
   const fetchOthers = async () => {
     if (!showOthers) {
-      const res = await fetch(`/api/matches/${match.id}/predictions`);
-      const data = await res.json();
-      setOthers(data);
+      try {
+        const data = await fetchMatchPredictions(match.id);
+        setOthers(data);
+      } catch (err) {
+        console.error(err);
+      }
     }
     setShowOthers(!showOthers);
   };
@@ -270,11 +285,12 @@ const MatchCard: React.FC<MatchCardProps> = ({
             
             <button
               onClick={() => onPredict?.(home, away)}
-              disabled={isLocked}
+              disabled={isLocked || home === away}
               className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-transform disabled:bg-slate-300 disabled:shadow-none"
             >
               {match.predicted_home_score !== null ? t.updateTip : t.saveTip}
             </button>
+            {!isLocked && home === away && <p className="text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
             {isLocked && <p className="text-[10px] text-center text-slate-400 italic">{t.locked}</p>}
           </div>
         )}
@@ -391,10 +407,14 @@ const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) 
       </div>
       <button 
         onClick={() => onUpdate(adminH, adminA)}
-        className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold shadow-sm active:scale-95 transition-transform"
+        disabled={adminH === adminA}
+        className={`w-full py-3 rounded-xl text-xs font-bold transition-transform shadow-sm ${
+          adminH === adminA ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-900 text-white active:scale-95'
+        }`}
       >
         {t.updateResult}
       </button>
+      {adminH === adminA && <p className="mt-2 text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
     </div>
   );
 };
@@ -433,16 +453,7 @@ export default function App() {
   const fetchAll = async () => {
     if (!user) return;
     try {
-      const [matchesRes, teamsRes, lbRes] = await Promise.all([
-        fetch(`/api/matches?userId=${user.id}`),
-        fetch('/api/teams'),
-        fetch('/api/leaderboard')
-      ]);
-      const [matchesData, teamsData, lbData] = await Promise.all([
-        matchesRes.json(),
-        teamsRes.json(),
-        lbRes.json()
-      ]);
+      const { matches: matchesData, teams: teamsData, leaderboard: lbData } = await fetchAllData(user.id);
       setMatches(matchesData);
       setTeams(teamsData);
       setLeaderboard(lbData);
@@ -460,22 +471,17 @@ export default function App() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    const endpoint = isRegistering ? '/api/auth/register' : '/api/auth/login';
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(loginData)
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setUser(data);
-        localStorage.setItem('user', JSON.stringify(data));
+      let data;
+      if (isRegistering) {
+        data = await registerUser(loginData.username, loginData.password);
       } else {
-        setError(data.error || 'Server error');
+        data = await loginUser(loginData.username, loginData.password);
       }
+      setUser(data);
+      localStorage.setItem('user', JSON.stringify(data));
     } catch (err: any) {
-      setError('Network error: ' + err.message);
+      setError(err.message || 'Chyba serveru');
     }
   };
 
@@ -485,27 +491,20 @@ export default function App() {
   };
 
   const savePrediction = async (matchId: string, h: number, a: number) => {
-    const res = await fetch('/api/predictions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user?.id, matchId, homeScore: h, awayScore: a })
-    });
-    if (res.ok) {
+    try {
+      await savePredDB(user?.id || '', matchId, h, a);
       fetchAll();
-    } else {
-      const data = await res.json();
-      alert(data.error);
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
   const updateMatchResult = async (matchId: string, h: number, a: number) => {
-    const res = await fetch('/api/admin/match-result', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user?.id, matchId, homeScore: h, awayScore: a })
-    });
-    if (res.ok) {
+    try {
+      await updateMatchResDB(user?.id || '', matchId, h, a);
       fetchAll();
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
@@ -513,50 +512,35 @@ export default function App() {
     e.preventDefault();
     setCreateUserMsg('');
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newUserData, adminId: user?.id })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setCreateUserMsg(t.userCreated);
-        setNewUserData({ username: '', password: '' });
-      } else {
-        setCreateUserMsg(data.error || 'Error');
-      }
-    } catch (err) {
-      setCreateUserMsg('Network error');
+      await registerUser(newUserData.username, newUserData.password, user?.id);
+      setCreateUserMsg(t.userCreated);
+      setNewUserData({ username: '', password: '' });
+      fetchAll();
+    } catch (err: any) {
+      setCreateUserMsg(err.message);
     }
   };
 
   const setTournamentWinner = async (teamId: string) => {
-    const res = await fetch('/api/admin/set-tournament-winner', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user?.id, teamId })
-    });
-    if (res.ok) {
+    try {
+      await setWinnerDB(user?.id || '', teamId);
       fetchAll();
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
   const pickWinner = async (teamId: string) => {
-    const res = await fetch('/api/profile/tournament-winner', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user?.id, teamId })
-    });
-    if (res.ok) {
+    try {
+      await pickWinnerDB(user?.id || '', teamId);
       if (user) {
         const updatedUser = { ...user, tournament_winner_id: teamId };
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
       }
       fetchAll();
-    } else {
-      const data = await res.json();
-      alert(data.error);
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
