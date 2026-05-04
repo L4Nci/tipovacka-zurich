@@ -516,7 +516,7 @@ export default function App() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUserData)
+        body: JSON.stringify({ ...newUserData, adminId: user?.id })
       });
       const data = await res.json();
       if (res.ok) {

@@ -220,8 +220,18 @@ async function startServer() {
 
   // Auth
   app.post("/api/auth/register", async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, adminId } = req.body;
     try {
+      // Check if requester is admin
+      const adminCheck = await db.execute({
+        sql: "SELECT role FROM players WHERE id = ?",
+        args: [adminId || '']
+      });
+      
+      if (adminCheck.rows[0]?.role !== 'admin') {
+        return res.status(403).json({ error: "Registraci může provádět pouze administrátor." });
+      }
+
       const id = "u-" + Math.random().toString(36).substring(2, 9);
       const hash = await bcrypt.hash(password, 10);
       await db.execute({
@@ -231,9 +241,9 @@ async function startServer() {
       res.json({ id, username, role: 'player', tournament_winner_id: null });
     } catch (err: any) {
       if (err.message?.includes("UNIQUE")) {
-        return res.status(400).json({ error: "Username already exists" });
+        return res.status(400).json({ error: "Uživatelské jméno již existuje." });
       }
-      res.status(500).json({ error: "Registration failed: " + err.message });
+      res.status(500).json({ error: "Chyba při registraci: " + err.message });
     }
   });
 
