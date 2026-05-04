@@ -9,7 +9,6 @@ import {
   ShieldCheck, 
   ChevronRight, 
   Trophy as TrophyIcon,
-  Flame,
   Clock,
   LogOut,
   ChevronDown,
@@ -50,8 +49,6 @@ const translations = {
     player: "Hráč",
     tournamentWinner: "Tvůj vítěz turnaje",
     pickWinner: "Vyber vítěze turnaje",
-    currentStreak: "Aktuální série",
-    bestStreak: "Nejlepší série",
     totalPoints: "Celkem bodů",
     exactScores: "Přesné skóre",
     langSelect: "Jazyk / Language",
@@ -585,59 +582,30 @@ export default function App() {
     }
   };
 
-  // Streak calculation logic
-  const streaks = useMemo(() => {
-    const userStreaks: Record<string, { current: number, best: number }> = {};
-    
-    leaderboard.forEach(p => {
-      userStreaks[p.id] = { current: 0, best: 0 };
-    });
-
-    // We need finished matches sorted chronologically to compute streaks
-    const finishedMatches = [...matches]
-      .filter(m => m.status === 'finished')
-      .sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime());
-
-    // This is complex because we don't have all predictions for all users here easily
-    // But since it's "10-15 friends", maybe we can just compute it for the logged-in user for now
-    // or fetch more data. For now, let's just do it for the current user in Profile.
-    return userStreaks;
-  }, [matches, leaderboard]);
-
   const currentUserStats = useMemo(() => {
     if (!user) return null;
-    const stats = { currentStreak: 0, bestStreak: 0, exact: 0, winner: 0, total: 0 };
+    const stats = { exact: 0, winner: 0, total: 0 };
     
     // Sort finished matches chronologically
     const finished = matches
       .filter(m => m.status === 'finished')
       .sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime());
 
-    let curr = 0;
     finished.forEach(m => {
       const ph = m.predicted_home_score;
       const pa = m.predicted_away_score;
       const mh = m.home_score;
       const ma = m.away_score;
 
-      if (ph === null || pa === null || mh === null || ma === null) {
-        curr = 0;
-        return;
-      }
+      if (ph === null || pa === null || mh === null || ma === null) return;
 
       if (ph === mh && pa === ma) {
         stats.exact++;
         stats.winner++;
-        curr++;
-      } else if ((ph > pa && mh > ma) || (pa > ph && ma > mh)) {
+      } else if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) {
         stats.winner++;
-        curr++;
-      } else {
-        curr = 0;
       }
-      stats.bestStreak = Math.max(stats.bestStreak, curr);
     });
-    stats.currentStreak = curr;
     
     const lbEntry = leaderboard.find(l => l.id === user.id);
     stats.total = lbEntry?.total_points ?? 0;
@@ -905,34 +873,16 @@ export default function App() {
                    })()}
                  </div>
                  <h2 className="text-xl font-black text-slate-900 uppercase">{user.username}</h2>
-                 {currentUserStats.currentStreak >= 3 && (
-                   <div className="mt-2 flex items-center gap-1 text-orange-500 font-black italic">
-                      <Flame className="w-5 h-5 fill-current" />
-                      {currentUserStats.currentStreak >= 7 ? 'GOAT' : 
-                       currentUserStats.currentStreak >= 5 ? 'ON FIRE' : 'HOT'}
-                   </div>
-                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                 <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
+                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center">
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t.totalPoints}</p>
-                    <p className="text-3xl font-black text-red-600">{currentUserStats.total}</p>
+                    <p className="text-4xl font-black text-red-600">{currentUserStats.total}</p>
                  </div>
-                 <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t.currentStreak}</p>
-                    <div className="flex items-center gap-2">
-                       <p className="text-3xl font-black text-orange-500">{currentUserStats.currentStreak}</p>
-                       <Flame className={`w-6 h-6 ${currentUserStats.currentStreak >= 3 ? 'text-orange-500 fill-current' : 'text-slate-200'}`} />
-                    </div>
-                 </div>
-                 <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
+                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center">
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t.exactScores}</p>
-                    <p className="text-3xl font-black text-green-600">{currentUserStats.exact}</p>
-                 </div>
-                 <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t.bestStreak}</p>
-                    <p className="text-3xl font-black text-slate-900">{currentUserStats.bestStreak}</p>
+                    <p className="text-4xl font-black text-green-600">{currentUserStats.exact}</p>
                  </div>
               </div>
 
@@ -981,6 +931,14 @@ export default function App() {
                     </button>
                  </div>
               </div>
+
+              <button 
+                onClick={handleLogout}
+                className="w-full py-4 bg-slate-50 text-slate-400 rounded-3xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:text-red-500 transition-colors active:scale-95"
+              >
+                <LogOut className="w-4 h-4" />
+                {lang === 'cz' ? 'Odhlásit se' : 'Logout'}
+              </button>
             </motion.div>
           )}
 
