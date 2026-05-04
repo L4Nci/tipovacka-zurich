@@ -87,6 +87,7 @@ const translations = {
     userCreated: "Hráč byl úspěšně vytvořen!",
     officialWinner: "Oficiální vítěz turnaje",
     noDraws: "Remíza není povolena. Jeden tým musí vyhrát!",
+    tipSaved: "Tip uložen! ✅",
   },
   en: {
     matches: "Matches",
@@ -147,6 +148,7 @@ const translations = {
     userCreated: "Player created successfully!",
     officialWinner: "Official Tournament Winner",
     noDraws: "Draws are not allowed. One team must win!",
+    tipSaved: "Tip saved! ✅",
   }
 };
 
@@ -154,7 +156,7 @@ const translations = {
 
 interface MatchCardProps {
   match: Match;
-  onPredict?: (h: number, a: number) => void;
+  onPredict?: (h: number, a: number) => Promise<void>;
   isFinished?: boolean;
   userId?: string;
   t: any;
@@ -171,21 +173,46 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const [away, setAway] = useState(match.predicted_away_score ?? 0);
   const [showOthers, setShowOthers] = useState(false);
   const [others, setOthers] = useState<Prediction[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const startTime = new Date(match.start_time_utc).getTime();
   const lockTime = startTime - (5 * 60 * 1000);
   const isLocked = Date.now() > lockTime || match.status === 'finished';
 
-  const fetchOthers = async () => {
-    if (!showOthers) {
+  const fetchOthers = async (forceRefresh = false) => {
+    if (!showOthers || forceRefresh === true) {
       try {
         const data = await fetchMatchPredictions(match.id);
         setOthers(data);
+        if (forceRefresh !== true) setShowOthers(true);
       } catch (err) {
         console.error(err);
       }
+    } else {
+      setShowOthers(false);
     }
-    setShowOthers(!showOthers);
+  };
+
+  const handlePredict = async () => {
+    if (!onPredict) return;
+    setIsSaving(true);
+    try {
+      await onPredict(home, away);
+      setShowSuccess(true);
+      
+      // Auto-refresh others if drawer is open
+      if (showOthers) {
+        const data = await fetchMatchPredictions(match.id);
+        setOthers(data);
+      }
+      
+      setTimeout(() => setShowSuccess(false), 2000);
+    } catch (err) {
+      // Error handled by parent alert
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getPoints = () => {
@@ -283,13 +310,22 @@ const MatchCard: React.FC<MatchCardProps> = ({
               </div>
             </div>
             
-            <button
-              onClick={() => onPredict?.(home, away)}
-              disabled={isLocked || home === away}
-              className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-100 active:scale-95 transition-transform disabled:bg-slate-300 disabled:shadow-none"
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={handlePredict}
+              disabled={isLocked || home === away || isSaving}
+              className={`w-full py-4 rounded-2xl font-black shadow-lg transition-all disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2 ${
+                showSuccess ? 'bg-green-500 text-white shadow-green-100' : 'bg-blue-600 text-white shadow-blue-100'
+              }`}
             >
-              {match.predicted_home_score !== null ? t.updateTip : t.saveTip}
-            </button>
+              {isSaving ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : showSuccess ? (
+                t.tipSaved
+              ) : (
+                match.predicted_home_score !== null ? t.updateTip : t.saveTip
+              )}
+            </motion.button>
             {!isLocked && home === away && <p className="text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
             {isLocked && <p className="text-[10px] text-center text-slate-400 italic">{t.locked}</p>}
           </div>
