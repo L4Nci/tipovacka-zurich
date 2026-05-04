@@ -315,7 +315,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
               onClick={handlePredict}
               disabled={isLocked || home === away || isSaving}
               className={`w-full py-4 rounded-2xl font-black shadow-lg transition-all disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2 ${
-                showSuccess ? 'bg-green-500 text-white shadow-green-100' : 'bg-blue-600 text-white shadow-blue-100'
+                showSuccess ? 'bg-green-500 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-200'
               }`}
             >
               {isSaving ? (
@@ -380,7 +380,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                     <div 
                       key={p.player_id} 
                       className={`px-3 py-2 rounded-xl border flex flex-col items-center min-w-[70px] ${
-                        p.player_id === userId ? 'ring-2 ring-blue-500 border-blue-500 shadow-sm' : ''
+                        p.player_id === userId ? 'ring-2 ring-red-500 border-red-500 shadow-sm' : ''
                       } ${
                         p.points_earned === 5 ? 'bg-green-100 border-green-200 text-green-800' :
                         p.points_earned === 2 ? 'bg-green-50 border-green-100 text-green-700' :
@@ -388,7 +388,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                       }`}
                     >
                       <div className="flex items-center gap-1 mb-1">
-                        <span className={`text-[10px] font-bold uppercase truncate max-w-[60px] ${p.player_id === userId ? 'text-blue-600' : ''}`}>
+                        <span className={`text-[10px] font-bold uppercase truncate max-w-[60px] ${p.player_id === userId ? 'text-red-600' : ''}`}>
                           {p.player_id === userId ? 'VY' : p.username}
                         </span>
                         {(p as any).winner_flag && (
@@ -657,7 +657,7 @@ export default function App() {
               onError={(e) => (e.currentTarget.src = "https://www.iihf.com/Content/img/iihf-logo.svg")}
             />
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{loginT.loginTitle}</h1>
-            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mt-1">{loginT.worldChampionship}</p>
+            <p className="text-[10px] font-bold text-red-600 uppercase tracking-[0.2em] mt-1">{loginT.worldChampionship}</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -668,7 +668,7 @@ export default function App() {
                 type="text" 
                 value={loginData.username}
                 onChange={e => setLoginData(prev => ({ ...prev, username: e.target.value }))}
-                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all"
                 placeholder="e.g. lukas"
               />
             </div>
@@ -679,14 +679,14 @@ export default function App() {
                 type="password" 
                 value={loginData.password}
                 onChange={e => setLoginData(prev => ({ ...prev, password: e.target.value }))}
-                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all"
                 placeholder="••••••••"
               />
             </div>
             {error && <p className="text-red-500 text-sm font-medium text-center bg-red-50 p-2 rounded-xl">{error}</p>}
             <button 
               type="submit"
-              className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-200 active:scale-95 transition-transform"
+              className="w-full py-4 bg-red-600 text-white rounded-2xl font-black shadow-lg shadow-red-200 active:scale-95 transition-transform"
             >
               {isRegistering ? loginT.register : loginT.signin}
             </button>
@@ -726,7 +726,7 @@ export default function App() {
                 key={f.id}
                 onClick={() => setMatchFilter(f.id as any)}
                 className={`flex-none px-4 py-1.5 rounded-full text-[10px] font-black transition-all ${
-                  matchFilter === f.id ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-white text-slate-400 border border-slate-100 hover:border-slate-200'
+                  matchFilter === f.id ? 'bg-red-600 text-white shadow-lg shadow-red-100' : 'bg-white text-slate-400 border border-slate-100 hover:border-slate-200'
                 }`}
               >
                 {f.label}
@@ -818,7 +818,7 @@ export default function App() {
 
               {/* Official Winner Display - Only if decided */}
               {teams.find(tm => tm.is_final_winner === 1) && (
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden mb-6">
+                <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden mb-6">
                     <TrophyIcon className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 rotate-12" />
                     <div className="relative z-10 flex flex-col items-center text-center">
                       <p className="text-xs font-bold uppercase opacity-80 mb-2">{t.officialWinner}</p>
@@ -848,7 +848,7 @@ export default function App() {
                     {leaderboard.map((p, i) => (
                       <tr 
                         key={p.id} 
-                        className={`border-b border-slate-50 last:border-none ${p.id === user.id ? 'bg-blue-50/50' : ''}`}
+                        className={`border-b border-slate-50 last:border-none ${p.id === user.id ? 'bg-red-50/50' : ''}`}
                       >
                         <td className="px-5 py-4">
                           <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
@@ -910,7 +910,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-4">
                  <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t.totalPoints}</p>
-                    <p className="text-3xl font-black text-blue-600">{currentUserStats.total}</p>
+                    <p className="text-3xl font-black text-red-600">{currentUserStats.total}</p>
                  </div>
                  <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100">
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t.currentStreak}</p>
@@ -938,13 +938,13 @@ export default function App() {
                        onClick={() => pickWinner(t.id)}
                        className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${
                          user.tournament_winner_id === t.id 
-                         ? 'bg-blue-600 border-blue-600 scale-105 shadow-lg shadow-blue-100 z-[1]' 
+                         ? 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]' 
                          : 'bg-slate-50 border-transparent hover:border-slate-200'
                        }`}
                      >
                        {user.tournament_winner_id === t.id && (
                          <div className="absolute -top-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                           <CheckCircle2 className="w-3 h-3 text-blue-600" />
+                           <CheckCircle2 className="w-3 h-3 text-red-600" />
                          </div>
                        )}
                        <span className="text-2xl">{t.flag_code}</span>
@@ -1000,7 +1000,7 @@ export default function App() {
                        placeholder={t.newUsername}
                        value={newUserData.username}
                        onChange={e => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
-                       className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                       className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600"
                      />
                    </div>
                    <div>
@@ -1010,12 +1010,12 @@ export default function App() {
                        placeholder={t.newPassword}
                        value={newUserData.password}
                        onChange={e => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
-                       className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                       className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600"
                      />
                    </div>
                    <button 
                      type="submit"
-                     className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md shadow-blue-100 transition-transform active:scale-95"
+                     className="w-full py-3 bg-red-600 text-white rounded-xl font-bold shadow-md shadow-red-100 transition-transform active:scale-95"
                    >
                      {t.create}
                    </button>
@@ -1065,26 +1065,26 @@ export default function App() {
 
       {/* Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-2 py-3 flex justify-around items-center rounded-t-[2rem]">
-        <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'matches' ? 'text-blue-600 scale-110' : 'text-slate-400'}`}>
+        <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'matches' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
           <Calendar className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.matches}</span>
         </button>
-        <button onClick={() => setTab('results')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'results' ? 'text-blue-600 scale-110' : 'text-slate-400'}`}>
+        <button onClick={() => setTab('results')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'results' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
           <CheckCircle2 className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.results}</span>
         </button>
-        <button onClick={() => setTab('leaderboard')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'leaderboard' ? 'text-blue-600 scale-110' : 'text-slate-400'}`}>
+        <button onClick={() => setTab('leaderboard')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'leaderboard' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
           <TrophyIcon className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.rank}</span>
         </button>
         {user.role === 'admin' && (
-          <button onClick={() => setTab('admin')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'admin' ? 'text-blue-600 scale-110' : 'text-slate-400'}`}>
+          <button onClick={() => setTab('admin')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'admin' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
             <ShieldCheck className="w-6 h-6" />
             <span className="text-[10px] font-bold uppercase">{t.admin}</span>
           </button>
         )}
-        <button onClick={() => setTab('profile')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'profile' ? 'text-blue-600 scale-110' : 'text-slate-400'}`}>
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden bg-slate-50 ${user.tournament_winner_id && tab === 'profile' ? 'ring-2 ring-blue-600' : ''}`}>
+        <button onClick={() => setTab('profile')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'profile' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden bg-slate-50 ${user.tournament_winner_id && tab === 'profile' ? 'ring-2 ring-red-600' : ''}`}>
              {(() => {
                const team = teams.find(tm => tm.id === user.tournament_winner_id);
                if (team) return <span className="text-lg leading-none">{team.flag_code}</span>;
