@@ -32,7 +32,7 @@ export const fetchAllData = async (userId: string) => {
     }),
     db.execute("SELECT * FROM teams ORDER BY name ASC"),
     db.execute(`
-      SELECT p.id, p.username, p.role, p.tournament_winner_id,
+      SELECT p.id, p.username, p.role, p.tournament_winner_id, t.flag_code as winner_flag,
              COALESCE(SUM(
                CASE 
                  WHEN pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score THEN 5
@@ -41,12 +41,17 @@ export const fetchAllData = async (userId: string) => {
                  ELSE 0
                END
              ), 0) + 
-             CASE WHEN p.tournament_winner_id = (SELECT id FROM teams WHERE is_final_winner = 1 LIMIT 1) THEN 10 ELSE 0 END as total_points
+             CASE WHEN p.tournament_winner_id = (SELECT id FROM teams WHERE is_final_winner = 1 LIMIT 1) THEN 10 ELSE 0 END as total_points,
+             COUNT(CASE WHEN pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score THEN 1 END) as exact_hits,
+             COUNT(CASE WHEN ((pr.predicted_home_score > pr.predicted_away_score AND m.home_score > m.away_score) OR 
+                             (pr.predicted_away_score > pr.predicted_home_score AND m.away_score > m.home_score)) 
+                             AND NOT (pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score) THEN 1 END) as outcome_hits
       FROM players p
       LEFT JOIN predictions pr ON p.id = pr.player_id
       LEFT JOIN matches m ON pr.match_id = m.id AND m.status = 'finished'
+      LEFT JOIN teams t ON p.tournament_winner_id = t.id
       GROUP BY p.id
-      ORDER BY total_points DESC, p.username ASC
+      ORDER BY total_points DESC, exact_hits DESC, p.username ASC
     `)
   ]);
 

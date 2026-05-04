@@ -5,8 +5,8 @@ export type Player = {
   tournament_winner_id?: string;
   winner_flag?: string;
   total_points?: number;
-  exact_scores?: number;
-  correct_winners?: number;
+  exact_hits?: number;
+  outcome_hits?: number;
 };
 
 export type Team = {

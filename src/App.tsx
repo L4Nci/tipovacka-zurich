@@ -701,9 +701,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl">
-      <header className="bg-white p-6 sticky top-0 z-10 border-b border-slate-100">
+      <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100">
         <div className="flex justify-between items-center">
-          <div>
+          <div 
+            className="cursor-pointer active:opacity-70 transition-opacity"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          >
              <h1 className="text-2xl font-black text-slate-900 leading-tight">MS V HOKEJI 2026</h1>
              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Zurich & Fribourg, Switzerland</p>
           </div>
@@ -716,7 +719,7 @@ export default function App() {
       <main className="p-4">
         {/* Match Filter Bar */}
         {(tab === 'matches' || tab === 'results') && (
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide no-scrollbar -mx-4 px-4 sticky top-[81px] bg-slate-50 z-[5] py-1">
+          <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 bg-slate-50 py-1">
             {[
               { id: 'all', label: t.all },
               { id: 'A', label: t.groupA },
@@ -864,10 +867,11 @@ export default function App() {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
                              <span className="font-bold text-slate-700">{p.username}</span>
-                             <span className="text-xs opacity-60">{p.winner_flag}</span>
+                             <span className="text-lg">{p.winner_flag}</span>
                           </div>
-                          <div className="text-[10px] text-slate-400 font-medium">
-                            {p.exact_scores} {t.exact} • {p.correct_winners} {t.winner}
+                          <div className="text-[10px] text-slate-400 font-medium flex items-center gap-2">
+                            <span>🎯 {p.exact_hits ?? 0}</span>
+                            <span>✅ {p.outcome_hits ?? 0}</span>
                           </div>
                         </td>
                         <td className="px-5 py-4 text-right">
@@ -1065,7 +1069,7 @@ export default function App() {
       </main>
 
       {/* Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-2 py-3 flex justify-around items-center rounded-t-[2rem]">
+      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-2 py-3 flex justify-around items-center rounded-t-[2rem] z-50">
         <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'matches' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
           <Calendar className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.matches}</span>
