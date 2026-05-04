@@ -710,9 +710,6 @@ export default function App() {
              <h1 className="text-2xl font-black text-slate-900 leading-tight">MS V HOKEJI 2026</h1>
              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Zurich & Fribourg, Switzerland</p>
           </div>
-          <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-500 transition-colors">
-            <LogOut className="w-5 h-5" />
-          </button>
         </div>
       </header>
 
