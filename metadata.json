@@ -1,6 +1,6 @@
 {
-  "name": "IIHF 2026 Predictor",
-  "description": "Simple IIHF World Championship 2026 prediction app for friends.",
+  "name": "MS v Hokeji 2026",
+  "description": "Tipovací aplikace pro Mistrovství světa v ledním hokeji 2026. Sledujte zápasy, tipujte výsledky a soutěžte s přáteli.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
