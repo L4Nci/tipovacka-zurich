@@ -1,0 +1,128 @@
+-- Schema setup
+CREATE TABLE IF NOT EXISTS teams (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  flag_code TEXT NOT NULL,
+  group_name TEXT,
+  is_final_winner INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS players (
+  id TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT DEFAULT 'player',
+  tournament_winner_id TEXT,
+  FOREIGN KEY (tournament_winner_id) REFERENCES teams (id)
+);
+
+CREATE TABLE IF NOT EXISTS matches (
+  id TEXT PRIMARY KEY,
+  home_team_id TEXT NOT NULL,
+  away_team_id TEXT NOT NULL,
+  start_time_utc TEXT NOT NULL,
+  home_score INTEGER,
+  away_score INTEGER,
+  status TEXT DEFAULT 'scheduled',
+  stage TEXT,
+  FOREIGN KEY (home_team_id) REFERENCES teams (id),
+  FOREIGN KEY (away_team_id) REFERENCES teams (id)
+);
+
+CREATE TABLE IF NOT EXISTS predictions (
+  player_id TEXT NOT NULL,
+  match_id TEXT NOT NULL,
+  predicted_home_score INTEGER NOT NULL,
+  predicted_away_score INTEGER NOT NULL,
+  points_earned INTEGER DEFAULT 0,
+  PRIMARY KEY (player_id, match_id),
+  FOREIGN KEY (player_id) REFERENCES players (id),
+  FOREIGN KEY (match_id) REFERENCES matches (id)
+);
+
+-- IIHF 2026 Teams
+INSERT OR IGNORE INTO teams (id, name, flag_code, group_name) VALUES
+('tba', 'TBA', '🏒', NULL),
+('usa', 'USA', '🇺🇸', 'A'),
+('sui', 'Switzerland', '🇨🇭', 'A'),
+('fin', 'Finland', '🇫🇮', 'A'),
+('ger', 'Germany', '🇩🇪', 'A'),
+('lat', 'Latvia', '🇱🇻', 'A'),
+('aut', 'Austria', '🇦🇹', 'A'),
+('hun', 'Hungary', '🇭🇺', 'A'),
+('gbr', 'Great Britain', '🇬🇧', 'A'),
+('can', 'Canada', '🇨🇦', 'B'),
+('swe', 'Sweden', '🇸🇪', 'B'),
+('cze', 'Czechia', '🇨🇿', 'B'),
+('den', 'Denmark', '🇩🇰', 'B'),
+('svk', 'Slovakia', '🇸🇰', 'B'),
+('nor', 'Norway', '🇳🇴', 'B'),
+('slo', 'Slovenia', '🇸🇮', 'B'),
+('ita', 'Italy', '🇮🇹', 'B');
+
+-- Full tournament match seed
+INSERT OR IGNORE INTO matches (id, home_team_id, away_team_id, start_time_utc, stage) VALUES
+('m001', 'fin', 'ger', '2026-05-15T14:20:00Z', 'Group A'),
+('m002', 'can', 'swe', '2026-05-15T14:20:00Z', 'Group B'),
+('m003', 'usa', 'sui', '2026-05-15T18:20:00Z', 'Group A'),
+('m004', 'cze', 'den', '2026-05-15T18:20:00Z', 'Group B'),
+('m005', 'gbr', 'aut', '2026-05-16T10:20:00Z', 'Group A'),
+('m006', 'svk', 'nor', '2026-05-16T10:20:00Z', 'Group B'),
+('m007', 'hun', 'fin', '2026-05-16T14:20:00Z', 'Group A'),
+('m008', 'ita', 'can', '2026-05-16T14:20:00Z', 'Group B'),
+('m009', 'sui', 'lat', '2026-05-16T18:20:00Z', 'Group A'),
+('m010', 'slo', 'cze', '2026-05-16T18:20:00Z', 'Group B'),
+('m011', 'gbr', 'usa', '2026-05-17T10:20:00Z', 'Group A'),
+('m012', 'ita', 'svk', '2026-05-17T10:20:00Z', 'Group B'),
+('m013', 'aut', 'hun', '2026-05-17T14:20:00Z', 'Group A'),
+('m014', 'den', 'swe', '2026-05-17T14:20:00Z', 'Group B'),
+('m015', 'ger', 'lat', '2026-05-17T18:20:00Z', 'Group A'),
+('m016', 'nor', 'slo', '2026-05-17T18:20:00Z', 'Group B'),
+('m017', 'fin', 'usa', '2026-05-18T14:20:00Z', 'Group A'),
+('m018', 'can', 'den', '2026-05-18T14:20:00Z', 'Group B'),
+('m019', 'ger', 'sui', '2026-05-18T18:20:00Z', 'Group A'),
+('m020', 'swe', 'cze', '2026-05-18T18:20:00Z', 'Group B'),
+('m021', 'lat', 'aut', '2026-05-19T14:20:00Z', 'Group A'),
+('m022', 'ita', 'nor', '2026-05-19T14:20:00Z', 'Group B'),
+('m023', 'hun', 'gbr', '2026-05-19T18:20:00Z', 'Group A'),
+('m024', 'slo', 'svk', '2026-05-19T18:20:00Z', 'Group B'),
+('m025', 'aut', 'sui', '2026-05-20T14:20:00Z', 'Group A'),
+('m026', 'cze', 'ita', '2026-05-20T14:20:00Z', 'Group B'),
+('m027', 'usa', 'ger', '2026-05-20T18:20:00Z', 'Group A'),
+('m028', 'swe', 'slo', '2026-05-20T18:20:00Z', 'Group B'),
+('m029', 'lat', 'fin', '2026-05-21T14:20:00Z', 'Group A'),
+('m030', 'can', 'nor', '2026-05-21T14:20:00Z', 'Group B'),
+('m031', 'sui', 'gbr', '2026-05-21T18:20:00Z', 'Group A'),
+('m032', 'den', 'svk', '2026-05-21T18:20:00Z', 'Group B'),
+('m033', 'ger', 'hun', '2026-05-22T14:20:00Z', 'Group A'),
+('m034', 'can', 'slo', '2026-05-22T14:20:00Z', 'Group B'),
+('m035', 'fin', 'gbr', '2026-05-22T18:20:00Z', 'Group A'),
+('m036', 'swe', 'ita', '2026-05-22T18:20:00Z', 'Group B'),
+('m037', 'lat', 'usa', '2026-05-23T10:20:00Z', 'Group A'),
+('m038', 'den', 'slo', '2026-05-23T10:20:00Z', 'Group B'),
+('m039', 'sui', 'hun', '2026-05-23T14:20:00Z', 'Group A'),
+('m040', 'svk', 'cze', '2026-05-23T14:20:00Z', 'Group B'),
+('m041', 'aut', 'ger', '2026-05-23T18:20:00Z', 'Group A'),
+('m042', 'nor', 'swe', '2026-05-23T18:20:00Z', 'Group B'),
+('m043', 'gbr', 'lat', '2026-05-24T14:20:00Z', 'Group A'),
+('m044', 'den', 'ita', '2026-05-24T14:20:00Z', 'Group B'),
+('m045', 'fin', 'aut', '2026-05-24T18:20:00Z', 'Group A'),
+('m046', 'svk', 'can', '2026-05-24T18:20:00Z', 'Group B'),
+('m047', 'usa', 'hun', '2026-05-25T14:20:00Z', 'Group A'),
+('m048', 'cze', 'nor', '2026-05-25T14:20:00Z', 'Group B'),
+('m049', 'ger', 'gbr', '2026-05-25T18:20:00Z', 'Group A'),
+('m050', 'slo', 'ita', '2026-05-25T18:20:00Z', 'Group B'),
+('m051', 'hun', 'lat', '2026-05-26T10:20:00Z', 'Group A'),
+('m052', 'nor', 'den', '2026-05-26T10:20:00Z', 'Group B'),
+('m053', 'usa', 'aut', '2026-05-26T14:20:00Z', 'Group A'),
+('m054', 'swe', 'svk', '2026-05-26T14:20:00Z', 'Group B'),
+('m055', 'sui', 'fin', '2026-05-26T18:20:00Z', 'Group A'),
+('m056', 'cze', 'can', '2026-05-26T18:20:00Z', 'Group B'),
+('qf1', 'tba', 'tba', '2026-05-28T14:20:00Z', 'Quarterfinal'),
+('qf2', 'tba', 'tba', '2026-05-28T14:20:00Z', 'Quarterfinal'),
+('qf3', 'tba', 'tba', '2026-05-28T18:20:00Z', 'Quarterfinal'),
+('qf4', 'tba', 'tba', '2026-05-28T18:20:00Z', 'Quarterfinal'),
+('sf1', 'tba', 'tba', '2026-05-30T13:20:00Z', 'Semifinal'),
+('sf2', 'tba', 'tba', '2026-05-30T18:00:00Z', 'Semifinal'),
+('bronze', 'tba', 'tba', '2026-05-31T13:30:00Z', 'Bronze Medal Game'),
+('final', 'tba', 'tba', '2026-05-31T18:20:00Z', 'Gold Medal Game');

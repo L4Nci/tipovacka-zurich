@@ -1,0 +1,16 @@
+{
+  "name": "IIHF 2026 Predictor",
+  "short_name": "IIHF 2026",
+  "description": "Mistrovství světa v hokeji 2026 - Tipovačka",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/824/824234.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
