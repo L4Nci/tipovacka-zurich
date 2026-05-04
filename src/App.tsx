@@ -9,6 +9,7 @@ import {
   ShieldCheck, 
   ChevronRight, 
   Trophy as TrophyIcon,
+  Flame,
   Clock,
   LogOut,
   ChevronDown,
@@ -228,7 +229,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
   return (
     <motion.div 
       layout
-      className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-4"
+      className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-4 transition-colors"
     >
       <div className="p-4">
         <div className="flex justify-between items-center mb-3">
@@ -236,7 +237,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
             <Clock className="w-3 h-3" />
             {new Date(match.start_time_utc).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
           </span>
-          <span className="text-[10px] bg-slate-50 px-2 py-0.5 rounded-full font-bold text-slate-400 uppercase tracking-tighter">{match.stage}</span>
+          <span className="text-[10px] bg-slate-50 px-2 py-0.5 rounded-full font-bold text-slate-400 uppercase tracking-tighter transition-colors">{match.stage}</span>
         </div>
 
         <div className="flex items-center justify-between gap-4 mb-6">
@@ -247,7 +248,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
           <div className="flex flex-col items-center gap-2">
             {match.status === 'finished' ? (
-              <div className="text-3xl font-black tabular-nums tracking-tighter text-slate-900">
+              <div className="text-3xl font-black tabular-nums tracking-tighter text-slate-900 transition-colors">
                 {match.home_score} : {match.away_score}
               </div>
             ) : (
@@ -263,23 +264,23 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
         {!isFinished && (
           <div className="flex flex-col gap-3">
-            <div className="bg-slate-50 rounded-2xl p-3 flex flex-col items-center justify-center">
+            <div className="bg-slate-50 rounded-2xl p-3 flex flex-col items-center justify-center transition-colors">
               <div className="flex items-center justify-center gap-4">
                 <div className="flex items-center gap-1.5">
                   <button 
                     onClick={() => setHome(h => Math.max(0, h - 1))}
                     disabled={isLocked}
-                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50"
+                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
                     <ChevronDown className="w-4 h-4 text-slate-600" />
                   </button>
-                  <div className="w-10 h-10 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-2xl font-black text-slate-900 shadow-sm">
+                  <div className="w-10 h-10 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-2xl font-black text-slate-900 shadow-sm transition-colors">
                     {home}
                   </div>
                   <button 
                     onClick={() => setHome(h => Math.max(0, h + 1))}
                     disabled={isLocked}
-                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50"
+                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
                     <ChevronUp className="w-4 h-4 text-slate-600" />
                   </button>
@@ -291,17 +292,17 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   <button 
                     onClick={() => setAway(h => Math.max(0, h - 1))}
                     disabled={isLocked}
-                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50"
+                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
                     <ChevronDown className="w-4 h-4 text-slate-600" />
                   </button>
-                  <div className="w-10 h-10 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-2xl font-black text-slate-900 shadow-sm">
+                  <div className="w-10 h-10 bg-white rounded-xl border border-slate-200 flex items-center justify-center text-2xl font-black text-slate-900 shadow-sm transition-colors">
                     {away}
                   </div>
                   <button 
                     onClick={() => setAway(h => Math.max(0, h + 1))}
                     disabled={isLocked}
-                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50"
+                    className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
                     <ChevronUp className="w-4 h-4 text-slate-600" />
                   </button>
@@ -332,9 +333,9 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
         {isFinished && (
           <div className="flex flex-col gap-3">
-             <div className={`p-4 rounded-xl flex items-center justify-between ${
-               points === 5 ? 'bg-green-100 border border-green-200' : 
-               points === 2 ? 'bg-green-50 border border-green-100' : 'bg-slate-50 border border-slate-100'
+             <div className={`p-4 rounded-xl flex items-center justify-between border transition-colors ${
+               points === 5 ? 'bg-green-100 border-green-200' : 
+               points === 2 ? 'bg-green-50 border-green-100' : 'bg-slate-50 border-slate-100'
              }`}>
                <div className="flex flex-col">
                  <span className="text-xs text-slate-500 uppercase font-bold">{t.yourPrediction}</span>
@@ -358,7 +359,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
         >
           {showOthers ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           {showOthers ? t.hide : t.show} {t.othersTip}
-          <span className="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-md font-bold text-[10px]">{match.total_predictions ?? 0} {t.tipsCount}</span>
+          <span className="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-md font-bold text-[10px] transition-colors">{match.total_predictions ?? 0} {t.tipsCount}</span>
         </button>
       </div>
 
@@ -368,7 +369,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
             initial={{ height: 0 }}
             animate={{ height: 'auto' }}
             exit={{ height: 0 }}
-            className="overflow-hidden bg-slate-50 border-t border-slate-100"
+            className="overflow-hidden bg-slate-50 border-t border-slate-100 transition-colors"
           >
             <div className="p-4">
               {others.length === 0 ? (
@@ -378,7 +379,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   {others.map(p => (
                     <div 
                       key={p.player_id} 
-                      className={`px-3 py-2 rounded-xl border flex flex-col items-center min-w-[70px] ${
+                      className={`px-3 py-2 rounded-xl border flex flex-col items-center min-w-[70px] transition-colors ${
                         p.player_id === userId ? 'ring-2 ring-red-500 border-red-500 shadow-sm' : ''
                       } ${
                         p.points_earned === 5 ? 'bg-green-100 border-green-200 text-green-800' :
@@ -410,12 +411,30 @@ const MatchCard: React.FC<MatchCardProps> = ({
 const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) => Promise<void>, t: any }> = ({ match, onUpdate, t }) => {
   const [adminH, setAdminH] = useState(match.home_score ?? 0);
   const [adminA, setAdminA] = useState(match.away_score ?? 0);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const handleUpdate = async () => {
+    if (!showConfirm) {
+      setShowConfirm(true);
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      await onUpdate(adminH, adminA);
+      setShowConfirm(false);
+    } catch (err) {
+      // handled elsewhere
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4">
+    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 overflow-hidden transition-colors">
       <div className="flex justify-between items-center mb-4">
-        <span className="text-xs font-bold text-slate-400">{match.stage}</span>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${match.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+        <span className="text-xs font-bold text-slate-400 uppercase">{match.stage}</span>
+        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors ${match.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
           {match.status.toUpperCase()}
         </span>
       </div>
@@ -423,9 +442,9 @@ const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) 
         <div className="flex flex-col items-center flex-1">
           <span className="text-2xl mb-1">{match.home_flag}</span>
           <div className="flex items-center gap-1">
-            <button onClick={() => setAdminH(Math.max(0, adminH - 1))} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90">-</button>
-            <span className="text-xl font-black w-6 text-center">{adminH}</span>
-            <button onClick={() => setAdminH(adminH + 1)} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90">+</button>
+            <button onClick={() => setAdminH(Math.max(0, adminH - 1))} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">-</button>
+            <span className="text-xl font-black w-6 text-center text-slate-900 transition-colors">{adminH}</span>
+            <button onClick={() => setAdminH(adminH + 1)} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">+</button>
           </div>
         </div>
 
@@ -434,21 +453,33 @@ const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) 
         <div className="flex flex-col items-center flex-1">
           <span className="text-2xl mb-1">{match.away_flag}</span>
           <div className="flex items-center gap-1">
-            <button onClick={() => setAdminA(Math.max(0, adminA - 1))} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90">-</button>
-            <span className="text-xl font-black w-6 text-center">{adminA}</span>
-            <button onClick={() => setAdminA(adminA + 1)} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90">+</button>
+            <button onClick={() => setAdminA(Math.max(0, adminA - 1))} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">-</button>
+            <span className="text-xl font-black w-6 text-center text-slate-900 transition-colors">{adminA}</span>
+            <button onClick={() => setAdminA(adminA + 1)} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">+</button>
           </div>
         </div>
       </div>
-      <button 
-        onClick={() => onUpdate(adminH, adminA)}
-        disabled={adminH === adminA}
-        className={`w-full py-3 rounded-xl text-xs font-bold transition-transform shadow-sm ${
-          adminH === adminA ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-slate-900 text-white active:scale-95'
-        }`}
-      >
-        {t.updateResult}
-      </button>
+      <div className="flex flex-col gap-2">
+        <button 
+          onClick={handleUpdate}
+          disabled={adminH === adminA || isUpdating}
+          className={`w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${
+            adminH === adminA ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 
+            showConfirm ? 'bg-orange-600 text-white animate-pulse' : 'bg-slate-900 text-white active:scale-95'
+          }`}
+        >
+          {isUpdating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 
+           showConfirm ? (t.lang === 'cz' ? 'Určitě?' : 'Are you sure?') : t.updateResult}
+        </button>
+        {showConfirm && (
+          <button 
+            onClick={() => setShowConfirm(false)}
+            className="w-full py-2 text-[10px] font-bold text-slate-400 uppercase"
+          >
+            {t.lang === 'cz' ? 'Zrušit' : 'Cancel'}
+          </button>
+        )}
+      </div>
       {adminH === adminA && <p className="mt-2 text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
     </div>
   );
@@ -471,6 +502,7 @@ export default function App() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [leaderboard, setLeaderboard] = useState<Player[]>([]);
+  const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
   const [loginData, setLoginData] = useState({ username: '', password: '' });
@@ -491,10 +523,11 @@ export default function App() {
   const fetchAll = async () => {
     if (!user) return;
     try {
-      const { matches: matchesData, teams: teamsData, leaderboard: lbData } = await fetchAllData(user.id);
+      const { matches: matchesData, teams: teamsData, leaderboard: lbData, allPredictions: apData } = await fetchAllData(user.id);
       setMatches(matchesData);
       setTeams(teamsData);
       setLeaderboard(lbData);
+      setAllPredictions(apData);
     } catch (e) {
       console.error(e);
     } finally {
@@ -582,36 +615,92 @@ export default function App() {
     }
   };
 
+  const leaderboardWithStreaks = useMemo(() => {
+    // Current ranks
+    const calculateRanks = (preds: Prediction[]) => {
+      const pStats = leaderboard.map(p => {
+        const userPreds = preds.filter(pr => pr.player_id === p.id);
+        let total = 0;
+        let exact = 0;
+        let currentStreak = 0;
+        let tempStreak = 0;
+        const history: { points: number, res: 'W' | 'L' | 'E' }[] = [];
+
+        userPreds.forEach(pr => {
+          const mh = (pr as any).home_score;
+          const ma = (pr as any).away_score;
+          const ph = pr.predicted_home_score;
+          const pa = pr.predicted_away_score;
+
+          let pts = 0;
+          if (ph === mh && pa === ma) pts = 5;
+          else if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) pts = 2;
+
+          total += pts;
+          if (pts === 5) exact++;
+
+          if (pts > 0) tempStreak++;
+          else tempStreak = 0;
+          currentStreak = tempStreak;
+          history.push({ points: pts, res: pts === 5 ? 'E' : pts === 2 ? 'W' : 'L' });
+        });
+
+        // Add tournament winner points if applicable
+        if (p.tournament_winner_id && teams.find(t => t.id === p.tournament_winner_id && t.is_final_winner === 1)) {
+          total += 10;
+        }
+
+        return { id: p.id, total, exact, currentStreak, history };
+      });
+
+      return pStats.sort((a, b) => b.total - a.total || b.exact - a.exact || a.id.localeCompare(b.id));
+    };
+
+    const currentResults = calculateRanks(allPredictions);
+    
+    // Sort all predictions by match time to determine "last match"
+    const sortedPreds = [...allPredictions].sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
+    const lastMatchId = sortedPreds[sortedPreds.length - 1]?.match_id;
+    const prevResults = lastMatchId ? calculateRanks(allPredictions.filter(pr => pr.match_id !== lastMatchId)) : currentResults;
+
+    return leaderboard.map(p => {
+      const stats = currentResults.find(r => r.id === p.id);
+      const prevIndex = prevResults.findIndex(r => r.id === p.id);
+      const currentIndex = currentResults.findIndex(r => r.id === p.id);
+      
+      // Also need best streak across all matches
+      const userPredsAll = allPredictions
+        .filter(pr => pr.player_id === p.id)
+        .sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
+      
+      let bestStreak = 0;
+      let temp = 0;
+      userPredsAll.forEach(pr => {
+        const mh = (pr as any).home_score;
+        const ma = (pr as any).away_score;
+        const pts = (pr.predicted_home_score === mh && pr.predicted_away_score === ma) ? 5 : 
+                    ((pr.predicted_home_score > pr.predicted_away_score && mh > ma) || (pr.predicted_away_score > pr.predicted_home_score && ma > mh) || (pr.predicted_home_score === pr.predicted_away_score && mh === ma)) ? 2 : 0;
+        if (pts > 0) temp++; else temp = 0;
+        bestStreak = Math.max(bestStreak, temp);
+      });
+
+      return {
+        ...p,
+        total_points: stats?.total ?? 0,
+        exact_hits: stats?.exact ?? 0,
+        currentStreak: stats?.currentStreak ?? 0,
+        bestStreak,
+        history: stats?.history.slice(-5) ?? [],
+        rankChange: prevIndex - currentIndex
+      };
+    }).sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0) || (b.exact_hits ?? 0) - (a.exact_hits ?? 0));
+  }, [leaderboard, allPredictions, teams]);
+
   const currentUserStats = useMemo(() => {
     if (!user) return null;
-    const stats = { exact: 0, winner: 0, total: 0 };
-    
-    // Sort finished matches chronologically
-    const finished = matches
-      .filter(m => m.status === 'finished')
-      .sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime());
-
-    finished.forEach(m => {
-      const ph = m.predicted_home_score;
-      const pa = m.predicted_away_score;
-      const mh = m.home_score;
-      const ma = m.away_score;
-
-      if (ph === null || pa === null || mh === null || ma === null) return;
-
-      if (ph === mh && pa === ma) {
-        stats.exact++;
-        stats.winner++;
-      } else if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) {
-        stats.winner++;
-      }
-    });
-    
-    const lbEntry = leaderboard.find(l => l.id === user.id);
-    stats.total = lbEntry?.total_points ?? 0;
-
-    return stats;
-  }, [matches, user, leaderboard]);
+    const stats = leaderboardWithStreaks.find(p => p.id === user.id);
+    return stats || { exact: 0, winner: 0, total: 0, currentStreak: 0, bestStreak: 0, history: [] };
+  }, [leaderboardWithStreaks, user]);
 
   if (!user) {
     const loginT = translations.cz; 
@@ -673,14 +762,14 @@ export default function App() {
   if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">{t.loading}</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl">
-      <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100">
+    <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300">
+      <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100 transition-colors">
         <div className="flex justify-between items-center">
           <div 
             className="cursor-pointer active:opacity-70 transition-opacity"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
-             <h1 className="text-2xl font-black text-slate-900 leading-tight">MS V HOKEJI 2026</h1>
+             <h1 className="text-2xl font-black text-slate-900 leading-tight transition-colors">MS V HOKEJI 2026</h1>
              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Zurich & Fribourg, Switzerland</p>
           </div>
         </div>
@@ -689,7 +778,7 @@ export default function App() {
       <main className="p-4">
         {/* Match Filter Bar */}
         {(tab === 'matches' || tab === 'results') && (
-          <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 bg-slate-50 py-1">
+          <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 bg-slate-50 py-1 transition-colors">
             {[
               { id: 'all', label: t.all },
               { id: 'A', label: t.groupA },
@@ -700,7 +789,9 @@ export default function App() {
                 key={f.id}
                 onClick={() => setMatchFilter(f.id as any)}
                 className={`flex-none px-4 py-1.5 rounded-full text-[10px] font-black transition-all ${
-                  matchFilter === f.id ? 'bg-red-600 text-white shadow-lg shadow-red-100' : 'bg-white text-slate-400 border border-slate-100 hover:border-slate-200'
+                  matchFilter === f.id 
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-100' 
+                    : 'bg-white text-slate-400 border-slate-100 border hover:border-slate-200'
                 }`}
               >
                 {f.label}
@@ -809,7 +900,7 @@ export default function App() {
                 </div>
               )}
 
-              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden transition-colors">
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-slate-50">
@@ -819,25 +910,38 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
-                    {leaderboard.map((p, i) => (
+                    {leaderboardWithStreaks.map((p, i) => (
                       <tr 
                         key={p.id} 
-                        className={`border-b border-slate-50 last:border-none ${p.id === user.id ? 'bg-red-50/50' : ''}`}
+                        className={`border-b border-slate-50 last:border-none transition-colors ${p.id === user.id ? 'bg-red-50/50' : ''}`}
                       >
                         <td className="px-5 py-4">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
-                            i === 0 ? 'bg-yellow-400 text-yellow-900' :
-                            i === 1 ? 'bg-slate-300 text-slate-700' :
-                            i === 2 ? 'bg-amber-600 text-amber-50' :
-                            'bg-slate-100 text-slate-500'
-                          }`}>
-                            {i + 1}
+                          <div className="flex flex-col items-center gap-1">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
+                              i === 0 ? 'bg-yellow-400 text-yellow-900 shadow-sm shadow-yellow-100' :
+                              i === 1 ? 'bg-slate-300 text-slate-700' :
+                              i === 2 ? 'bg-amber-600 text-amber-50' :
+                              'bg-slate-100 text-slate-500'
+                            }`}>
+                              {i + 1}
+                            </div>
+                            {p.rankChange !== 0 && (
+                              <span className={`text-[8px] font-bold ${p.rankChange > 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                {p.rankChange > 0 ? `+${p.rankChange}` : p.rankChange}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
                              <span className="font-bold text-slate-700">{p.username}</span>
                              <span className="text-lg">{p.winner_flag}</span>
+                             {p.currentStreak >= 3 && (
+                               <span className="flex items-center scale-75 origin-left">
+                                 {p.currentStreak >= 7 ? '🐐' : 
+                                  p.currentStreak >= 5 ? '🔥🔥' : '🔥'}
+                               </span>
+                             )}
                           </div>
                           <div className="text-[10px] text-slate-400 font-medium flex items-center gap-2">
                             <span>🎯 {p.exact_hits ?? 0}</span>
@@ -845,7 +949,7 @@ export default function App() {
                           </div>
                         </td>
                         <td className="px-5 py-4 text-right">
-                          <span className="text-xl font-black text-slate-900">{p.total_points ?? 0}</span>
+                          <span className="text-xl font-black text-slate-900 transition-colors">{p.total_points ?? 0}</span>
                         </td>
                       </tr>
                     ))}
@@ -863,8 +967,8 @@ export default function App() {
               exit={{ opacity: 0, x: 20 }}
               className="space-y-6"
             >
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center">
-                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-md overflow-hidden bg-white">
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-md overflow-hidden">
                    {(() => {
                      const team = teams.find(tm => tm.id === user.tournament_winner_id);
                      if (team) return <span className="text-5xl leading-none">{team.flag_code}</span>;
@@ -872,49 +976,109 @@ export default function App() {
                      return <User className="w-10 h-10 text-slate-400" />;
                    })()}
                  </div>
-                 <h2 className="text-xl font-black text-slate-900 uppercase">{user.username}</h2>
+                 <h2 className="text-xl font-black text-slate-900 uppercase transition-colors">{user.username}</h2>
+                 {currentUserStats.currentStreak >= 3 && (
+                   <div className="mt-2 flex items-center gap-1 text-orange-500 font-black italic text-sm">
+                      <Flame className="w-4 h-4 fill-current" />
+                      {currentUserStats.currentStreak >= 7 ? 'GOAT' : 
+                       currentUserStats.currentStreak >= 5 ? 'ON FIRE' : 'HOT'}
+                   </div>
+                 )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t.totalPoints}</p>
-                    <p className="text-4xl font-black text-red-600">{currentUserStats.total}</p>
+                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{t.totalPoints}</p>
+                    <p className="text-4xl font-black text-red-600 transition-colors">{currentUserStats.total_points}</p>
                  </div>
-                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{t.exactScores}</p>
-                    <p className="text-4xl font-black text-green-600">{currentUserStats.exact}</p>
+                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{t.exactScores}</p>
+                    <p className="text-4xl font-black text-green-600 transition-colors">{currentUserStats.exact_hits}</p>
+                 </div>
+                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{lang === 'cz' ? 'Nejlepší série' : 'Best Streak'}</p>
+                    <p className="text-4xl font-black text-slate-900 transition-colors">{currentUserStats.bestStreak}</p>
+                 </div>
+                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{lang === 'cz' ? 'Aktuální série' : 'Current Streak'}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-4xl font-black text-orange-500 transition-colors">{currentUserStats.currentStreak}</p>
+                      <Flame className={`w-6 h-6 ${currentUserStats.currentStreak >= 3 ? 'text-orange-500 fill-current' : 'text-slate-100'}`} />
+                    </div>
                  </div>
               </div>
 
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t.pickWinner}</h3>
-                 <div className="grid grid-cols-4 gap-2">
-                   {teams.filter(t => t.id !== 'tba').map(t => (
-                     <button
-                       key={t.id}
-                       onClick={() => pickWinner(t.id)}
-                       className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${
-                         user.tournament_winner_id === t.id 
-                         ? 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]' 
-                         : 'bg-slate-50 border-transparent hover:border-slate-200'
-                       }`}
-                     >
-                       {user.tournament_winner_id === t.id && (
-                         <div className="absolute -top-1 -right-1 bg-white rounded-full p-0.5 shadow-sm">
-                           <CheckCircle2 className="w-3 h-3 text-red-600" />
-                         </div>
-                       )}
-                       <span className="text-2xl">{t.flag_code}</span>
-                       <span className={`text-[10px] font-black ${user.tournament_winner_id === t.id ? 'text-white' : 'text-slate-400'}`}>
-                         {t.id.toUpperCase()}
-                       </span>
-                     </button>
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
+                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 text-center">{lang === 'cz' ? 'Historie (posledních 5)' : 'History (last 5)'}</h3>
+                 <div className="flex justify-center gap-3">
+                   {currentUserStats.history.map((h: any, idx: number) => (
+                      <div key={idx} className="flex flex-col items-center gap-1">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black border transition-colors ${
+                          h.res === 'E' ? 'bg-green-500 text-white border-green-600' :
+                          h.res === 'W' ? 'bg-green-100 text-green-700 border-green-200' :
+                          'bg-slate-50 text-slate-400 border-slate-100'
+                        }`}>
+                          {h.res === 'L' ? '0' : `+${h.points}`}
+                        </div>
+                        <span className="text-[8px] font-bold text-slate-300">
+                          {h.res === 'E' ? '✔✔' : h.res === 'W' ? '✔' : '✖'}
+                        </span>
+                      </div>
                    ))}
+                   {currentUserStats.history.length === 0 && <p className="text-[10px] text-slate-400 italic">Zatím žádná historie</p>}
                  </div>
-                 <p className="mt-4 text-[10px] text-center text-slate-400 italic">{t.lockedWinner}</p>
               </div>
 
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
+                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
+                   {t.pickWinner}
+                   {(() => {
+                     const firstMatch = matches.sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
+                     const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
+                     const isLocked = Date.now() > firstTime - (4 * 60 * 60 * 1000);
+                     return isLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null;
+                   })()}
+                 </h3>
+                 <div className="grid grid-cols-4 gap-2">
+                   {teams.filter(tm => tm.id !== 'tba').map(tm => {
+                     const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
+                     const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
+                     const isLocked = Date.now() > firstTime - (4 * 60 * 60 * 1000);
+                     const isSelected = user.tournament_winner_id === tm.id;
+                     
+                     return (
+                       <motion.button
+                         key={tm.id}
+                         whileTap={!isLocked ? { scale: 0.9 } : {}}
+                         onClick={() => !isLocked && pickWinner(tm.id)}
+                         disabled={isLocked && !isSelected}
+                         className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${
+                           isSelected 
+                           ? 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]' 
+                           : isLocked ? 'bg-slate-50 border-transparent opacity-40 grayscale pointer-events-none' : 'bg-slate-50 border-transparent hover:border-slate-200'
+                         }`}
+                       >
+                         {isSelected && (
+                           <motion.div 
+                             initial={{ scale: 0 }}
+                             animate={{ scale: 1 }}
+                             className="absolute -top-1 -right-1 bg-white rounded-full p-0.5 shadow-sm"
+                           >
+                             <CheckCircle2 className="w-3 h-3 text-red-600" />
+                           </motion.div>
+                         )}
+                         <span className="text-2xl">{tm.flag_code}</span>
+                         <span className={`text-[10px] font-black ${isSelected ? 'text-white' : 'text-slate-400'}`}>
+                           {tm.id.toUpperCase()}
+                         </span>
+                       </motion.button>
+                     );
+                   })}
+                 </div>
+                 <p className="mt-4 text-[10px] text-center text-slate-400 italic font-medium">{t.lockedWinner}</p>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t.langSelect}</h3>
                  <div className="grid grid-cols-2 gap-4">
                     <button 
@@ -953,7 +1117,7 @@ export default function App() {
                  <ShieldCheck className="w-4 h-4" /> {t.adminControls}
               </h2>
 
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-8 overflow-hidden">
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-8 overflow-hidden transition-colors">
                  <div className="flex items-center justify-between mb-4">
                    <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
                      <UserPlus className="w-4 h-4" /> {t.createUser}
@@ -981,7 +1145,7 @@ export default function App() {
                            placeholder={t.newUsername}
                            value={newUserData.username}
                            onChange={e => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
-                           className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600"
+                           className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600 transition-colors"
                          />
                        </div>
                        <div>
@@ -991,7 +1155,7 @@ export default function App() {
                            placeholder={t.newPassword}
                            value={newUserData.password}
                            onChange={e => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
-                           className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600"
+                           className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600 transition-colors"
                          />
                        </div>
                        <button 
@@ -1010,7 +1174,7 @@ export default function App() {
                  </AnimatePresence>
               </div>
 
-               <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl">
+               <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl transition-colors">
                  <button 
                     onClick={() => setAdminMatchFilter('scheduled')}
                     className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${adminMatchFilter === 'scheduled' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
@@ -1089,7 +1253,7 @@ export default function App() {
       </main>
 
       {/* Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t border-slate-100 px-2 py-3 flex justify-around items-center rounded-t-[2rem] z-50">
+      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t px-2 py-3 flex justify-around items-center rounded-t-[2rem] z-50 transition-colors border-slate-100">
         <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'matches' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
           <Calendar className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.matches}</span>
