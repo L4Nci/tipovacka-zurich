@@ -86,6 +86,7 @@ const translations = {
     officialWinner: "Oficiální vítěz turnaje",
     noDraws: "Remíza není povolena. Jeden tým musí vyhrát!",
     tipSaved: "Tip uložen! ✅",
+    notTipped: "Nenatipoval jsi :(",
   },
   en: {
     matches: "Matches",
@@ -147,6 +148,7 @@ const translations = {
     officialWinner: "Official Tournament Winner",
     noDraws: "Draws are not allowed. One team must win!",
     tipSaved: "Tip saved! ✅",
+    notTipped: "You didn't predict :(",
   }
 };
 
@@ -158,6 +160,7 @@ interface MatchCardProps {
   isFinished?: boolean;
   userId?: string;
   t: any;
+  matchPredictions?: Prediction[];
 }
 
 const MatchCard: React.FC<MatchCardProps> = ({ 
@@ -165,7 +168,8 @@ const MatchCard: React.FC<MatchCardProps> = ({
   onPredict, 
   isFinished = false, 
   userId,
-  t
+  t,
+  matchPredictions = []
 }) => {
   const [home, setHome] = useState(match.predicted_home_score ?? 0);
   const [away, setAway] = useState(match.predicted_away_score ?? 0);
@@ -226,6 +230,29 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
   const points = getPoints();
 
+  const predictionStats = useMemo(() => {
+    const total = matchPredictions.length;
+    if (total === 0) return { home: 50, away: 50, draw: 0, isEmpty: true };
+    
+    const homeWins = matchPredictions.filter(p => p.predicted_home_score > p.predicted_away_score).length;
+    const draws = matchPredictions.filter(p => p.predicted_home_score === p.predicted_away_score).length;
+    const awayWins = matchPredictions.filter(p => p.predicted_away_score > p.predicted_home_score).length;
+    
+    return {
+      home: Math.round((homeWins / total) * 100),
+      draw: Math.round((draws / total) * 100),
+      away: Math.round((awayWins / total) * 100),
+      isEmpty: false
+    };
+  }, [matchPredictions]);
+
+  const calcPoints = (ph: number, pa: number) => {
+    if (match.home_score === null || match.away_score === null) return 0;
+    if (ph === match.home_score && pa === match.away_score) return 5;
+    if ((ph > pa && match.home_score > match.away_score) || (pa > ph && match.away_score > match.home_score)) return 2;
+    return 0;
+  };
+
   return (
     <motion.div 
       layout
@@ -264,6 +291,36 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
         {!isFinished && (
           <div className="flex flex-col gap-3">
+            <div className="px-1 mb-1">
+              <div className="flex justify-between items-center mb-1.5 text-[9px] font-black uppercase text-slate-400 px-1">
+                <span className={!predictionStats.isEmpty && predictionStats.home > predictionStats.away && predictionStats.home > predictionStats.draw ? 'text-red-600 font-bold' : ''}>
+                  {predictionStats.isEmpty ? '---' : `${predictionStats.home}%`}
+                </span>
+                {!predictionStats.isEmpty && predictionStats.draw > 0 && (
+                  <span className="text-slate-400">
+                    Remíza {predictionStats.draw}%
+                  </span>
+                )}
+                <span className={!predictionStats.isEmpty && predictionStats.away > predictionStats.home && predictionStats.away > predictionStats.draw ? 'text-slate-800 font-bold' : ''}>
+                  {predictionStats.isEmpty ? '---' : `${predictionStats.away}%`}
+                </span>
+              </div>
+              <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-white">
+                <div 
+                  style={{ width: `${predictionStats.home}%` }} 
+                  className={`h-full transition-all duration-1000 ease-out ${predictionStats.isEmpty ? 'bg-slate-200' : 'bg-red-600'}`} 
+                />
+                <div 
+                  style={{ width: `${predictionStats.draw}%` }} 
+                  className={`h-full transition-all duration-1000 ease-out ${predictionStats.isEmpty ? 'bg-slate-200' : 'bg-slate-300'}`} 
+                />
+                <div 
+                  style={{ width: `${predictionStats.away}%` }} 
+                  className={`h-full transition-all duration-1000 ease-out ${predictionStats.isEmpty ? 'bg-slate-200' : 'bg-slate-700'}`} 
+                />
+              </div>
+            </div>
+
             <div className="bg-slate-50 rounded-2xl p-3 flex flex-col items-center justify-center transition-colors">
               <div className="flex items-center justify-center gap-4">
                 <div className="flex items-center gap-1.5">
@@ -336,19 +393,19 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
         {isFinished && (
           <div className="flex flex-col gap-3">
-             <div className={`p-4 rounded-xl flex items-center justify-between border transition-colors ${
-               points === 5 ? 'bg-green-100 border-green-200' : 
-               points === 2 ? 'bg-green-50 border-green-100' : 'bg-slate-50 border-slate-100'
+             <div className={`py-2 px-4 rounded-xl flex items-center justify-between border transition-colors ${
+               points === 5 ? 'bg-indigo-50/60 border-indigo-200/50 text-indigo-950 shadow-sm' : 
+               points === 2 ? 'bg-slate-50 border-slate-200 text-slate-900 font-medium' : 'bg-slate-50 border-slate-100'
              }`}>
                <div className="flex flex-col">
-                 <span className="text-xs text-slate-500 uppercase font-bold">{t.yourPrediction}</span>
-                 <span className="text-xl font-bold text-slate-800">
-                    {match.predicted_home_score ?? '?'} : {match.predicted_away_score ?? '?'}
+                 <span className="text-[10px] text-slate-400 uppercase font-bold leading-tight">{t.yourPrediction}</span>
+                 <span className={`text-lg font-black leading-tight ${match.predicted_home_score === null ? 'text-slate-400 italic text-sm' : 'text-slate-900'}`}>
+                    {match.predicted_home_score !== null ? `${match.predicted_home_score} : ${match.predicted_away_score}` : t.notTipped}
                  </span>
                </div>
                {points !== null && (
-                 <div className={`flex items-center gap-1 font-bold ${points > 0 ? 'text-green-600' : 'text-slate-400'}`}>
-                   {points > 0 && <CheckCircle2 className="w-5 h-5" />}
+                 <div className={`flex items-center gap-1 font-black ${points > 0 ? 'text-indigo-700' : 'text-slate-400'}`}>
+                   {points > 0 && <CheckCircle2 className="w-4 h-4" />}
                    +{points} {t.pts}
                  </div>
                )}
@@ -379,28 +436,31 @@ const MatchCard: React.FC<MatchCardProps> = ({
                 <p className="text-center text-xs text-slate-400">{t.noPredictions}</p>
               ) : (
                 <div className="flex flex-wrap gap-2 justify-center">
-                  {others.map(p => (
-                    <div 
-                      key={p.player_id} 
-                      className={`px-3 py-2 rounded-xl border flex flex-col items-center min-w-[70px] transition-colors ${
-                        p.player_id === userId ? 'ring-2 ring-red-500 border-red-500 shadow-sm' : ''
-                      } ${
-                        p.points_earned === 5 ? 'bg-green-100 border-green-200 text-green-800' :
-                        p.points_earned === 2 ? 'bg-green-50 border-green-100 text-green-700' :
-                        'bg-white border-slate-200 text-slate-500'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className={`text-[10px] font-bold uppercase truncate max-w-[60px] ${p.player_id === userId ? 'text-red-600' : ''}`}>
-                          {p.player_id === userId ? 'VY' : p.username}
-                        </span>
-                        {(p as any).winner_flag && (
-                          <span className="text-[10px] grayscale-[0.5] opacity-80">{(p as any).winner_flag}</span>
-                        )}
+                  {others.map(p => {
+                    const pPoints = calcPoints(p.predicted_home_score, p.predicted_away_score);
+                    return (
+                        <div 
+                          key={p.player_id} 
+                          className={`px-3 py-2 rounded-xl border flex flex-col items-center min-w-[70px] transition-colors ${
+                            p.player_id === userId ? 'ring-2 ring-red-500 border-red-500 shadow-sm z-10' : ''
+                          } ${
+                            pPoints === 5 ? 'bg-indigo-50/60 border-indigo-100 text-indigo-950 font-bold shadow-sm' :
+                            pPoints === 2 ? 'bg-slate-50/50 border-slate-200 text-slate-900 font-medium' :
+                            'bg-white border-slate-100 text-slate-400'
+                          }`}
+                        >
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <span className={`text-[9px] font-black uppercase truncate max-w-[55px] ${p.player_id === userId ? 'text-red-600' : ''}`}>
+                            {p.player_id === userId ? 'VY' : p.username}
+                          </span>
+                          {(p as any).winner_flag && (
+                            <span className="text-[10px] grayscale-[0.5] opacity-80">{(p as any).winner_flag}</span>
+                          )}
+                        </div>
+                        <span className={`text-xs ${pPoints === 5 ? 'font-black' : 'font-bold'}`}>{p.predicted_home_score}:{p.predicted_away_score}</span>
                       </div>
-                      <span className="text-xs font-black">{p.predicted_home_score}:{p.predicted_away_score}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -619,10 +679,11 @@ export default function App() {
   };
 
   const leaderboardWithStreaks = useMemo(() => {
-    // Current ranks
+    // Current ranks - only use finished matches for scoring
     const calculateRanks = (preds: Prediction[]) => {
+      const finishedPreds = preds.filter(p => (p as any).home_score !== null && (p as any).away_score !== null);
       const pStats = leaderboard.map(p => {
-        const userPreds = preds.filter(pr => pr.player_id === p.id);
+        const userPreds = finishedPreds.filter(pr => pr.player_id === p.id);
         let total = 0;
         let exact = 0;
         let currentStreak = 0;
@@ -662,7 +723,8 @@ export default function App() {
     const currentResults = calculateRanks(allPredictions);
     
     // Sort all predictions by match time to determine "last match"
-    const sortedPreds = [...allPredictions].sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
+    const finishedPredictions = allPredictions.filter(p => (p as any).home_score !== null && (p as any).away_score !== null);
+    const sortedPreds = [...finishedPredictions].sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
     const lastMatchId = sortedPreds[sortedPreds.length - 1]?.match_id;
     const prevResults = lastMatchId ? calculateRanks(allPredictions.filter(pr => pr.match_id !== lastMatchId)) : currentResults;
 
@@ -672,7 +734,7 @@ export default function App() {
       const currentIndex = currentResults.findIndex(r => r.id === p.id);
       
       // Also need best streak across all matches
-      const userPredsAll = allPredictions
+      const userPredsAll = finishedPredictions
         .filter(pr => pr.player_id === p.id)
         .sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
       
@@ -828,6 +890,7 @@ export default function App() {
                    userId={user.id}
                    t={t}
                    onPredict={(h, a) => savePrediction(m.id, h, a)}
+                   matchPredictions={allPredictions.filter(p => p.match_id === m.id)}
                  />
                ))}
               {matches.filter(m => {
@@ -860,7 +923,14 @@ export default function App() {
                 })
                 .reverse()
                 .map(m => (
-                 <MatchCard key={m.id} match={m} isFinished userId={user.id} t={t} />
+                 <MatchCard 
+                   key={m.id} 
+                   match={m} 
+                   isFinished 
+                   userId={user.id} 
+                   t={t} 
+                   matchPredictions={allPredictions.filter(p => p.match_id === m.id)}
+                 />
                ))}
                {matches.filter(m => {
                   if (m.status !== 'finished') return false;
@@ -995,8 +1065,8 @@ export default function App() {
                    {currentUserStats.history.map((h: any, idx: number) => (
                       <div key={idx} className="flex flex-col items-center gap-1">
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black border transition-colors ${
-                          h.res === 'E' ? 'bg-green-500 text-white border-green-600' :
-                          h.res === 'W' ? 'bg-green-100 text-green-700 border-green-200' :
+                          h.res === 'E' ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm shadow-emerald-100' :
+                          h.res === 'W' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                           'bg-slate-50 text-slate-400 border-slate-100'
                         }`}>
                           {h.res === 'L' ? '0' : `+${h.points}`}

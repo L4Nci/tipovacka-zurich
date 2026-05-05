@@ -57,7 +57,6 @@ export const fetchAllData = async (userId: string) => {
       SELECT pr.*, m.start_time_utc, m.home_score, m.away_score
       FROM predictions pr
       JOIN matches m ON pr.match_id = m.id
-      WHERE m.status = 'finished'
       ORDER BY m.start_time_utc ASC
     `)
   ]);
