@@ -41,7 +41,6 @@ const translations = {
     winner: "vítěz",
     saveTip: "Uložit tip",
     updateTip: "Aktualizovat tip",
-    locked: "Uzamčeno (5 min před startem)",
     yourPrediction: "Tvůj tip",
     noUpcoming: "Žádné nadcházející zápasy.",
     noResults: "Žádné výsledky.",
@@ -65,9 +64,10 @@ const translations = {
     othersTip: "tipy ostatních",
     hide: "Skrýt",
     show: "Zobrazit",
+    locked: "Méně než 5 min do zápasu",
     noPredictions: "Zatím žádné tipy.",
     notPicked: "Zatím nevybráno",
-    lockedWinner: "Uzamčeno 4 hodiny před prvním zápasem",
+    lockedWinner: "Uzamčeno 5 min před prvním zápasem",
     adminControls: "Administrace",
     setFinalWinner: "Nastavit vítěze turnaje",
     setFinalChampion: "Potvrdit šampiona",
@@ -100,7 +100,6 @@ const translations = {
     winner: "winner",
     saveTip: "Save Prediction",
     updateTip: "Update Prediction",
-    locked: "Locked (5 min before start)",
     yourPrediction: "Your Prediction",
     noUpcoming: "No upcoming matches.",
     noResults: "No results.",
@@ -126,9 +125,10 @@ const translations = {
     othersTip: "other users' predictions",
     hide: "Hide",
     show: "Show",
+    locked: "Less than 5 min to game",
     noPredictions: "No predictions yet.",
     notPicked: "Not picked yet",
-    lockedWinner: "Locked 4 hours before first game",
+    lockedWinner: "Locked 5 min before first game",
     adminControls: "Admin Controls",
     setFinalWinner: "Set Tournament Winner",
     setFinalChampion: "Set Final Champion",
@@ -314,12 +314,15 @@ const MatchCard: React.FC<MatchCardProps> = ({
               whileTap={{ scale: 0.95 }}
               onClick={handlePredict}
               disabled={isLocked || home === away || isSaving}
-              className={`w-full py-4 rounded-2xl font-black shadow-lg transition-all disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2 ${
+              className={`w-full py-4 rounded-2xl font-black shadow-lg transition-all disabled:shadow-none flex items-center justify-center gap-2 ${
+                isLocked ? 'bg-slate-100 text-slate-400' :
                 showSuccess ? 'bg-green-500 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-200'
               }`}
             >
               {isSaving ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : isLocked ? (
+                t.locked
               ) : showSuccess ? (
                 t.tipSaved
               ) : (
@@ -986,6 +989,27 @@ export default function App() {
                  )}
               </div>
 
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
+                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 text-center">{lang === 'cz' ? 'Historie (posledních 5)' : 'History (last 5)'}</h3>
+                 <div className="flex justify-center gap-3">
+                   {currentUserStats.history.map((h: any, idx: number) => (
+                      <div key={idx} className="flex flex-col items-center gap-1">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black border transition-colors ${
+                          h.res === 'E' ? 'bg-green-500 text-white border-green-600' :
+                          h.res === 'W' ? 'bg-green-100 text-green-700 border-green-200' :
+                          'bg-slate-50 text-slate-400 border-slate-100'
+                        }`}>
+                          {h.res === 'L' ? '0' : `+${h.points}`}
+                        </div>
+                        <span className="text-[8px] font-bold text-slate-300">
+                          {h.res === 'E' ? '✔✔' : h.res === 'W' ? '✔' : '✖'}
+                        </span>
+                      </div>
+                   ))}
+                   {currentUserStats.history.length === 0 && <p className="text-[10px] text-slate-400 italic">Zatím žádná historie</p>}
+                 </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                  <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
                     <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{t.totalPoints}</p>
@@ -1009,33 +1033,12 @@ export default function App() {
               </div>
 
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 text-center">{lang === 'cz' ? 'Historie (posledních 5)' : 'History (last 5)'}</h3>
-                 <div className="flex justify-center gap-3">
-                   {currentUserStats.history.map((h: any, idx: number) => (
-                      <div key={idx} className="flex flex-col items-center gap-1">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black border transition-colors ${
-                          h.res === 'E' ? 'bg-green-500 text-white border-green-600' :
-                          h.res === 'W' ? 'bg-green-100 text-green-700 border-green-200' :
-                          'bg-slate-50 text-slate-400 border-slate-100'
-                        }`}>
-                          {h.res === 'L' ? '0' : `+${h.points}`}
-                        </div>
-                        <span className="text-[8px] font-bold text-slate-300">
-                          {h.res === 'E' ? '✔✔' : h.res === 'W' ? '✔' : '✖'}
-                        </span>
-                      </div>
-                   ))}
-                   {currentUserStats.history.length === 0 && <p className="text-[10px] text-slate-400 italic">Zatím žádná historie</p>}
-                 </div>
-              </div>
-
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
                    {t.pickWinner}
                    {(() => {
                      const firstMatch = matches.sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
                      const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
-                     const isLocked = Date.now() > firstTime - (4 * 60 * 60 * 1000);
+                     const isLocked = Date.now() > firstTime - (5 * 60 * 1000);
                      return isLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null;
                    })()}
                  </h3>
@@ -1043,7 +1046,7 @@ export default function App() {
                    {teams.filter(tm => tm.id !== 'tba').map(tm => {
                      const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
                      const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
-                     const isLocked = Date.now() > firstTime - (4 * 60 * 60 * 1000);
+                     const isLocked = Date.now() > firstTime - (5 * 60 * 1000);
                      const isSelected = user.tournament_winner_id === tm.id;
                      
                      return (
@@ -1214,6 +1217,11 @@ export default function App() {
                     if (adminGroupFilter === 'all') return true;
                     if (adminGroupFilter === 'playoffs') return !m.stage?.includes('Group');
                     return m.stage?.includes(`Group ${adminGroupFilter}`);
+                 })
+                 .sort((a, b) => {
+                    const timeA = new Date(a.start_time_utc).getTime();
+                    const timeB = new Date(b.start_time_utc).getTime();
+                    return adminMatchFilter === 'finished' ? timeB - timeA : timeA - timeB;
                  })
                  .map(m => (
                     <AdminMatchCard 

@@ -114,12 +114,13 @@ export const registerUser = async (username: string, pass: string, adminId?: str
 
 export const savePrediction = async (userId: string, matchId: string, home: number, away: number) => {
   const matchRes = await db.execute({
-    sql: "SELECT start_time_utc FROM matches WHERE id = ?",
+    sql: "SELECT start_time_utc, status FROM matches WHERE id = ?",
     args: [matchId]
   });
   
   if (matchRes.rows.length === 0) throw new Error("Zápas nenalezen.");
   if (home === away) throw new Error("Remíza není povolena. Vyberte vítěze!");
+
   const startTime = new Date(matchRes.rows[0].start_time_utc as string).getTime();
   if (Date.now() > startTime - (5 * 60 * 1000)) throw new Error("Zápas je již uzamčen.");
 
@@ -173,7 +174,7 @@ export const setTournamentWinner = async (userId: string, teamId: string) => {
 export const pickTournamentWinner = async (userId: string, teamId: string) => {
   const firstMatch = await db.execute("SELECT MIN(start_time_utc) as start FROM matches");
   const firstTime = new Date(firstMatch.rows[0]?.start as string).getTime();
-  if (Date.now() > firstTime - (4 * 60 * 60 * 1000)) throw new Error("Výběr vítěze je již uzamčen.");
+  if (Date.now() > firstTime - (5 * 60 * 1000)) throw new Error("Výběr vítěze je již uzamčen.");
 
   await db.execute({
     sql: "UPDATE players SET tournament_winner_id = ? WHERE id = ?",
