@@ -13,60 +13,67 @@ const db = createClient({
 });
 
 export const fetchAllData = async (userId: string) => {
-  const [matchesRes, teamsRes, lbRes, allPredsRes] = await Promise.all([
-    db.execute({
-      sql: `
-        SELECT m.*, 
-               t1.name as home_name, t1.flag_code as home_flag, 
-               t2.name as away_name, t2.flag_code as away_flag,
-               p.predicted_home_score, 
-               p.predicted_away_score,
-               (SELECT COUNT(*) FROM predictions WHERE match_id = m.id) as total_predictions
-        FROM matches m
-        JOIN teams t1 ON m.home_team_id = t1.id
-        JOIN teams t2 ON m.away_team_id = t2.id
-        LEFT JOIN predictions p ON m.id = p.match_id AND p.player_id = ?
+  try {
+    const [matchesRes, teamsRes, lbRes, allPredsRes] = await Promise.all([
+      db.execute({
+        sql: `
+          SELECT m.*, 
+                 t1.name as home_name, t1.flag_code as home_flag, 
+                 t2.name as away_name, t2.flag_code as away_flag,
+                 p.predicted_home_score, 
+                 p.predicted_away_score,
+                 (SELECT COUNT(*) FROM predictions WHERE match_id = m.id) as total_predictions
+          FROM matches m
+          JOIN teams t1 ON m.home_team_id = t1.id
+          JOIN teams t2 ON m.away_team_id = t2.id
+          LEFT JOIN predictions p ON m.id = p.match_id AND p.player_id = ?
+          ORDER BY m.start_time_utc ASC
+        `,
+        args: [userId]
+      }).catch(e => { console.error("Matches query failed:", e); throw e; }),
+      db.execute("SELECT * FROM teams ORDER BY name ASC").catch(e => { console.error("Teams query failed:", e); throw e; }),
+      db.execute(`
+        SELECT p.id, p.username, p.role, p.tournament_winner_id, t.flag_code as winner_flag,
+               COALESCE(SUM(
+                 CASE 
+                   WHEN pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score THEN 5
+                   WHEN (pr.predicted_home_score > pr.predicted_away_score AND m.home_score > m.away_score) OR 
+                        (pr.predicted_away_score > pr.predicted_home_score AND m.away_score > m.home_score) OR
+                        (pr.predicted_home_score = pr.predicted_away_score AND m.home_score = m.away_score AND m.home_score IS NOT NULL) THEN 2
+                   ELSE 0
+                 END
+               ), 0) + 
+               CASE WHEN p.tournament_winner_id = (SELECT id FROM teams WHERE is_final_winner = 1 LIMIT 1) THEN 10 ELSE 0 END as total_points,
+               COUNT(CASE WHEN pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score THEN 1 END) as exact_hits,
+               COUNT(CASE WHEN ((pr.predicted_home_score > pr.predicted_away_score AND m.home_score > m.away_score) OR 
+                               (pr.predicted_away_score > pr.predicted_home_score AND m.away_score > m.home_score) OR
+                               (pr.predicted_home_score = pr.predicted_away_score AND m.home_score = m.away_score AND m.home_score IS NOT NULL)) 
+                               AND NOT (pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score) THEN 1 END) as outcome_hits
+        FROM players p
+        LEFT JOIN predictions pr ON p.id = pr.player_id
+        LEFT JOIN matches m ON pr.match_id = m.id AND m.status = 'finished'
+        LEFT JOIN teams t ON p.tournament_winner_id = t.id
+        GROUP BY p.id
+        ORDER BY total_points DESC, exact_hits DESC, p.username ASC
+      `).catch(e => { console.error("Leaderboard query failed:", e); throw e; }),
+      db.execute(`
+        SELECT pr.*, m.start_time_utc, m.home_score, m.away_score
+        FROM predictions pr
+        JOIN matches m ON pr.match_id = m.id
         ORDER BY m.start_time_utc ASC
-      `,
-      args: [userId]
-    }),
-    db.execute("SELECT * FROM teams ORDER BY name ASC"),
-    db.execute(`
-      SELECT p.id, p.username, p.role, p.tournament_winner_id, t.flag_code as winner_flag,
-             COALESCE(SUM(
-               CASE 
-                 WHEN pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score THEN 5
-                 WHEN (pr.predicted_home_score > pr.predicted_away_score AND m.home_score > m.away_score) OR 
-                      (pr.predicted_away_score > pr.predicted_home_score AND m.away_score > m.home_score) THEN 2
-                 ELSE 0
-               END
-             ), 0) + 
-             CASE WHEN p.tournament_winner_id = (SELECT id FROM teams WHERE is_final_winner = 1 LIMIT 1) THEN 10 ELSE 0 END as total_points,
-             COUNT(CASE WHEN pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score THEN 1 END) as exact_hits,
-             COUNT(CASE WHEN ((pr.predicted_home_score > pr.predicted_away_score AND m.home_score > m.away_score) OR 
-                             (pr.predicted_away_score > pr.predicted_home_score AND m.away_score > m.home_score)) 
-                             AND NOT (pr.predicted_home_score = m.home_score AND pr.predicted_away_score = m.away_score) THEN 1 END) as outcome_hits
-      FROM players p
-      LEFT JOIN predictions pr ON p.id = pr.player_id
-      LEFT JOIN matches m ON pr.match_id = m.id AND m.status = 'finished'
-      LEFT JOIN teams t ON p.tournament_winner_id = t.id
-      GROUP BY p.id
-      ORDER BY total_points DESC, exact_hits DESC, p.username ASC
-    `),
-    db.execute(`
-      SELECT pr.*, m.start_time_utc, m.home_score, m.away_score
-      FROM predictions pr
-      JOIN matches m ON pr.match_id = m.id
-      ORDER BY m.start_time_utc ASC
-    `)
-  ]);
+      `).catch(e => { console.error("All predictions query failed:", e); throw e; })
+    ]);
 
-  return {
-    matches: matchesRes.rows as unknown as Match[],
-    teams: teamsRes.rows as unknown as Team[],
-    leaderboard: lbRes.rows as unknown as Player[],
-    allPredictions: allPredsRes.rows as unknown as Prediction[]
-  };
+    return {
+      matches: matchesRes.rows as unknown as Match[],
+      teams: teamsRes.rows as unknown as Team[],
+      leaderboard: lbRes.rows as unknown as Player[],
+      allPredictions: allPredsRes.rows as unknown as Prediction[]
+    };
+  } catch (err) {
+    console.error("fetchAllData critical error:", err);
+    throw err;
+  }
 };
 
 export const loginUser = async (username: string, pass: string) => {

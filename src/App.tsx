@@ -87,6 +87,8 @@ const translations = {
     noDraws: "Remíza není povolena. Jeden tým musí vyhrát!",
     tipSaved: "Tip uložen! ✅",
     notTipped: "Nenatipoval jsi :(",
+    locksIn: "Zamyká se za",
+    locksAt: "Zamyká se"
   },
   en: {
     matches: "Matches",
@@ -149,10 +151,81 @@ const translations = {
     noDraws: "Draws are not allowed. One team must win!",
     tipSaved: "Tip saved! ✅",
     notTipped: "You didn't predict :(",
+    locksIn: "Locks in",
+    locksAt: "Locks at"
   }
 };
 
 // --- Components ---
+
+const TeamFlag = ({ code, className = "w-6 h-4" }: { code: string | null | undefined, className?: string }) => {
+  const [error, setError] = React.useState(false);
+  const [retry, setRetry] = React.useState(false);
+
+  if (!code) return null;
+
+  // Function to convert flag emoji to 2-letter ISO code
+  const emojiToIso = (emoji: string) => {
+    const charCodes = Array.from(emoji).map(c => c.codePointAt(0));
+    const iso = charCodes
+      .filter(code => code !== undefined && code >= 0x1F1E6 && code <= 0x1F1FF)
+      .map(code => String.fromCharCode(code! - 0x1F1E6 + 65))
+      .join('')
+      .toLowerCase();
+    return iso.length === 2 ? iso : null;
+  };
+
+  const isoFromEmoji = emojiToIso(code);
+  
+  const map: Record<string, string> = {
+    'cze': 'cz', 'svk': 'sk', 'can': 'ca', 'usa': 'us',
+    'fin': 'fi', 'swe': 'se', 'sui': 'ch', 'ger': 'de',
+    'lat': 'lv', 'den': 'dk', 'nor': 'no', 'kaz': 'kz',
+    'aut': 'at', 'fra': 'fr', 'slo': 'si', 'hun': 'hu',
+    'gbr': 'gb', 'pol': 'pl', 'ita': 'it', 'slv': 'si',
+    'kor': 'kr', 'jpn': 'jp', 'aus': 'au', 'bel': 'be', 
+    'ukr': 'ua', 'kaz': 'kz'
+  };
+
+  const clean = code.trim().toLowerCase();
+  const iso = isoFromEmoji || map[clean] || (clean.length === 2 ? clean : null);
+
+  // If we can't determine ISO, or both image attempts failed
+  if (!iso || (error && retry)) {
+    const isEmoji = /[\uD800-\uDBFF][\uDC00-\uDFFF]/.test(code);
+    return (
+      <div className={`${className} bg-slate-100 rounded-sm flex items-center justify-center border border-slate-200 overflow-hidden`}>
+        {isEmoji ? (
+          <span className="text-xl leading-none scale-125">{code}</span>
+        ) : (
+          <span className="text-[8px] font-black text-slate-500 uppercase">
+            {code.length > 3 ? code.substring(0, 3) : code}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  const flagSrc = retry 
+    ? `https://flagicons.lipis.dev/flags/4x3/${iso}.svg`
+    : `https://flagcdn.com/w160/${iso}.png`;
+
+  return (
+    <img 
+      src={flagSrc} 
+      alt={code}
+      className={`${className} object-contain rounded-sm shadow-sm flex-shrink-0 animate-in fade-in duration-300`}
+      referrerPolicy="no-referrer"
+      onError={() => {
+        if (!retry) {
+          setRetry(true);
+        } else {
+          setError(true);
+        }
+      }}
+    />
+  );
+};
 
 interface MatchCardProps {
   match: Match;
@@ -177,10 +250,44 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const [others, setOthers] = useState<Prediction[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<string | null>(null);
 
   const startTime = new Date(match.start_time_utc).getTime();
   const lockTime = startTime - (5 * 60 * 1000);
   const isLocked = Date.now() > lockTime || match.status === 'finished';
+
+  useEffect(() => {
+    if (isLocked || isFinished) {
+      setTimeLeft(null);
+      return;
+    }
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const diff = lockTime - now;
+
+      if (diff <= 0) {
+        setTimeLeft(null);
+        return;
+      }
+
+      const h = Math.floor(diff / (1000 * 60 * 60));
+      const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const s = Math.floor((diff % (1000 * 60)) / 1000);
+
+      if (h > 0) {
+        setTimeLeft(`${h}h ${m}m`);
+      } else if (m > 0) {
+        setTimeLeft(`${m}m ${s}s`);
+      } else {
+        setTimeLeft(`${s}s`);
+      }
+    };
+
+    updateTimer();
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, [lockTime, isLocked, isFinished]);
 
   const fetchOthers = async (forceRefresh = false) => {
     if (!showOthers || forceRefresh === true) {
@@ -260,16 +367,23 @@ const MatchCard: React.FC<MatchCardProps> = ({
     >
       <div className="p-4">
         <div className="flex justify-between items-center mb-3">
-          <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
-            <Clock className="w-3 h-3" />
-            {new Date(match.start_time_utc).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
-          </span>
+          <div className="flex flex-col">
+            <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
+              <Clock className="w-3 h-3" />
+              {new Date(match.start_time_utc).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {timeLeft && (
+              <span className="text-[9px] font-black text-red-500 uppercase mt-0.5 animate-pulse">
+                {t.locksIn} {timeLeft}
+              </span>
+            )}
+          </div>
           <span className="text-[10px] bg-slate-50 px-2 py-0.5 rounded-full font-bold text-slate-400 uppercase tracking-tighter transition-colors">{match.stage}</span>
         </div>
 
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex-1 flex flex-col items-center text-center">
-            <span className="text-4xl mb-2">{match.home_flag}</span>
+            <TeamFlag code={match.home_flag || match.home_team_id} className="w-12 h-8 mb-2" />
             <span className="text-sm font-semibold text-slate-700 line-clamp-1">{match.home_name}</span>
           </div>
 
@@ -284,7 +398,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
           </div>
 
           <div className="flex-1 flex flex-col items-center text-center">
-            <span className="text-4xl mb-2">{match.away_flag}</span>
+            <TeamFlag code={match.away_flag || match.away_team_id} className="w-12 h-8 mb-2" />
             <span className="text-sm font-semibold text-slate-700 line-clamp-1">{match.away_name}</span>
           </div>
         </div>
@@ -453,9 +567,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                           <span className={`text-[9px] font-black uppercase truncate max-w-[55px] ${p.player_id === userId ? 'text-red-600' : ''}`}>
                             {p.player_id === userId ? 'VY' : p.username}
                           </span>
-                          {(p as any).winner_flag && (
-                            <span className="text-[10px] grayscale-[0.5] opacity-80">{(p as any).winner_flag}</span>
-                          )}
+                          <TeamFlag code={(p as any).winner_flag || (p as any).tournament_winner_id} className="w-4 h-3 grayscale-[0.5] opacity-80" />
                         </div>
                         <span className={`text-xs ${pPoints === 5 ? 'font-black' : 'font-bold'}`}>{p.predicted_home_score}:{p.predicted_away_score}</span>
                       </div>
@@ -503,7 +615,7 @@ const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) 
       </div>
       <div className="flex items-center justify-between gap-2 mb-4">
         <div className="flex flex-col items-center flex-1">
-          <span className="text-2xl mb-1">{match.home_flag}</span>
+          <TeamFlag code={match.home_flag || match.home_team_id} className="w-12 h-8 mb-1" />
           <div className="flex items-center gap-1">
             <button onClick={() => setAdminH(Math.max(0, adminH - 1))} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">-</button>
             <span className="text-xl font-black w-6 text-center text-slate-900 transition-colors">{adminH}</span>
@@ -514,7 +626,7 @@ const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) 
         <span className="text-slate-300 font-bold text-xl">:</span>
 
         <div className="flex flex-col items-center flex-1">
-          <span className="text-2xl mb-1">{match.away_flag}</span>
+          <TeamFlag code={match.away_flag || match.away_team_id} className="w-12 h-8 mb-1" />
           <div className="flex items-center gap-1">
             <button onClick={() => setAdminA(Math.max(0, adminA - 1))} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">-</button>
             <span className="text-xl font-black w-6 text-center text-slate-900 transition-colors">{adminA}</span>
@@ -586,13 +698,21 @@ export default function App() {
   const fetchAll = async () => {
     if (!user) return;
     try {
+      console.log("Fetching all data for user:", user.username);
       const { matches: matchesData, teams: teamsData, leaderboard: lbData, allPredictions: apData } = await fetchAllData(user.id);
+      console.log("Data received:", { 
+        matches: matchesData.length, 
+        teams: teamsData.length, 
+        leaderboard: lbData.length, 
+        allPredictions: apData.length 
+      });
       setMatches(matchesData);
       setTeams(teamsData);
       setLeaderboard(lbData);
       setAllPredictions(apData);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("fetchAll error:", e);
+      setError(e?.message || "Failed to load data");
     } finally {
       setLoading(false);
     }
@@ -600,11 +720,12 @@ export default function App() {
 
   useEffect(() => {
     fetchAll();
-  }, [user]);
+  }, [user?.id]); // Only refetch on actual ID change
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     try {
       let data;
       if (isRegistering) {
@@ -616,18 +737,22 @@ export default function App() {
       localStorage.setItem('user', JSON.stringify(data));
     } catch (err: any) {
       setError(err.message || 'Chyba serveru');
+      setLoading(false);
     }
   };
 
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    setMatches([]);
+    setLeaderboard([]);
+    setAllPredictions([]);
   };
 
   const savePrediction = async (matchId: string, h: number, a: number) => {
     try {
       await savePredDB(user?.id || '', matchId, h, a);
-      fetchAll();
+      await fetchAll();
     } catch (err: any) {
       alert(err.message);
     }
@@ -636,7 +761,7 @@ export default function App() {
   const updateMatchResult = async (matchId: string, h: number, a: number) => {
     try {
       await updateMatchResDB(user?.id || '', matchId, h, a);
-      fetchAll();
+      await fetchAll();
     } catch (err: any) {
       alert(err.message);
     }
@@ -649,7 +774,7 @@ export default function App() {
       await registerUser(newUserData.username, newUserData.password, user?.id);
       setCreateUserMsg(t.userCreated);
       setNewUserData({ username: '', password: '' });
-      fetchAll();
+      await fetchAll();
     } catch (err: any) {
       setCreateUserMsg(err.message);
     }
@@ -658,7 +783,7 @@ export default function App() {
   const setTournamentWinner = async (teamId: string) => {
     try {
       await setWinnerDB(user?.id || '', teamId);
-      fetchAll();
+      await fetchAll();
     } catch (err: any) {
       alert(err.message);
     }
@@ -672,20 +797,34 @@ export default function App() {
         setUser(updatedUser);
         localStorage.setItem('user', JSON.stringify(updatedUser));
       }
-      fetchAll();
+      await fetchAll();
     } catch (err: any) {
       alert(err.message);
     }
   };
 
   const leaderboardWithStreaks = useMemo(() => {
+    // Determine the most recently finished match to calculate "previous" state
+    const finishedMatchesSorted = [...matches]
+      .filter(m => m.home_score !== null && m.away_score !== null)
+      .sort((a, b) => new Date(b.start_time_utc).getTime() - new Date(a.start_time_utc).getTime());
+    
+    const lastFinishedMatchId = finishedMatchesSorted[0]?.id;
+
     // Current ranks - only use finished matches for scoring
-    const calculateRanks = (preds: Prediction[]) => {
-      const finishedPreds = preds.filter(p => (p as any).home_score !== null && (p as any).away_score !== null);
+    const calculateRanks = (preds: Prediction[], excludeMatchId?: string) => {
+      const filteredPreds = preds.filter(p => {
+        const scoreH = (p as any).home_score;
+        const scoreA = (p as any).away_score;
+        const isFinished = scoreH !== null && scoreA !== null && scoreH !== undefined && scoreA !== undefined;
+        return isFinished && (excludeMatchId ? p.match_id !== excludeMatchId : true);
+      });
+
       const pStats = leaderboard.map(p => {
-        const userPreds = finishedPreds.filter(pr => pr.player_id === p.id);
+        const userPreds = filteredPreds.filter(pr => pr.player_id === p.id);
         let total = 0;
         let exact = 0;
+        let outcomeHits = 0;
         let currentStreak = 0;
         let tempStreak = 0;
         const history: { points: number, res: 'W' | 'L' | 'E' }[] = [];
@@ -697,11 +836,15 @@ export default function App() {
           const pa = pr.predicted_away_score;
 
           let pts = 0;
-          if (ph === mh && pa === ma) pts = 5;
-          else if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) pts = 2;
+          if (ph === mh && pa === ma) {
+            pts = 5;
+          } else if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) {
+            pts = 2;
+          }
 
           total += pts;
           if (pts === 5) exact++;
+          if (pts === 2) outcomeHits++;
 
           if (pts > 0) tempStreak++;
           else tempStreak = 0;
@@ -710,30 +853,30 @@ export default function App() {
         });
 
         // Add tournament winner points if applicable
-        if (p.tournament_winner_id && teams.find(t => t.id === p.tournament_winner_id && t.is_final_winner === 1)) {
+        if (p.tournament_winner_id && teams.find(tm => tm.id === p.tournament_winner_id && tm.is_final_winner === 1)) {
           total += 10;
         }
 
-        return { id: p.id, total, exact, currentStreak, history };
+        return { id: p.id, username: p.username, total, exact, outcomeHits, currentStreak, history };
       });
 
-      return pStats.sort((a, b) => b.total - a.total || b.exact - a.exact || a.id.localeCompare(b.id));
+      return pStats.sort((a, b) => b.total - a.total || b.exact - a.exact || b.outcomeHits - a.outcomeHits || a.username.localeCompare(b.username));
     };
 
     const currentResults = calculateRanks(allPredictions);
-    
-    // Sort all predictions by match time to determine "last match"
-    const finishedPredictions = allPredictions.filter(p => (p as any).home_score !== null && (p as any).away_score !== null);
-    const sortedPreds = [...finishedPredictions].sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
-    const lastMatchId = sortedPreds[sortedPreds.length - 1]?.match_id;
-    const prevResults = lastMatchId ? calculateRanks(allPredictions.filter(pr => pr.match_id !== lastMatchId)) : currentResults;
+    const prevResults = lastFinishedMatchId ? calculateRanks(allPredictions, lastFinishedMatchId) : currentResults;
 
     return leaderboard.map(p => {
       const stats = currentResults.find(r => r.id === p.id);
       const prevIndex = prevResults.findIndex(r => r.id === p.id);
       const currentIndex = currentResults.findIndex(r => r.id === p.id);
       
-      // Also need best streak across all matches
+      const finishedPredictions = allPredictions.filter(pr => {
+        const mh = (pr as any).home_score;
+        const ma = (pr as any).away_score;
+        return mh !== null && ma !== null && mh !== undefined && ma !== undefined;
+      });
+
       const userPredsAll = finishedPredictions
         .filter(pr => pr.player_id === p.id)
         .sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
@@ -743,8 +886,10 @@ export default function App() {
       userPredsAll.forEach(pr => {
         const mh = (pr as any).home_score;
         const ma = (pr as any).away_score;
-        const pts = (pr.predicted_home_score === mh && pr.predicted_away_score === ma) ? 5 : 
-                    ((pr.predicted_home_score > pr.predicted_away_score && mh > ma) || (pr.predicted_away_score > pr.predicted_home_score && ma > mh) || (pr.predicted_home_score === pr.predicted_away_score && mh === ma)) ? 2 : 0;
+        const ph = pr.predicted_home_score;
+        const pa = pr.predicted_away_score;
+        const pts = (ph === mh && pa === ma) ? 5 : 
+                    ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) ? 2 : 0;
         if (pts > 0) temp++; else temp = 0;
         bestStreak = Math.max(bestStreak, temp);
       });
@@ -753,13 +898,15 @@ export default function App() {
         ...p,
         total_points: stats?.total ?? 0,
         exact_hits: stats?.exact ?? 0,
+        outcome_hits: stats?.outcomeHits ?? 0,
         currentStreak: stats?.currentStreak ?? 0,
         bestStreak,
         history: stats?.history.slice(-5) ?? [],
-        rankChange: prevIndex - currentIndex
+        rankChange: (prevIndex === -1 || currentIndex === -1) ? 0 : prevIndex - currentIndex
       };
-    }).sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0) || (b.exact_hits ?? 0) - (a.exact_hits ?? 0));
-  }, [leaderboard, allPredictions, teams]);
+    }).sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0) || (b.exact_hits ?? 0) - (a.exact_hits ?? 0) || (b.outcome_hits ?? 0) - (a.outcome_hits ?? 0) || a.username.localeCompare(b.username));
+  }, [leaderboard, allPredictions, teams, matches]);
+
 
   const currentUserStats = useMemo(() => {
     if (!user) return null;
@@ -824,7 +971,24 @@ export default function App() {
     );
   }
 
-  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center">{t.loading}</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+      <div className="w-8 h-8 border-4 border-red-600/20 border-t-red-600 rounded-full animate-spin mb-4" />
+      <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">{t.loading}</p>
+      {error && (
+        <div className="mt-6 p-4 bg-white rounded-2xl border border-red-100 shadow-sm max-w-xs text-center">
+          <p className="text-red-600 text-xs font-bold uppercase mb-2">Error</p>
+          <p className="text-slate-600 text-sm mb-4">{error}</p>
+          <button 
+            onClick={() => { setError(''); setLoading(true); fetchAll(); }}
+            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-transform"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300">
@@ -964,7 +1128,7 @@ export default function App() {
                         const officialWinner = teams.find(tm => tm.is_final_winner === 1);
                         return (
                           <div className="flex flex-col items-center">
-                            <span className="text-6xl mb-2">{officialWinner?.flag_code}</span>
+                            <TeamFlag code={officialWinner?.flag_code || officialWinner?.id} className="w-20 h-12 mb-2" />
                             <span className="text-2xl font-black">{officialWinner?.name}</span>
                           </div>
                         );
@@ -989,8 +1153,8 @@ export default function App() {
                         className={`border-b border-slate-50 last:border-none transition-colors ${p.id === user.id ? 'bg-red-50/50' : ''}`}
                       >
                         <td className="px-5 py-4">
-                          <div className="flex flex-col items-center gap-1">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
                               i === 0 ? 'bg-yellow-400 text-yellow-900 shadow-sm shadow-yellow-100' :
                               i === 1 ? 'bg-slate-300 text-slate-700' :
                               i === 2 ? 'bg-amber-600 text-amber-50' :
@@ -998,17 +1162,27 @@ export default function App() {
                             }`}>
                               {i + 1}
                             </div>
-                            {p.rankChange !== 0 && (
-                              <span className={`text-[8px] font-bold ${p.rankChange > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                {p.rankChange > 0 ? `+${p.rankChange}` : p.rankChange}
-                              </span>
-                            )}
+                            <div className="flex items-center min-w-[28px] ml-1">
+                              {p.rankChange > 0 ? (
+                                <div className="flex items-center text-[10px] font-black text-emerald-500">
+                                  <ChevronUp className="w-3.5 h-3.5 stroke-[3]" />
+                                  <span>{p.rankChange}</span>
+                                </div>
+                              ) : p.rankChange < 0 ? (
+                                <div className="flex items-center text-[10px] font-black text-rose-500">
+                                  <ChevronDown className="w-3.5 h-3.5 stroke-[3]" />
+                                  <span>{Math.abs(p.rankChange)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 font-bold text-[10px] ml-1.5 opacity-40">•</span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
                              <span className="font-bold text-slate-700">{p.username}</span>
-                             <span className="text-lg">{p.winner_flag}</span>
+                             <TeamFlag code={p.winner_flag || p.tournament_winner_id} className="w-5 h-3.5" />
                              {p.currentStreak >= 3 && (
                                <span className="flex items-center scale-75 origin-left">
                                  {p.currentStreak >= 7 ? '🐐' : 
@@ -1044,8 +1218,8 @@ export default function App() {
                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-md overflow-hidden">
                    {(() => {
                      const team = teams.find(tm => tm.id === user.tournament_winner_id);
-                     if (team) return <span className="text-5xl leading-none">{team.flag_code}</span>;
-                     if (user.winner_flag) return <span className="text-5xl leading-none">{user.winner_flag}</span>;
+                     if (team) return <TeamFlag code={team.flag_code || team.id} className="w-12 h-8" />;
+                     if (user.winner_flag) return <TeamFlag code={user.winner_flag || user.tournament_winner_id} className="w-12 h-8" />;
                      return <User className="w-10 h-10 text-slate-400" />;
                    })()}
                  </div>
@@ -1140,7 +1314,7 @@ export default function App() {
                              <CheckCircle2 className="w-3 h-3 text-red-600" />
                            </motion.div>
                          )}
-                         <span className="text-2xl">{tm.flag_code}</span>
+                         <TeamFlag code={tm.flag_code || tm.id} className="w-10 h-6 mb-1" />
                          <span className={`text-[10px] font-black ${isSelected ? 'text-white' : 'text-slate-400'}`}>
                            {tm.id.toUpperCase()}
                          </span>
@@ -1313,7 +1487,7 @@ export default function App() {
                          selectedWinner === t.id ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-transparent'
                        }`}
                      >
-                       <span className="text-2xl">{t.flag_code}</span>
+                       <TeamFlag code={t.flag_code || t.id} className="w-10 h-6 mb-1" />
                        <span className="text-[10px] font-bold">{t.id.toUpperCase()}</span>
                      </button>
                    ))}
@@ -1354,8 +1528,8 @@ export default function App() {
           <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden bg-slate-50 ${user.tournament_winner_id && tab === 'profile' ? 'ring-2 ring-red-600' : ''}`}>
              {(() => {
                const team = teams.find(tm => tm.id === user.tournament_winner_id);
-               if (team) return <span className="text-lg leading-none">{team.flag_code}</span>;
-               if (user.winner_flag) return <span className="text-lg leading-none">{user.winner_flag}</span>;
+               if (team) return <TeamFlag code={team.flag_code || team.id} className="w-5 h-3" />;
+               if (user.winner_flag) return <TeamFlag code={user.winner_flag || user.tournament_winner_id} className="w-5 h-3" />;
                return <User className="w-4 h-4" />;
              })()}
           </div>
