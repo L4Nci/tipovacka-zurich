@@ -187,3 +187,11 @@ export const pickTournamentWinner = async (userId: string, teamId: string) => {
     args: [teamId, userId]
   });
 };
+
+export const changePassword = async (userId: string, newPass: string) => {
+  const hash = await bcrypt.hash(newPass, 10);
+  await db.execute({
+    sql: "UPDATE players SET password_hash = ? WHERE id = ?",
+    args: [hash, userId]
+  });
+};

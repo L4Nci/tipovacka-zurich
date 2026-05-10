@@ -24,7 +24,8 @@ import {
   fetchMatchPredictions,
   updateMatchResult as updateMatchResDB,
   setTournamentWinner as setWinnerDB,
-  pickTournamentWinner as pickWinnerDB
+  pickTournamentWinner as pickWinnerDB,
+  changePassword as changePassDB
 } from './lib/db.ts';
 
 const translations = {
@@ -88,7 +89,12 @@ const translations = {
     tipSaved: "Tip uložen! ✅",
     notTipped: "Nenatipoval jsi :(",
     locksIn: "Zamyká se za",
-    locksAt: "Zamyká se"
+    locksAt: "Zamyká se",
+    changePass: "Změnit heslo",
+    newPass: "Nové heslo",
+    passUpdated: "Heslo aktualizováno! ✅",
+    confirmPass: "Potvrďte nové heslo",
+    passMismatch: "Hesla se neshodují!",
   },
   en: {
     matches: "Matches",
@@ -152,7 +158,12 @@ const translations = {
     tipSaved: "Tip saved! ✅",
     notTipped: "You didn't predict :(",
     locksIn: "Locks in",
-    locksAt: "Locks at"
+    locksAt: "Locks at",
+    changePass: "Change Password",
+    newPass: "New Password",
+    confirmPass: "Confirm New Password",
+    passUpdated: "Password updated! ✅",
+    passMismatch: "Passwords do not match!",
   }
 };
 
@@ -688,6 +699,9 @@ export default function App() {
   const [showCreatePlayer, setShowCreatePlayer] = useState(false);
   const [newUserData, setNewUserData] = useState({ username: '', password: '' });
   const [createUserMsg, setCreateUserMsg] = useState('');
+  const [passData, setPassData] = useState({ newPass: '', confirmPass: '' });
+  const [passMsg, setPassMsg] = useState('');
+  const [passError, setPassError] = useState('');
 
   useEffect(() => {
     localStorage.setItem('lang', lang);
@@ -800,6 +814,28 @@ export default function App() {
       await fetchAll();
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassMsg('');
+    setPassError('');
+    if (passData.newPass !== passData.confirmPass) {
+      setPassError(t.passMismatch);
+      return;
+    }
+    if (passData.newPass.length < 4) {
+      setPassError(lang === 'cz' ? 'Heslo musí mít aspoň 4 znaky' : 'Password must be at least 4 characters');
+      return;
+    }
+
+    try {
+      await changePassDB(user?.id || '', passData.newPass);
+      setPassMsg(t.passUpdated);
+      setPassData({ newPass: '', confirmPass: '' });
+    } catch (err: any) {
+      setPassError(err.message);
     }
   };
 
@@ -1323,6 +1359,36 @@ export default function App() {
                    })}
                  </div>
                  <p className="mt-4 text-[10px] text-center text-slate-400 italic font-medium">{t.lockedWinner}</p>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
+                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 italic">{t.changePass}</h3>
+                 <form onSubmit={handleUpdatePassword} className="space-y-3">
+                   <input 
+                     type="password"
+                     placeholder={t.newPass}
+                     value={passData.newPass}
+                     onChange={e => setPassData(p => ({ ...p, newPass: e.target.value }))}
+                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm focus:ring-2 focus:ring-red-500 transition-all outline-none"
+                     required
+                   />
+                   <input 
+                     type="password"
+                     placeholder={t.confirmPass}                    
+                     value={passData.confirmPass}
+                     onChange={e => setPassData(p => ({ ...p, confirmPass: e.target.value }))}
+                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm focus:ring-2 focus:ring-red-500 transition-all outline-none"
+                     required
+                   />
+                   <button 
+                     type="submit"
+                     className="w-full py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all shadow-md"
+                   >
+                     {t.changePass}
+                   </button>
+                   {passMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-2">{passMsg}</p>}
+                   {passError && <p className="text-[10px] text-red-600 font-bold text-center mt-2">{passError}</p>}
+                 </form>
               </div>
 
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
