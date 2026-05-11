@@ -1,6 +1,6 @@
 {
-  "name": "IIHF 2026 Predictor",
-  "short_name": "IIHF 2026",
+  "name": "IIHF 2026 Predictor (Unofficial Fan App)",
+  "short_name": "MS 2026 Fan",
   "description": "Mistrovství světa v hokeji 2026 - Tipovačka",
   "start_url": "/",
   "display": "standalone",

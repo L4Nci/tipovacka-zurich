@@ -969,6 +969,11 @@ export default function App() {
             />
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{loginT.loginTitle}</h1>
             <p className="text-[10px] font-bold text-red-600 uppercase tracking-[0.2em] mt-1">{loginT.worldChampionship}</p>
+            <div className="mt-4 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 max-w-[250px] text-center">
+              <p className="text-[9px] text-slate-400 font-medium leading-tight">
+                Toto je neoficiální fanouškovská stránka pro soukromé tipování. Není spojena s IIHF.
+              </p>
+            </div>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
@@ -1035,7 +1040,7 @@ export default function App() {
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
              <h1 className="text-2xl font-black text-slate-900 leading-tight transition-colors">MS V HOKEJI 2026</h1>
-             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Zurich & Fribourg, Switzerland</p>
+             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Fan Tipovačka • Unofficial</p>
           </div>
         </div>
       </header>
