@@ -54,7 +54,7 @@ const translations = {
     exactScores: "Přesné skóre",
     langSelect: "Jazyk / Language",
     logout: "Odhlásit se",
-    loginTitle: "MS V HOKEJI 2026",
+    loginTitle: "MS 2026 Fan Tipovačka",
     signin: "Přihlásit se",
     register: "Registrovat se",
     noAccount: "Nemáš účet? Registruj se",
@@ -84,7 +84,7 @@ const translations = {
     newPassword: "Heslo pro nového hráče",
     create: "Vytvořit účet",
     userCreated: "Hráč byl úspěšně vytvořen!",
-    officialWinner: "Oficiální vítěz turnaje",
+    officialWinner: "Skutečný šampion turnaje",
     noDraws: "Remíza není povolena. Jeden tým musí vyhrát!",
     tipSaved: "Tip uložen! ✅",
     notTipped: "Nenatipoval jsi :(",
@@ -123,7 +123,7 @@ const translations = {
     exactScores: "Exact Scores",
     langSelect: "Language",
     logout: "Logout",
-    loginTitle: "IIHF 2026 Predictor",
+    loginTitle: "MS 2026 Fan Predictor",
     signin: "Sign In",
     register: "Register",
     noAccount: "No account? Register here",
@@ -959,19 +959,17 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-sm bg-white rounded-[40px] shadow-2xl p-8 border border-slate-100"
         >
-          <div className="flex flex-col items-center mb-8">
-            <img 
-              src="https://upload.wikimedia.org/wikipedia/en/thumb/6/62/2026_IIHF_World_Championship_logo.svg/960px-2026_IIHF_World_Championship_logo.svg.png" 
-              alt="IIHF 2026 Logo"
-              className="w-32 h-32 mb-4 object-contain drop-shadow-sm"
-              referrerPolicy="no-referrer"
-              onError={(e) => (e.currentTarget.src = "https://www.iihf.com/Content/img/iihf-logo.svg")}
-            />
+          <div className="flex flex-col items-center mb-8 text-center">
+            <div className="w-20 h-20 bg-red-600 rounded-3xl flex items-center justify-center shadow-lg shadow-red-200 mb-6 transform rotate-3">
+              <Trophy className="w-12 h-12 text-white" />
+            </div>
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{loginT.loginTitle}</h1>
-            <p className="text-[10px] font-bold text-red-600 uppercase tracking-[0.2em] mt-1">{loginT.worldChampionship}</p>
-            <div className="mt-4 px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 max-w-[250px] text-center">
-              <p className="text-[9px] text-slate-400 font-medium leading-tight">
-                Toto je neoficiální fanouškovská stránka pro soukromé tipování. Není spojena s IIHF.
+            <p className="text-[10px] font-bold text-red-600 uppercase tracking-[0.2em] mt-1">UNOFFICIAL FAN PREDICTOR</p>
+            <div className="mt-4 px-4 py-3 bg-slate-50 rounded-xl border border-red-100 max-w-[280px] text-center">
+              <p className="text-[10px] text-red-500 font-bold uppercase tracking-wider mb-1">DŮLEŽITÉ UPOZORNĚNÍ</p>
+              <p className="text-[9px] text-slate-500 font-medium leading-tight">
+                Toto je neoficiální, nezisková fanouškovská stránka vytvořená výhradně pro soukromé tipování mezi přáteli. 
+                Tato aplikace není žádným způsobem spojena s IIHF ani žádnou oficiální sportovní organizací.
               </p>
             </div>
           </div>
