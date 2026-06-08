@@ -1,15 +1,12 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createClient } from "@libsql/client";
 import bcrypt from "bcryptjs";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import "dotenv/config";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { getSupabaseAdmin } from "./server/lib/supabaseAdmin.ts";
 
 const dbUrl = process.env.TURSO_DATABASE_URL || `file:///${path.join(process.cwd(), "local.db")}`;
 const dbAuthToken = process.env.TURSO_AUTH_TOKEN;
@@ -22,6 +19,35 @@ const db = createClient({
 async function initDb() {
   console.log("Initializing Database...");
   console.log("DB URL protocol:", dbUrl.split(':')[0]);
+
+  // Create sports table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS sports (
+      id TEXT PRIMARY KEY,
+      slug TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      icon TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Seed sports
+  const sportsToSeed = [
+    { id: 'hockey', slug: 'hockey', name: 'Hokej', icon: '🏒' },
+    { id: 'football', slug: 'football', name: 'Fotbal', icon: '⚽' },
+    { id: 'tennis', slug: 'tennis', name: 'Tenis', icon: '🎾' },
+    { id: 'mma', slug: 'mma', name: 'MMA', icon: '🥊' },
+    { id: 'formula1', slug: 'formula1', name: 'Formule 1', icon: '🏎️' }
+  ];
+
+  for (const s of sportsToSeed) {
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO sports (id, slug, name, icon) VALUES (?, ?, ?, ?)",
+      args: [s.id, s.slug, s.name, s.icon]
+    });
+  }
+  console.log("Sports seeded.");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS teams (
@@ -129,6 +155,163 @@ async function initDb() {
     console.log("Teams seeded.");
   }
 
+  // Create participants table and sync from teams
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS participants (
+      id TEXT PRIMARY KEY,
+      sport_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      short_name TEXT,
+      type TEXT NOT NULL DEFAULT 'team',
+      flag_code TEXT,
+      logo_url TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (sport_id) REFERENCES sports (id)
+    )
+  `);
+
+  // Migrate existing teams to participants (idempotent INSERT OR IGNORE)
+  await db.execute(`
+    INSERT OR IGNORE INTO participants (id, sport_id, name, short_name, type, flag_code, created_at)
+    SELECT id, 'hockey', name, UPPER(id), 'team', flag_code, CURRENT_TIMESTAMP FROM teams
+  `);
+  console.log("Participants synced from teams.");
+
+  // Create tournaments table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS tournaments (
+      id TEXT PRIMARY KEY,
+      sport_id TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      external_id TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (sport_id) REFERENCES sports (id)
+    )
+  `);
+
+  // Seed tournaments
+  const tournamentsToSeed = [
+    { id: 'ms-hockey-2026', sport_id: 'hockey', slug: 'ms-hockey-2026', name: 'Mistrovství světa v hokeji 2026' },
+    { id: 'fifa-world-cup-2026', sport_id: 'football', slug: 'fifa-world-cup-2026', name: 'FIFA World Cup 2026' },
+    { id: 'premier-league', sport_id: 'football', slug: 'premier-league', name: 'Premier League' },
+    { id: 'champions-league', sport_id: 'football', slug: 'champions-league', name: 'UEFA Champions League' }
+  ];
+
+  for (const t of tournamentsToSeed) {
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO tournaments (id, sport_id, slug, name, status) VALUES (?, ?, ?, ?, 'active')",
+      args: [t.id, t.sport_id, t.slug, t.name]
+    });
+  }
+  console.log("Tournaments seeded.");
+
+  // Create lobbies table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS lobbies (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      owner_id TEXT,
+      tournament_id TEXT NOT NULL,
+      join_code TEXT UNIQUE NOT NULL,
+      visibility TEXT DEFAULT 'private',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id),
+      FOREIGN KEY (owner_id) REFERENCES players(id)
+    )
+  `);
+
+  // Seed default hockey lobby
+  const firstAdminRes = await db.execute("SELECT id FROM players WHERE role = 'admin' LIMIT 1");
+  const defaultOwnerId = firstAdminRes.rows.length > 0 ? String(firstAdminRes.rows[0].id) : null;
+
+  await db.execute({
+    sql: "INSERT OR IGNORE INTO lobbies (id, name, owner_id, tournament_id, join_code, visibility) VALUES (?, ?, ?, ?, ?, ?)",
+    args: ['global-hockey-lobby', 'Hlavní hokejová tipovačka', defaultOwnerId, 'ms-hockey-2026', 'HOCKEY2026', 'public']
+  });
+  console.log("Lobbies seeded.");
+
+  // Create lobby_tournaments table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS lobby_tournaments (
+      id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-a' || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
+      lobby_id TEXT NOT NULL,
+      tournament_id TEXT NOT NULL,
+      status TEXT DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (lobby_id) REFERENCES lobbies(id) ON DELETE CASCADE,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
+      CONSTRAINT unique_lobby_tournament UNIQUE (lobby_id, tournament_id)
+    )
+  `);
+
+  // Backfill existing lobby_tournaments
+  await db.execute(`
+    INSERT OR IGNORE INTO lobby_tournaments (lobby_id, tournament_id, status)
+    SELECT id, tournament_id, 'active'
+    FROM lobbies
+    WHERE tournament_id IS NOT NULL
+  `);
+
+  // Create lobby_members table and sync from players
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS lobby_members (
+      id TEXT PRIMARY KEY,
+      lobby_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role TEXT DEFAULT 'member',
+      joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (lobby_id) REFERENCES lobbies(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES players(id) ON DELETE CASCADE,
+      CONSTRAINT unique_lobby_member UNIQUE (lobby_id, user_id)
+    )
+  `);
+
+  // Migrate existing players to lobby_members
+  const playersRes = await db.execute("SELECT id, role FROM players");
+  console.log(`Syncing ${playersRes.rows.length} players to lobby_members...`);
+
+  const LOBBY_MEMBERS_BATCH_SIZE = 50;
+  for (let i = 0; i < playersRes.rows.length; i += LOBBY_MEMBERS_BATCH_SIZE) {
+    const chunk = playersRes.rows.slice(i, i + LOBBY_MEMBERS_BATCH_SIZE);
+    const statements = chunk.map(player => {
+      const playerId = String(player.id);
+      const playerRole = String(player.role);
+
+      let lobbyRole = 'member';
+      if (playerId === defaultOwnerId) {
+        lobbyRole = 'owner';
+      } else if (playerRole === 'admin') {
+        lobbyRole = 'admin';
+      }
+
+      return {
+        sql: `
+          INSERT OR IGNORE INTO lobby_members (id, lobby_id, user_id, role)
+          VALUES (?, ?, ?, ?)
+        `,
+        args: [`lm-global-hockey-lobby-${playerId}`, 'global-hockey-lobby', playerId, lobbyRole]
+      };
+    });
+    await db.batch(statements, "write");
+  }
+
+  // Audit results logic
+  const lobbyMembersCountRes = await db.execute("SELECT COUNT(*) as count FROM lobby_members WHERE lobby_id = 'global-hockey-lobby'");
+  const lobbyOwnersCountRes = await db.execute("SELECT COUNT(*) as count FROM lobby_members WHERE lobby_id = 'global-hockey-lobby' AND role = 'owner'");
+  const lobbyAdminsCountRes = await db.execute("SELECT COUNT(*) as count FROM lobby_members WHERE lobby_id = 'global-hockey-lobby' AND role = 'admin'");
+  const lobbyMembersOnlyCountRes = await db.execute("SELECT COUNT(*) as count FROM lobby_members WHERE lobby_id = 'global-hockey-lobby' AND role = 'member'");
+
+  console.log("=== Auditing Lobby Members ===");
+  console.log(`Total players in database: ${playersRes.rows.length}`);
+  console.log(`Total members in global-hockey-lobby: ${lobbyMembersCountRes.rows[0].count}`);
+  console.log(`Owners count: ${lobbyOwnersCountRes.rows[0].count}`);
+  console.log(`Admins count: ${lobbyAdminsCountRes.rows[0].count}`);
+  console.log(`Regular members count: ${lobbyMembersOnlyCountRes.rows[0].count}`);
+  console.log("===============================");
+
   // Matches seeding
   const matchesCheck = await db.execute("SELECT COUNT(*) as count FROM matches");
   if (Number(matchesCheck.rows[0].count) === 0) {
@@ -198,15 +381,206 @@ async function initDb() {
       ['bronze', 'tba', 'tba', '2026-05-31T13:30:00Z', 'Bronze Medal Game'],
       ['final', 'tba', 'tba', '2026-05-31T18:20:00Z', 'Gold Medal Game'],
     ];
-    for (const m of matches) {
-      await db.execute({
+    const MATCH_SEED_BATCH_SIZE = 50;
+    for (let i = 0; i < matches.length; i += MATCH_SEED_BATCH_SIZE) {
+      const chunk = matches.slice(i, i + MATCH_SEED_BATCH_SIZE);
+      const statements = chunk.map(m => ({
         sql: "INSERT OR IGNORE INTO matches (id, home_team_id, away_team_id, start_time_utc, stage) VALUES (?, ?, ?, ?, ?)",
         args: m
-      });
+      }));
+      await db.batch(statements, "write");
     }
     console.log("Matches seeded.");
   }
+
+  // Create matches_v2 table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS matches_v2 (
+      id TEXT PRIMARY KEY,
+      tournament_id TEXT NOT NULL,
+      home_participant_id TEXT NOT NULL,
+      away_participant_id TEXT NOT NULL,
+      start_time_utc TEXT NOT NULL,
+      lock_time_utc TEXT NOT NULL,
+      status TEXT DEFAULT 'scheduled',
+      stage TEXT,
+      home_score INTEGER,
+      away_score INTEGER,
+      provider_name TEXT,
+      provider_match_id TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (tournament_id) REFERENCES tournaments (id),
+      FOREIGN KEY (home_participant_id) REFERENCES participants (id),
+      FOREIGN KEY (away_participant_id) REFERENCES participants (id)
+    )
+  `);
+
+  await db.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_v2_provider ON matches_v2(provider_name, provider_match_id) 
+    WHERE provider_name IS NOT NULL AND provider_match_id IS NOT NULL;
+  `);
+
+  // Migrate legacy matches to matches_v2 (idempotent mapping)
+  const legacyMatchesRes = await db.execute("SELECT * FROM matches");
+  console.log(`Syncing ${legacyMatchesRes.rows.length} legacy matches to matches_v2...`);
+
+  const MATCHES_BATCH_SIZE = 50;
+  for (let i = 0; i < legacyMatchesRes.rows.length; i += MATCHES_BATCH_SIZE) {
+    const chunk = legacyMatchesRes.rows.slice(i, i + MATCHES_BATCH_SIZE);
+    const statements = chunk.map(m => {
+      const id = String(m.id);
+      const homeTeamId = String(m.home_team_id);
+      const awayTeamId = String(m.away_team_id);
+      const startTimeUtc = String(m.start_time_utc);
+      const status = String(m.status || 'scheduled');
+      const stage = m.stage ? String(m.stage) : null;
+      const homeScore = m.home_score !== null && m.home_score !== undefined ? Number(m.home_score) : null;
+      const awayScore = m.away_score !== null && m.away_score !== undefined ? Number(m.away_score) : null;
+
+      let lockTimeUtc = startTimeUtc;
+      try {
+        const date = new Date(startTimeUtc);
+        if (!isNaN(date.getTime())) {
+          const lockDate = new Date(date.getTime() - 5 * 60 * 1000);
+          lockTimeUtc = lockDate.toISOString();
+        }
+      } catch (e) {
+        console.error(`Chyba při parsování start_time_utc pro zápas ${id}:`, e);
+      }
+
+      return {
+        sql: `
+          INSERT OR IGNORE INTO matches_v2 (
+            id, tournament_id, home_participant_id, away_participant_id,
+            start_time_utc, lock_time_utc, status, stage,
+            home_score, away_score
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        args: [id, 'ms-hockey-2026', homeTeamId, awayTeamId, startTimeUtc, lockTimeUtc, status, stage, homeScore, awayScore]
+      };
+    });
+    await db.batch(statements, "write");
+  }
+
+  // Auditing results logic for matches_v2
+  const legacyMatchesCountRes = await db.execute("SELECT COUNT(*) as count FROM matches");
+  const matchesV2CountRes = await db.execute("SELECT COUNT(*) as count FROM matches_v2");
+  const participantsCountRes = await db.execute("SELECT COUNT(*) as count FROM participants");
+  const inconsistenciesRes = await db.execute(`
+    SELECT COUNT(*) as count FROM matches_v2 
+    WHERE home_participant_id NOT IN (SELECT id FROM participants) 
+       OR away_participant_id NOT IN (SELECT id FROM participants)
+  `);
+
+  console.log("=== Auditing Matches V2 ===");
+  console.log(`Počet legacy zápasů v matches: ${legacyMatchesCountRes.rows[0].count}`);
+  console.log(`Počet nových zápasů v matches_v2: ${matchesV2CountRes.rows[0].count}`);
+  console.log(`Počet unikátních participantů v databázi: ${participantsCountRes.rows[0].count}`);
+  console.log(`Počet nekonzistentních referencí na participanty: ${inconsistenciesRes.rows[0].count}`);
+  console.log("===========================");
+
+  // Create predictions_v2 table
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS predictions_v2 (
+      id TEXT PRIMARY KEY,
+      lobby_id TEXT NOT NULL,
+      match_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      predicted_home_score INTEGER NOT NULL,
+      predicted_away_score INTEGER NOT NULL,
+      points_earned INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (lobby_id) REFERENCES lobbies (id),
+      FOREIGN KEY (match_id) REFERENCES matches_v2 (id),
+      FOREIGN KEY (user_id) REFERENCES players (id),
+      CONSTRAINT unique_lobby_match_user UNIQUE (lobby_id, match_id, user_id)
+    )
+  `);
+
+  // Migrate existing predictions to predictions_v2 (idempotent mapping)
+  const legacyPredictionsRes = await db.execute("SELECT * FROM predictions");
+  console.log(`Syncing ${legacyPredictionsRes.rows.length} legacy predictions to predictions_v2...`);
+
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < legacyPredictionsRes.rows.length; i += BATCH_SIZE) {
+    const chunk = legacyPredictionsRes.rows.slice(i, i + BATCH_SIZE);
+    const statements = chunk.map(p => {
+      const playerId = String(p.player_id);
+      const matchId = String(p.match_id);
+      const predHome = Number(p.predicted_home_score);
+      const predAway = Number(p.predicted_away_score);
+      const pts = p.points_earned !== null && p.points_earned !== undefined ? Number(p.points_earned) : 0;
+      const id = `p2-global-hockey-lobby-${matchId}-${playerId}`;
+      return {
+        sql: `
+          INSERT OR IGNORE INTO predictions_v2 (
+            id, lobby_id, match_id, user_id, 
+            predicted_home_score, predicted_away_score, points_earned
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `,
+        args: [id, 'global-hockey-lobby', matchId, playerId, predHome, predAway, pts]
+      };
+    });
+    await db.batch(statements, "write");
+  }
+
+  // Audit predictions_v2
+  const oldPredsCount = await db.execute("SELECT COUNT(*) as count FROM predictions");
+  const newPredsCount = await db.execute("SELECT COUNT(*) as count FROM predictions_v2");
+  
+  const dupCheck = await db.execute(`
+    SELECT COUNT(*) as count FROM (
+      SELECT lobby_id, match_id, user_id 
+      FROM predictions_v2 
+      GROUP BY lobby_id, match_id, user_id 
+      HAVING COUNT(*) > 1
+    )
+  `);
+  const dupCount = Number(dupCheck.rows[0].count);
+
+  const orphanMatchesCheck = await db.execute(`
+    SELECT COUNT(*) as count FROM predictions_v2
+    WHERE match_id NOT IN (SELECT id FROM matches_v2)
+  `);
+  const orphanMatchesCount = Number(orphanMatchesCheck.rows[0].count);
+
+  const orphanUsersCheck = await db.execute(`
+    SELECT COUNT(*) as count FROM predictions_v2
+    WHERE user_id NOT IN (SELECT id FROM players)
+  `);
+  const orphanUsersCount = Number(orphanUsersCheck.rows[0].count);
+
+  console.log("=== Auditing Predictions V2 ===");
+  console.log(`Počet legacy předpovědí v predictions: ${oldPredsCount.rows[0].count}`);
+  console.log(`Počet nových předpovědí v predictions_v2: ${newPredsCount.rows[0].count}`);
+  console.log(`Počet duplicitních kombinací (lobby, match, user): ${dupCount}`);
+  console.log(`Počet odkazů na neexistující zápasy v matches_v2: ${orphanMatchesCount}`);
+  console.log(`Počet odkazů na neexistující hráče v players: ${orphanUsersCount}`);
+  console.log("===============================");
 }
+
+const calculatePoints = (ph: number, pa: number, mh: number, ma: number, sport: 'football' | 'hockey' = 'football'): number => {
+  if (ph === mh && pa === ma) return 5;
+  if (sport === 'football') {
+    const isActualDraw = mh === ma;
+    const isPredictedDraw = ph === pa;
+    if (isActualDraw) {
+      if (isPredictedDraw) return 2; // Correctly predicted draw, not exact
+    } else {
+      const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
+      if (correctWinner) {
+        if (ph - pa === mh - ma) return 3; // Correct winner + correct goal difference
+        return 2; // Correct winner without correct goal difference
+      }
+    }
+  } else {
+    // Hockey
+    if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) return 2;
+  }
+  return 0;
+};
 
 async function startServer() {
   await initDb();
@@ -396,25 +770,76 @@ async function startServer() {
   // Admin: Set Tournament Winner
   app.post("/api/admin/set-tournament-winner", async (req, res) => {
     const { userId, teamId } = req.body;
-    
-    const userResult = await db.execute({
-      sql: "SELECT role FROM players WHERE id = ?",
-      args: [userId]
-    });
-    if (userResult.rows[0]?.role !== 'admin') {
-      return res.status(403).json({ error: "Only admins can perform this action" });
+    const tournamentId = "fifa-world-cup-2026"; // Standard tournament ID for FIFA WC 2026
+
+    if (!userId || !teamId) {
+      return res.status(400).json({ error: "Chybějící parametry." });
     }
 
-    await db.execute("UPDATE teams SET is_final_winner = 0");
-    await db.execute({
-      sql: "UPDATE teams SET is_final_winner = 1 WHERE id = ?",
-      args: [teamId]
-    });
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
 
-    res.json({ success: true });
+      // 1. Verify admin role in Supabase
+      const { data: profile, error: pErr } = await supabaseAdmin
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .single();
+
+      if (pErr || profile?.role !== 'admin') {
+        return res.status(403).json({ error: "Pouze administrátor může vyhlásit celkového vítěze." });
+      }
+
+      // 2. Update tournaments table in Supabase
+      const { error: tErr } = await supabaseAdmin
+        .from("tournaments")
+        .update({ actual_tournament_winner_id: teamId })
+        .eq("id", tournamentId);
+
+      if (tErr) throw tErr;
+
+      // 3. Score predictions: matching predictions get 10 points, others 0 points in Supabase
+      const { data: predictions, error: predsErr } = await supabaseAdmin
+        .from("longterm_predictions")
+        .select("*")
+        .eq("tournament_id", tournamentId)
+        .eq("prediction_type", "tournament_winner");
+
+      if (predsErr) throw predsErr;
+
+      if (predictions && predictions.length > 0) {
+        for (const pred of predictions) {
+          const points = pred.predicted_participant_id === teamId ? 10 : 0;
+          const { error: scoreErr } = await supabaseAdmin
+            .from("longterm_predictions")
+            .update({ points_earned: points })
+            .eq("id", pred.id);
+
+          if (scoreErr) {
+            console.error(`Error scoring longterm prediction ${pred.id}:`, scoreErr);
+          }
+        }
+      }
+
+      // Also update local SQLite copy for backward compatibility
+      try {
+        await db.execute("UPDATE teams SET is_final_winner = 0");
+        await db.execute({
+          sql: "UPDATE teams SET is_final_winner = 1 WHERE id = ?",
+          args: [teamId]
+        });
+      } catch (sqle) {
+        console.warn("Local SQLite sync skipped (safe to ignore):", sqle);
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Set tournament winner admin error:", err);
+      res.status(500).json({ error: "Chyba při nastavení vítěze turnaje: " + err.message });
+    }
   });
 
-  // Profile (Tournament Winner Pick)
+  // Profile (Tournament Winner Pick for legacy SQLite fallback)
   app.post("/api/profile/tournament-winner", async (req, res) => {
     const { userId, teamId } = req.body;
     
@@ -436,50 +861,159 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  // Admin: Update Match Result
+  // Admin: Update Match Result (Secure Server-Side Supabase implementation to bypass client-side RLS)
   app.post("/api/admin/match-result", async (req, res) => {
     const { userId, matchId, homeScore, awayScore } = req.body;
     
-    // Check if user is admin
-    const userResult = await db.execute({
-      sql: "SELECT role FROM players WHERE id = ?",
-      args: [userId]
-    });
-    if (userResult.rows[0]?.role !== 'admin') {
-      return res.status(403).json({ error: "Only admins can perform this action" });
+    if (!userId || !matchId) {
+      return res.status(400).json({ error: "Chybějící parametry." });
     }
 
-    await db.execute({
-      sql: "UPDATE matches SET home_score = ?, away_score = ?, status = 'finished' WHERE id = ?",
-      args: [homeScore, awayScore, matchId]
-    });
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
 
-    // Recalculate points for all predictions of this match
-    const preds = await db.execute({
-      sql: "SELECT * FROM predictions WHERE match_id = ?",
-      args: [matchId]
-    });
+      // 1. Check if user is admin in Supabase profiles
+      const { data: profile, error: pErr } = await supabaseAdmin
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .single();
 
-    for (const p of preds.rows) {
-      let points = 0;
-      const ph = Number(p.predicted_home_score);
-      const pa = Number(p.predicted_away_score);
-      const mh = Number(homeScore);
-      const ma = Number(awayScore);
-
-      if (ph === mh && pa === ma) {
-        points = 5;
-      } else if ((ph > pa && mh > ma) || (pa > ph && ma > mh)) {
-        points = 2;
+      if (pErr || profile?.role !== 'admin') {
+        return res.status(403).json({ error: "Pouze administrátor může vkládat výsledky a spouštět vyhodnocení." });
       }
 
-      await db.execute({
-        sql: "UPDATE predictions SET points_earned = ? WHERE player_id = ? AND match_id = ?",
-        args: [points, p.player_id, matchId]
-      });
+      // 2. Fetch match from Supabase
+      const { data: match, error: mErr } = await supabaseAdmin
+        .from("matches")
+        .select("tournament_id")
+        .eq("id", matchId)
+        .single();
+
+      if (mErr || !match) {
+        return res.status(404).json({ error: "Zápas nenalezen v Supabase." });
+      }
+
+      const sport = match.tournament_id === "ms-hockey-2026" ? "hockey" : "football";
+
+      if (sport === "hockey" && homeScore === awayScore) {
+        return res.status(400).json({ error: "V hokeji není remíza povolena. Výsledek po prodloužení nebo nájezdech musí určit vítěze!" });
+      }
+
+      // 3. Update match in Supabase
+      const { error: matchUpdateErr } = await supabaseAdmin
+        .from("matches")
+        .update({
+          home_score: homeScore,
+          away_score: awayScore,
+          status: "finished",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", matchId);
+
+      if (matchUpdateErr) throw matchUpdateErr;
+
+      // 4. Fetch predictions for this match from Supabase
+      const { data: predictions, error: predsErr } = await supabaseAdmin
+        .from("predictions")
+        .select("*")
+        .eq("match_id", matchId);
+
+      if (predsErr) throw predsErr;
+
+      if (predictions && predictions.length > 0) {
+        for (const pred of predictions) {
+          const points = calculatePoints(
+            pred.predicted_home_score,
+            pred.predicted_away_score,
+            homeScore,
+            awayScore,
+            sport
+          );
+
+          const { error: updatePredErr } = await supabaseAdmin
+            .from("predictions")
+            .update({ points_earned: points })
+            .eq("user_id", pred.user_id)
+            .eq("lobby_id", pred.lobby_id)
+            .eq("match_id", matchId);
+
+          if (updatePredErr) {
+            console.error(`Recalculate error for prediction user: ${pred.user_id}`, updatePredErr);
+          }
+        }
+      }
+
+      // Also update local SQLite copy for backward compatibility
+      try {
+        await db.execute({
+          sql: "UPDATE matches SET home_score = ?, away_score = ?, status = 'finished' WHERE id = ?",
+          args: [homeScore, awayScore, matchId]
+        });
+        await db.execute({
+          sql: "DELETE FROM predictions WHERE match_id = ?",
+          args: [matchId]
+        });
+        for (const pred of (predictions || [])) {
+          const points = calculatePoints(pred.predicted_home_score, pred.predicted_away_score, homeScore, awayScore, sport);
+          await db.execute({
+            sql: "INSERT OR REPLACE INTO predictions (player_id, match_id, predicted_home_score, predicted_away_score, points_earned) VALUES (?, ?, ?, ?, ?)",
+            args: [pred.user_id, matchId, pred.predicted_home_score, pred.predicted_away_score, points]
+          });
+        }
+      } catch (sqle) {
+        console.warn("Local SQLite sync skipped or failed (safe to ignore):", sqle);
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Match result admin error:", err);
+      res.status(500).json({ error: "Chyba při ukládání výsledků: " + err.message });
+    }
+  });
+
+  // Owner Update Lobby Name
+  app.post("/api/lobby/update-name", async (req, res) => {
+    const { userId, lobbyId, newName } = req.body;
+    
+    if (!userId || !lobbyId || !newName) {
+      return res.status(400).json({ error: "Chybějí povinné parametry." });
     }
 
-    res.json({ success: true });
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
+
+      // Verify that user is owner
+      const { data: lobby, error: lobbyErr } = await supabaseAdmin
+        .from("lobbies")
+        .select("owner_id")
+        .eq("id", lobbyId)
+        .single();
+      
+      if (lobbyErr || !lobby) {
+         return res.status(404).json({ error: "Lobby nenalezena." });
+      }
+
+      if (lobby.owner_id !== userId) {
+         // Maybe user is global admin? Check profiles
+         const { data: profile } = await supabaseAdmin.from("profiles").select("role").eq("id", userId).single();
+         if (profile?.role !== 'admin') {
+           return res.status(403).json({ error: "Pouze zakladatel lobby může měnit její název." });
+         }
+      }
+
+      const { error: updateErr } = await supabaseAdmin
+        .from("lobbies")
+        .update({ name: newName })
+        .eq("id", lobbyId);
+
+      if (updateErr) throw updateErr;
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("/api/lobby/update-name err:", err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // --- Vite Setup ---

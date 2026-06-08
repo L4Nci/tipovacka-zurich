@@ -1,0 +1,4 @@
+tournament_id,stage,home_participant_id,away_participant_id,start_time_utc,provider_name,provider_match_id
+fifa-world-cup-2026,Group Stage,football-usa,football-mex,2026-06-11T20:00:00Z,manual-test,fwc2026-test-001
+fifa-world-cup-2026,Group Stage,football-can,football-arg,2026-06-12T18:00:00Z,manual-test,fwc2026-test-002
+fifa-world-cup-2026,Group Stage,football-fra,football-eng,2026-06-12T21:00:00Z,manual-test,fwc2026-test-003

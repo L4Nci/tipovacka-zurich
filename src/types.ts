@@ -2,6 +2,8 @@ export type Player = {
   id: string;
   username: string;
   role: 'player' | 'admin';
+  lobby_role?: 'owner' | 'admin' | 'member';
+  // TODO: Legacy (profiles.tournament_winner_id) - no longer used in new longterm_predictions logic
   tournament_winner_id?: string;
   winner_flag?: string;
   total_points?: number;
@@ -14,6 +16,8 @@ export type Team = {
   name: string;
   flag_code: string;
   group_name: string;
+  short_name?: string;
+  is_final_winner?: number;
 };
 
 export type Match = {
@@ -42,3 +46,61 @@ export type Prediction = {
   points_earned: number;
   username?: string;
 };
+
+export type Tournament = {
+  id: string;
+  name: string;
+  sport_id: string;
+  description?: string;
+  start_date?: string;
+  end_date?: string;
+  status: 'upcoming' | 'ongoing' | 'finished';
+  winner_participant_id?: string;
+  external_id?: string;
+  provider_name?: string;
+  created_at?: string;
+};
+
+export type LobbyTournament = {
+  id?: string;
+  lobby_id: string;
+  tournament_id: string;
+  status: 'active' | 'archived';
+  created_at?: string;
+  updated_at?: string;
+  tournament?: Tournament;
+};
+
+export type Lobby = {
+  id: string;
+  name: string;
+  owner_id: string;
+  tournament_id: string; // legacy fallback
+  join_code: string;
+  visibility: 'private' | 'public';
+  created_at?: string;
+  is_owner?: boolean;
+  tournaments?: LobbyTournament[];
+  tournament_name?: string;
+};
+
+export type LobbyMember = {
+  id: string;
+  username: string;
+  role: 'player' | 'admin';
+  lobby_role: 'owner' | 'admin' | 'member';
+  joined_at: string;
+  tournament_winner_id?: string | null;
+};
+
+export type TournamentParticipant = {
+  id: string;
+  tournament_id: string;
+  participant_id: string;
+  group_code: string | null;
+  seed_position?: number | null;
+  status: 'active' | 'qualified' | 'eliminated';
+  created_at?: string;
+};
+
+

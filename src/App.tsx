@@ -15,7 +15,9 @@ import {
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
-import { Player, Team, Match, Prediction } from './types.ts';
+import { Player, Team, Match, Prediction, Lobby } from './types.ts';
+import { LobbyView } from './components/LobbyView.tsx';
+import { supabase } from './lib/supabase.ts';
 import { 
   fetchAllData, 
   loginUser, 
@@ -25,7 +27,11 @@ import {
   updateMatchResult as updateMatchResDB,
   setTournamentWinner as setWinnerDB,
   pickTournamentWinner as pickWinnerDB,
-  changePassword as changePassDB
+  changePassword as changePassDB,
+  checkSession,
+  createLobby,
+  joinLobbyByCode,
+  calculatePoints
 } from './lib/db.ts';
 
 const translations = {
@@ -54,7 +60,7 @@ const translations = {
     exactScores: "Přesné skóre",
     langSelect: "Jazyk / Language",
     logout: "Odhlásit se",
-    loginTitle: "MS 2026 Fan Tipovačka",
+    loginTitle: "FAN TIPOVAČKA",
     signin: "Přihlásit se",
     register: "Registrovat se",
     noAccount: "Nemáš účet? Registruj se",
@@ -123,7 +129,7 @@ const translations = {
     exactScores: "Exact Scores",
     langSelect: "Language",
     logout: "Logout",
-    loginTitle: "MS 2026 Fan Predictor",
+    loginTitle: "FAN PREDICTOR",
     signin: "Sign In",
     register: "Register",
     noAccount: "No account? Register here",
@@ -195,7 +201,7 @@ const TeamFlag = ({ code, className = "w-6 h-4" }: { code: string | null | undef
     'aut': 'at', 'fra': 'fr', 'slo': 'si', 'hun': 'hu',
     'gbr': 'gb', 'pol': 'pl', 'ita': 'it', 'slv': 'si',
     'kor': 'kr', 'jpn': 'jp', 'aus': 'au', 'bel': 'be', 
-    'ukr': 'ua', 'kaz': 'kz'
+    'ukr': 'ua'
   };
 
   const clean = code.trim().toLowerCase();
@@ -240,20 +246,24 @@ const TeamFlag = ({ code, className = "w-6 h-4" }: { code: string | null | undef
 
 interface MatchCardProps {
   match: Match;
+  lobbyId?: string;
   onPredict?: (h: number, a: number) => Promise<void>;
   isFinished?: boolean;
   userId?: string;
   t: any;
   matchPredictions?: Prediction[];
+  isHockey?: boolean;
 }
 
 const MatchCard: React.FC<MatchCardProps> = ({ 
   match, 
+  lobbyId,
   onPredict, 
   isFinished = false, 
   userId,
   t,
-  matchPredictions = []
+  matchPredictions = [],
+  isHockey = false
 }) => {
   const [home, setHome] = useState(match.predicted_home_score ?? 0);
   const [away, setAway] = useState(match.predicted_away_score ?? 0);
@@ -303,7 +313,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const fetchOthers = async (forceRefresh = false) => {
     if (!showOthers || forceRefresh === true) {
       try {
-        const data = await fetchMatchPredictions(match.id);
+        const data = await fetchMatchPredictions(lobbyId || '', match.id);
         setOthers(data);
         if (forceRefresh !== true) setShowOthers(true);
       } catch (err) {
@@ -323,7 +333,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
       
       // Auto-refresh others if drawer is open
       if (showOthers) {
-        const data = await fetchMatchPredictions(match.id);
+        const data = await fetchMatchPredictions(lobbyId || '', match.id);
         setOthers(data);
       }
       
@@ -339,11 +349,8 @@ const MatchCard: React.FC<MatchCardProps> = ({
     if (match.home_score === null || match.away_score === null) return null;
     const ph = match.predicted_home_score;
     const pa = match.predicted_away_score;
-    if (ph === null || pa === null) return null;
-
-    if (ph === match.home_score && pa === match.away_score) return 5;
-    if ((ph > pa && match.home_score > match.away_score) || (pa > ph && match.away_score > match.home_score)) return 2;
-    return 0;
+    if (ph === null || pa === null || ph === undefined || pa === undefined) return null;
+    return calculatePoints(ph, pa, match.home_score, match.away_score, isHockey ? 'hockey' : 'football');
   };
 
   const points = getPoints();
@@ -366,9 +373,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
   const calcPoints = (ph: number, pa: number) => {
     if (match.home_score === null || match.away_score === null) return 0;
-    if (ph === match.home_score && pa === match.away_score) return 5;
-    if ((ph > pa && match.home_score > match.away_score) || (pa > ph && match.away_score > match.home_score)) return 2;
-    return 0;
+    return calculatePoints(ph, pa, match.home_score, match.away_score, isHockey ? 'hockey' : 'football');
   };
 
   return (
@@ -495,7 +500,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={handlePredict}
-              disabled={isLocked || home === away || isSaving}
+              disabled={isLocked || (isHockey && home === away) || isSaving}
               className={`w-full py-4 rounded-2xl font-black shadow-lg transition-all disabled:shadow-none flex items-center justify-center gap-2 ${
                 isLocked ? 'bg-slate-100 text-slate-400' :
                 showSuccess ? 'bg-green-500 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-200'
@@ -511,7 +516,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                 match.predicted_home_score !== null ? t.updateTip : t.saveTip
               )}
             </motion.button>
-            {!isLocked && home === away && <p className="text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
+            {!isLocked && isHockey && home === away && <p className="text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
             {isLocked && <p className="text-[10px] text-center text-slate-400 italic">{t.locked}</p>}
           </div>
         )}
@@ -520,7 +525,8 @@ const MatchCard: React.FC<MatchCardProps> = ({
           <div className="flex flex-col gap-3">
              <div className={`py-2 px-4 rounded-xl flex items-center justify-between border transition-colors ${
                points === 5 ? 'bg-indigo-50/60 border-indigo-200/50 text-indigo-950 shadow-sm' : 
-               points === 2 ? 'bg-slate-50 border-slate-200 text-slate-900 font-medium' : 'bg-slate-50 border-slate-100'
+               points === 3 ? 'bg-emerald-50/60 border-emerald-200/50 text-emerald-950 shadow-sm' : 
+               points === 2 || points === 1 ? 'bg-slate-50 border-slate-200 text-slate-900 font-medium' : 'bg-slate-50 border-slate-100'
              }`}>
                <div className="flex flex-col">
                  <span className="text-[10px] text-slate-400 uppercase font-bold leading-tight">{t.yourPrediction}</span>
@@ -570,7 +576,8 @@ const MatchCard: React.FC<MatchCardProps> = ({
                             p.player_id === userId ? 'ring-2 ring-red-500 border-red-500 shadow-sm z-10' : ''
                           } ${
                             pPoints === 5 ? 'bg-indigo-50/60 border-indigo-100 text-indigo-950 font-bold shadow-sm' :
-                            pPoints === 2 ? 'bg-slate-50/50 border-slate-200 text-slate-900 font-medium' :
+                            pPoints === 3 ? 'bg-emerald-50/60 border-emerald-100 text-emerald-950 font-bold shadow-sm' :
+                            pPoints === 2 || pPoints === 1 ? 'bg-slate-50/50 border-slate-200 text-slate-900 font-medium' :
                             'bg-white border-slate-100 text-slate-400'
                           }`}
                         >
@@ -594,7 +601,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
   );
 };
 
-const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) => Promise<void>, t: any }> = ({ match, onUpdate, t }) => {
+const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) => Promise<void>, t: any, isHockey?: boolean }> = ({ match, onUpdate, t, isHockey = false }) => {
   const [adminH, setAdminH] = useState(match.home_score ?? 0);
   const [adminA, setAdminA] = useState(match.away_score ?? 0);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -648,9 +655,9 @@ const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) 
       <div className="flex flex-col gap-2">
         <button 
           onClick={handleUpdate}
-          disabled={adminH === adminA || isUpdating}
+          disabled={(isHockey && adminH === adminA) || isUpdating}
           className={`w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${
-            adminH === adminA ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 
+            (isHockey && adminH === adminA) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 
             showConfirm ? 'bg-orange-600 text-white animate-pulse' : 'bg-slate-900 text-white active:scale-95'
           }`}
         >
@@ -666,7 +673,7 @@ const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) 
           </button>
         )}
       </div>
-      {adminH === adminA && <p className="mt-2 text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
+      {isHockey && adminH === adminA && <p className="mt-2 text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
     </div>
   );
 };
@@ -685,14 +692,67 @@ export default function App() {
     const saved = localStorage.getItem('lang');
     return (saved as 'cz' | 'en') || 'cz';
   });
+  
   const [matches, setMatches] = useState<Match[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [leaderboard, setLeaderboard] = useState<Player[]>([]);
   const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRegistering, setIsRegistering] = useState(false);
-  const [loginData, setLoginData] = useState({ username: '', password: '' });
+  const [loginData, setLoginData] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
+  
+  // Lobbies State (FÁZE S7 & S8)
+  const [lobbies, setLobbies] = useState<Lobby[]>([]);
+  const [activeLobbyId, setActiveLobbyId] = useState<string | null>(() => localStorage.getItem('activeLobbyId'));
+  const [activeLobbyName, setActiveLobbyName] = useState<string>("");
+  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+  const [lobbyExpanded, setLobbyExpanded] = useState(false);
+  const [newLobbyName, setNewLobbyName] = useState("");
+  const [newLobbyTournament, setNewLobbyTournament] = useState("fifa-world-cup-2026");
+  const [joinCodeInput, setJoinCodeInput] = useState(() => {
+    return new URLSearchParams(window.location.search).get("join") || "";
+  });
+
+  const activeLobby = lobbies.find(l => l.id === activeLobbyId);
+  const isHockey = activeTournamentId === "ms-hockey-2026";
+
+  const [winnerPickerTeams, setWinnerPickerTeams] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchWinnerPickerTeams = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('participants')
+          .select('*')
+          .eq('sport_id', 'football')
+          .order('name');
+          
+        if (error) {
+           console.error("Error fetching participants for winner picker:", error);
+        }
+
+        const validTeams = (data ?? []).filter((p) => {
+          const id = String(p.id ?? '');
+          return id.startsWith('football-') && !id.includes('tba');
+        });
+
+        setWinnerPickerTeams(validTeams);
+        
+      } catch (err) {
+        console.error("Error fetching winner teams:", err);
+      }
+    };
+    if (activeLobby || user) fetchWinnerPickerTeams();
+  }, [activeLobby, user, activeTournamentId]);
+
+  const [lobbyFormActive, setLobbyFormActive] = useState<'none' | 'create' | 'join'>(() => {
+    if (new URLSearchParams(window.location.search).get("join")) return 'join';
+    return 'none';
+  });
+  const [lobbyError, setLobbyError] = useState("");
+  const [lobbySuccess, setLobbySuccess] = useState("");
+
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
   const [adminMatchFilter, setAdminMatchFilter] = useState<'scheduled' | 'finished'>('scheduled');
   const [adminGroupFilter, setAdminGroupFilter] = useState<'all' | 'A' | 'B' | 'playoffs'>('all');
@@ -707,34 +767,93 @@ export default function App() {
     localStorage.setItem('lang', lang);
   }, [lang]);
 
+  useEffect(() => {
+    if (activeLobbyId) {
+      localStorage.setItem('activeLobbyId', activeLobbyId);
+      setActiveTournamentId(null); // Reset when switching lobby
+    } else {
+      localStorage.removeItem('activeLobbyId');
+      setActiveTournamentId(null);
+    }
+  }, [activeLobbyId]);
+
   const t = (translations as any)[lang];
 
-  const fetchAll = async () => {
+  // Try to restore Supabase session automatically on launch
+  useEffect(() => {
+    const checkSupSession = async () => {
+      try {
+        const restored = await checkSession();
+        if (restored) {
+          setUser(restored);
+          localStorage.setItem('user', JSON.stringify(restored));
+        } else {
+          // If no database session, prompt to sign in
+          setUser(null);
+          localStorage.removeItem('user');
+        }
+      } catch (err) {
+        console.error("Error checking passive session:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkSupSession();
+  }, []);
+
+  const fetchAll = async (lobbyIdParam?: string) => {
     if (!user) return;
     try {
-      console.log("Fetching all data for user:", user.username);
-      const { matches: matchesData, teams: teamsData, leaderboard: lbData, allPredictions: apData } = await fetchAllData(user.id);
-      console.log("Data received:", { 
-        matches: matchesData.length, 
-        teams: teamsData.length, 
-        leaderboard: lbData.length, 
-        allPredictions: apData.length 
-      });
-      setMatches(matchesData);
-      setTeams(teamsData);
-      setLeaderboard(lbData);
-      setAllPredictions(apData);
+      setError('');
+      const targetLobbyId = lobbyIdParam || activeLobbyId;
+      console.log("Fetching all data for user:", user.username, "Target Lobby:", targetLobbyId);
+      
+      const res = await fetchAllData(user.id, targetLobbyId || undefined, activeTournamentId || undefined);
+      
+      setMatches(res.matches);
+      setTeams(res.teams);
+      setLeaderboard(res.leaderboard);
+      setAllPredictions(res.allPredictions);
+      setLobbies(res.lobbies);
+      
+      if (res.lobbyId) {
+        setActiveLobbyId(res.lobbyId);
+      }
+      if (res.lobbyName) {
+        setActiveNameOnly(res.lobbyName); // helper mapping
+      }
+
+      // Sync active user's tournament winner selection from the target lobby leaderboard selection
+      if (res.leaderboard) {
+        const myPlayer = res.leaderboard.find(p => p.id === user.id);
+        if (myPlayer) {
+          const updated = { ...user, tournament_winner_id: myPlayer.tournament_winner_id || undefined };
+          setUser(updated);
+          localStorage.setItem('user', JSON.stringify(updated));
+        } else {
+          // If not in the leaderboard yet, clear it
+          const updated = { ...user, tournament_winner_id: undefined };
+          setUser(updated);
+          localStorage.setItem('user', JSON.stringify(updated));
+        }
+      }
     } catch (e: any) {
       console.error("fetchAll error:", e);
-      setError(e?.message || "Failed to load data");
+      setError(e?.message || "Nepodařilo se synchronizovat data se Supabase.");
     } finally {
       setLoading(false);
     }
   };
 
+  const setActiveNameOnly = (name: string) => {
+    setActiveLobbyName(name);
+  };
+
   useEffect(() => {
-    fetchAll();
-  }, [user?.id]); // Only refetch on actual ID change
+    if (user?.id) {
+      fetchAll();
+    }
+  }, [user?.id, activeLobbyId, activeTournamentId]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -743,14 +862,17 @@ export default function App() {
     try {
       let data;
       if (isRegistering) {
-        data = await registerUser(loginData.username, loginData.password);
+        // Register using email, username, password (FÁZE S6)
+        const emailToSubmit = loginData.email || `${loginData.username.toLowerCase().replace(/\s+/g, "")}@tipovacka.cz`;
+        data = await registerUser(loginData.username, loginData.password, undefined, emailToSubmit);
       } else {
-        data = await loginUser(loginData.username, loginData.password);
+        // Sign in using email (or username) and password
+        data = await loginUser(loginData.email || loginData.username, loginData.password);
       }
       setUser(data);
       localStorage.setItem('user', JSON.stringify(data));
     } catch (err: any) {
-      setError(err.message || 'Chyba serveru');
+      setError(err.message || 'Chyba serveru při ověřování identity.');
       setLoading(false);
     }
   };
@@ -758,14 +880,18 @@ export default function App() {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('activeLobbyId');
     setMatches([]);
     setLeaderboard([]);
     setAllPredictions([]);
+    setLobbies([]);
+    setActiveLobbyId(null);
+    setActiveLobbyName("");
   };
 
   const savePrediction = async (matchId: string, h: number, a: number) => {
     try {
-      await savePredDB(user?.id || '', matchId, h, a);
+      await savePredDB(user?.id || '', activeLobbyId || '', matchId, h, a);
       await fetchAll();
     } catch (err: any) {
       alert(err.message);
@@ -796,21 +922,25 @@ export default function App() {
 
   const setTournamentWinner = async (teamId: string) => {
     try {
-      await setWinnerDB(user?.id || '', teamId);
+      await setWinnerDB(user?.id || '', teamId, activeLobby?.tournament_id || 'fifa-world-cup-2026');
       await fetchAll();
     } catch (err: any) {
       alert(err.message);
     }
   };
 
+  const currentUserPickId = user ? leaderboard.find(l => l.id === user.id)?.tournament_winner_id : undefined;
+
   const pickWinner = async (teamId: string) => {
     try {
-      await pickWinnerDB(user?.id || '', teamId);
-      if (user) {
-        const updatedUser = { ...user, tournament_winner_id: teamId };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
+      await pickWinnerDB(
+        user?.id || '', 
+        teamId, 
+        activeLobbyId || '', 
+        activeTournamentId || activeLobby?.tournament_id || 'fifa-world-cup-2026'
+      );
+      // Legacy cleanup: not saving to user local storage anymore
+      // just rely on longterm_predictions via fetchAll
       await fetchAll();
     } catch (err: any) {
       alert(err.message);
@@ -840,6 +970,9 @@ export default function App() {
   };
 
   const leaderboardWithStreaks = useMemo(() => {
+    const activeLobby = lobbies.find(l => l.id === activeLobbyId);
+    const isHockey = activeTournamentId === "ms-hockey-2026";
+
     // Determine the most recently finished match to calculate "previous" state
     const finishedMatchesSorted = [...matches]
       .filter(m => m.home_score !== null && m.away_score !== null)
@@ -871,21 +1004,16 @@ export default function App() {
           const ph = pr.predicted_home_score;
           const pa = pr.predicted_away_score;
 
-          let pts = 0;
-          if (ph === mh && pa === ma) {
-            pts = 5;
-          } else if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) {
-            pts = 2;
-          }
+          const pts = calculatePoints(ph, pa, mh, ma, isHockey ? 'hockey' : 'football');
 
           total += pts;
           if (pts === 5) exact++;
-          if (pts === 2) outcomeHits++;
+          else if (pts > 0) outcomeHits++;
 
           if (pts > 0) tempStreak++;
           else tempStreak = 0;
           currentStreak = tempStreak;
-          history.push({ points: pts, res: pts === 5 ? 'E' : pts === 2 ? 'W' : 'L' });
+          history.push({ points: pts, res: pts === 5 ? 'E' : pts > 0 ? 'W' : 'L' });
         });
 
         // Add tournament winner points if applicable
@@ -924,8 +1052,7 @@ export default function App() {
         const ma = (pr as any).away_score;
         const ph = pr.predicted_home_score;
         const pa = pr.predicted_away_score;
-        const pts = (ph === mh && pa === ma) ? 5 : 
-                    ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) ? 2 : 0;
+        const pts = calculatePoints(ph, pa, mh, ma, isHockey ? 'hockey' : 'football');
         if (pts > 0) temp++; else temp = 0;
         bestStreak = Math.max(bestStreak, temp);
       });
@@ -965,25 +1092,33 @@ export default function App() {
             </div>
             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{loginT.loginTitle}</h1>
             <p className="text-[10px] font-bold text-red-600 uppercase tracking-[0.2em] mt-1">UNOFFICIAL FAN PREDICTOR</p>
-            <div className="mt-4 px-4 py-3 bg-slate-50 rounded-xl border border-red-100 max-w-[280px] text-center">
-              <p className="text-[10px] text-red-500 font-bold uppercase tracking-wider mb-1">DŮLEŽITÉ UPOZORNĚNÍ</p>
-              <p className="text-[9px] text-slate-500 font-medium leading-tight">
-                Toto je neoficiální, nezisková fanouškovská stránka vytvořená výhradně pro soukromé tipování mezi přáteli. 
-                Tato aplikace není žádným způsobem spojena s IIHF ani žádnou oficiální sportovní organizací.
-              </p>
-            </div>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
+            {isRegistering && (
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">E-mail</label>
+                <input 
+                  required
+                  type="email" 
+                  value={loginData.email}
+                  onChange={e => setLoginData(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all focus:bg-white"
+                  placeholder="e.g. test@tipovacka.cz"
+                />
+              </div>
+            )}
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">{loginT.username}</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">
+                {isRegistering ? loginT.username : (lang === 'cz' ? "E-mail nebo Uživatelské jméno" : "Email or Username")}
+              </label>
               <input 
                 required
                 type="text" 
                 value={loginData.username}
                 onChange={e => setLoginData(prev => ({ ...prev, username: e.target.value }))}
-                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all"
-                placeholder="e.g. lukas"
+                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all focus:bg-white font-semibold text-slate-800"
+                placeholder={isRegistering ? "e.g. lukas" : "e.g. test@tipovacka.cz"}
               />
             </div>
             <div>
@@ -993,17 +1128,30 @@ export default function App() {
                 type="password" 
                 value={loginData.password}
                 onChange={e => setLoginData(prev => ({ ...prev, password: e.target.value }))}
-                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all"
+                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all focus:bg-white"
                 placeholder="••••••••"
               />
             </div>
-            {error && <p className="text-red-500 text-sm font-medium text-center bg-red-50 p-2 rounded-xl">{error}</p>}
+            {error && <p className="text-red-500 text-xs font-bold text-center bg-red-50 p-3 rounded-2xl">{error}</p>}
             <button 
               type="submit"
-              className="w-full py-4 bg-red-600 text-white rounded-2xl font-black shadow-lg shadow-red-200 active:scale-95 transition-transform"
+              className="w-full py-4 bg-red-600 text-white rounded-2xl font-black shadow-lg shadow-red-200 active:scale-95 transition-transform uppercase tracking-wider text-xs cursor-pointer"
             >
               {isRegistering ? loginT.register : loginT.signin}
             </button>
+
+            <div className="text-center mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRegistering(!isRegistering);
+                  setError('');
+                }}
+                className="text-xs font-black text-red-600 hover:underline uppercase tracking-wide cursor-pointer animate-pulse"
+              >
+                {isRegistering ? loginT.hasAccount : loginT.noAccount}
+              </button>
+            </div>
           </form>
         </motion.div>
       </div>
@@ -1029,26 +1177,252 @@ export default function App() {
     </div>
   );
 
+  if (!activeLobbyId) {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300 animate-fade-in flex flex-col">
+        <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100 transition-colors">
+          <div className="flex justify-between items-center mr-1">
+            <div 
+              className="cursor-pointer active:opacity-70 transition-opacity"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            >
+               <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tighter italic uppercase transition-colors">FAN TIPOVAČKA</h1>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest"
+            >
+              Odhlásit
+            </button>
+          </div>
+        </header>
+        
+        <main className="p-6 flex-1 flex flex-col">
+          {lobbies.length > 0 ? (
+            <div className="space-y-4">
+               <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">
+                 {lang === 'cz' ? 'Moje lobby' : 'My lobbies'} ({lobbies.length})
+               </h2>
+               <div className="space-y-3">
+                 {lobbies.map(l => (
+                   <div key={l.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
+                      <div className="flex justify-between items-start">
+                         <div>
+                           <h3 className="text-sm uppercase font-black text-slate-800">{l.name}</h3>
+                           <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">{l.tournament_name || "Football"}</p>
+                         </div>
+                         <div className="flex items-center gap-2">
+                            {l.is_owner && (
+                              <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-slate-100 text-slate-400">Owner</span>
+                            )}
+                         </div>
+                      </div>
+                      
+                      <div className="flex gap-2 mt-2">
+                         <button 
+                           onClick={() => {
+                             setActiveLobbyId(l.id);
+                             setActiveTournamentId(null);
+                             setActiveLobbyName(l.name);
+                           }}
+                           className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform"
+                         >
+                           Otevřít lobby
+                         </button>
+                      </div>
+                   </div>
+                 ))}
+               </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
+               <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-6">
+                 <TrophyIcon className="w-8 h-8" />
+               </div>
+               <h2 className="text-xl font-black text-slate-800 mb-2">
+                 Zatím nejsi v žádné lobby
+               </h2>
+               <p className="text-[12px] text-slate-500 max-w-[250px] mx-auto font-medium leading-relaxed">
+                 Připoj se ke svým přátelům pomocí kódu, nebo založ úplně novou tipovačku.
+               </p>
+            </div>
+          )}
+
+          <div className="mt-8 space-y-4">
+            <div className="flex gap-2">
+               <button 
+                 onClick={() => {
+                   setLobbyFormActive(lobbyFormActive === 'join' ? 'none' : 'join');
+                   setLobbyError(""); setLobbySuccess("");
+                 }}
+                 className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${
+                   lobbyFormActive === 'join' || (lobbies.length === 0 && lobbyFormActive !== 'create') ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-200' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                 }`}
+               >
+                 {lang === 'cz' ? 'Připojit kód' : 'Join via Code'}
+               </button>
+               <button 
+                 onClick={() => {
+                   setLobbyFormActive(lobbyFormActive === 'create' ? 'none' : 'create');
+                   setLobbyError(""); setLobbySuccess("");
+                 }}
+                 className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${
+                   lobbyFormActive === 'create' ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                 }`}
+               >
+                 {lang === 'cz' ? 'Založit lobby' : 'Create Lobby'}
+               </button>
+            </div>
+
+            {/* Expanded Forms */}
+            {(lobbyFormActive !== 'none' || (lobbies.length === 0 && lobbyFormActive === 'none')) && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="mt-3 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm text-left"
+              >
+                {(lobbyFormActive === 'create') ? (
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setLobbyError(""); setLobbySuccess("");
+                    try {
+                      if (!newLobbyName.trim()) throw new Error("Prosím zadejte název lobby.");
+                      const created = await createLobby(user.id, newLobbyName.trim(), newLobbyTournament);
+                      setLobbySuccess(`Lobby "${created.name}" vytvořena! Kód: ${created.join_code}`);
+                      setNewLobbyName("");
+                      setLobbyFormActive('none');
+                      setActiveLobbyId(created.id);
+                      setActiveTournamentId(null);
+                      setActiveLobbyName(created.name);
+                      await fetchAll(created.id);
+                    } catch(err: any) {
+                      setLobbyError(err.message || "Chyba při vytváření lobby.");
+                    }
+                  }} className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider">Vytvořit novou lobby</h4>
+                    <div>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Název lobby</label>
+                      <input 
+                        type="text" required value={newLobbyName} onChange={e => setNewLobbyName(e.target.value)}
+                        className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
+                        placeholder="e.g. Kolegové z práce"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Turnaj</label>
+                      <select
+                        value={newLobbyTournament} onChange={e => setNewLobbyTournament(e.target.value)}
+                        className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-bold text-slate-700"
+                      >
+                        <option value="fifa-world-cup-2026">🏆 FIFA World Cup 2026</option>
+                        <option value="ms-hockey-2026">🏒 MS v hokeji 2026</option>
+                      </select>
+                    </div>
+                    <button type="submit" className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer">
+                      Potvrdit a vytvořit
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setLobbyError(""); setLobbySuccess("");
+                    try {
+                      if (!joinCodeInput.trim()) throw new Error("Prosím zadejte kód.");
+                      const joined = await joinLobbyByCode(user.id, joinCodeInput.trim());
+                      setLobbySuccess(`Úspěšně ses připojil k lobby "${joined.name}"!`);
+                      setJoinCodeInput("");
+                      setLobbyFormActive('none');
+                      setActiveLobbyId(joined.id);
+                      setActiveTournamentId(null);
+                      setActiveLobbyName(joined.name);
+                      await fetchAll(joined.id);
+                    } catch(err: any) {
+                      setLobbyError(err.message || "Chyba při připojování k lobby.");
+                    }
+                  }} className="space-y-3">
+                    <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider font-semibold">Připojit se k lobby</h4>
+                    <div>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Pozvánkový kód</label>
+                      <input 
+                        type="text" required value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value)}
+                        className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-600 uppercase"
+                        placeholder="e.g. LOB-C2F8"
+                      />
+                    </div>
+                    <button type="submit" className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer">
+                      Odeslat kód a připojit
+                    </button>
+                  </form>
+                )}
+                
+                {lobbyError && <p className="text-red-500 font-bold text-[10px] mt-2 text-center bg-red-50 p-1.5 rounded-lg">{lobbyError}</p>}
+                {lobbySuccess && <p className="text-green-600 font-bold text-[10px] mt-2 text-center bg-green-50 p-1.5 rounded-lg">{lobbySuccess}</p>}
+              </motion.div>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300 animate-fade-in">
       <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100 transition-colors">
-        <div className="flex justify-between items-center">
-          <div 
-            className="cursor-pointer active:opacity-70 transition-opacity"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          >
-             <h1 className="text-2xl font-black text-slate-900 leading-tight transition-colors">MS V HOKEJI 2026</h1>
-             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mt-1">Fan Tipovačka • Unofficial</p>
+        <div className="flex justify-between items-center mr-1">
+          <div className="flex items-center gap-3">
+            {activeTournamentId ? (
+              <button 
+                onClick={() => setActiveTournamentId(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
+                title="Zpět do Lobby"
+              >
+                <ChevronRight className="w-4 h-4 rotate-180" />
+              </button>
+            ) : activeLobbyId ? (
+              <button 
+                onClick={() => {
+                  setActiveLobbyId(null);
+                  setActiveTournamentId(null);
+                }}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
+                title={lang === 'cz' ? 'Zpět na Seznam Lobby' : 'Back to Lobbies'}
+              >
+                <ChevronRight className="w-4 h-4 rotate-180" />
+              </button>
+            ) : null}
+            <div 
+              className="cursor-pointer active:opacity-70 transition-opacity"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            >
+               <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tighter italic uppercase transition-colors">FAN TIPOVAČKA</h1>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="p-4">
-        {/* Match Filter Bar */}
-        {(tab === 'matches' || tab === 'results') && (
-          <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 bg-slate-50 py-1 transition-colors">
-            {[
-              { id: 'all', label: t.all },
+      {activeLobby && !activeTournamentId ? (
+        <main className="p-4" style={{ backgroundColor: '#f8fafc' }}>
+          <LobbyView 
+            lobby={activeLobby}
+            user={{ ...user, username: user.username || '' }}
+            lang={lang as 'cz' | 'en'}
+            onSelectTournament={id => setActiveTournamentId(id)}
+            onRefresh={() => fetchAll()}
+            onLobbyDeleted={() => {
+              setActiveLobbyId(null);
+              setActiveTournamentId(null);
+              fetchAll();
+            }}
+            membersCount={leaderboard.length}
+          />
+        </main>
+      ) : activeLobby && activeTournamentId ? (
+        <main className="p-4">
+          {/* Match Filter Bar */}
+          {(tab === 'matches' || tab === 'results') && (
+            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 bg-slate-50 py-1 transition-colors">
+              {[
+                { id: 'all', label: t.all },
               { id: 'A', label: t.groupA },
               { id: 'B', label: t.groupB },
               { id: 'playoffs', label: t.playoffs },
@@ -1090,10 +1464,12 @@ export default function App() {
                  <MatchCard 
                    key={m.id} 
                    match={m} 
+                   lobbyId={activeLobbyId || ''}
                    userId={user.id}
                    t={t}
                    onPredict={(h, a) => savePrediction(m.id, h, a)}
                    matchPredictions={allPredictions.filter(p => p.match_id === m.id)}
+                   isHockey={isHockey}
                  />
                ))}
               {matches.filter(m => {
@@ -1129,10 +1505,12 @@ export default function App() {
                  <MatchCard 
                    key={m.id} 
                    match={m} 
+                   lobbyId={activeLobbyId || ''}
                    isFinished 
                    userId={user.id} 
                    t={t} 
                    matchPredictions={allPredictions.filter(p => p.match_id === m.id)}
+                   isHockey={isHockey}
                  />
                ))}
                {matches.filter(m => {
@@ -1221,7 +1599,19 @@ export default function App() {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
                              <span className="font-bold text-slate-700">{p.username}</span>
-                             <TeamFlag code={p.winner_flag || p.tournament_winner_id} className="w-5 h-3.5" />
+                             {p.lobby_role === 'owner' && <span title="Správce lobby">👑</span>}
+                             
+                             {(() => {
+                               const pTeamInfo = teams.find(tm => tm.id === p.tournament_winner_id) || winnerPickerTeams.find(tm => tm.id === p.tournament_winner_id);
+                               if (!pTeamInfo) return null;
+                               return (
+                                 <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] ml-1 border border-slate-200/50">
+                                   <TeamFlag code={pTeamInfo.flag_code || pTeamInfo.id} className="w-4 h-2.5 shadow-sm" />
+                                   {pTeamInfo.short_name || pTeamInfo.name.substring(0, 3).toUpperCase()}
+                                 </span>
+                               );
+                             })()}
+
                              {p.currentStreak >= 3 && (
                                <span className="flex items-center scale-75 origin-left">
                                  {p.currentStreak >= 7 ? '🐐' : 
@@ -1255,10 +1645,11 @@ export default function App() {
             >
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-md overflow-hidden">
+                   {/* TODO: Profilovka - avatar/emoji will be a separate future phase */}
                    {(() => {
-                     const team = teams.find(tm => tm.id === user.tournament_winner_id);
+                     const team = teams.find(tm => tm.id === currentUserPickId) || winnerPickerTeams.find(tm => tm.id === currentUserPickId);
                      if (team) return <TeamFlag code={team.flag_code || team.id} className="w-12 h-8" />;
-                     if (user.winner_flag) return <TeamFlag code={user.winner_flag || user.tournament_winner_id} className="w-12 h-8" />;
+                     if (user.winner_flag) return <TeamFlag code={user.winner_flag || currentUserPickId} className="w-12 h-8" />;
                      return <User className="w-10 h-10 text-slate-400" />;
                    })()}
                  </div>
@@ -1317,31 +1708,39 @@ export default function App() {
 
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
-                   {t.pickWinner}
+                   {t.pickWinner} ({winnerPickerTeams.length} TEAMS AVAILABLE)
                    {(() => {
-                     const firstMatch = matches.sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
+                     const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
                      const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
-                     const isLocked = Date.now() > firstTime - (5 * 60 * 1000);
+                     const isLocked = firstTime > 0 && Date.now() > firstTime;
                      return isLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null;
                    })()}
                  </h3>
-                 <div className="grid grid-cols-4 gap-2">
-                   {teams.filter(tm => tm.id !== 'tba').map(tm => {
+                 {(() => {
+                   console.log({
+                     activeTournamentId,
+                     winnerPickerTeamsTotal: winnerPickerTeams.length,
+                     winnerPickerFirst5: winnerPickerTeams.slice(0, 5),
+                     winnerPickerRendered: true
+                   });
+                   return (
+                     <div className="grid grid-cols-4 gap-2">
+                       {winnerPickerTeams.map(tm => {
                      const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
                      const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
-                     const isLocked = Date.now() > firstTime - (5 * 60 * 1000);
-                     const isSelected = user.tournament_winner_id === tm.id;
+                     const isLocked = firstTime > 0 && Date.now() > firstTime;
+                     const isSelected = currentUserPickId === tm.id;
                      
                      return (
                        <motion.button
                          key={tm.id}
                          whileTap={!isLocked ? { scale: 0.9 } : {}}
                          onClick={() => !isLocked && pickWinner(tm.id)}
-                         disabled={isLocked && !isSelected}
+                         disabled={isLocked}
                          className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${
                            isSelected 
                            ? 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]' 
-                           : isLocked ? 'bg-slate-50 border-transparent opacity-40 grayscale pointer-events-none' : 'bg-slate-50 border-transparent hover:border-slate-200'
+                           : isLocked ? 'bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed' : 'bg-slate-50 border-transparent hover:border-slate-200'
                          }`}
                        >
                          {isSelected && (
@@ -1355,12 +1754,14 @@ export default function App() {
                          )}
                          <TeamFlag code={tm.flag_code || tm.id} className="w-10 h-6 mb-1" />
                          <span className={`text-[10px] font-black ${isSelected ? 'text-white' : 'text-slate-400'}`}>
-                           {tm.id.toUpperCase()}
+                           {tm.short_name ? tm.short_name : tm.id.replace('football-', '').toUpperCase()}
                          </span>
                        </motion.button>
                      );
-                   })}
-                 </div>
+                    })}
+                     </div>
+                   );
+                 })()}
                  <p className="mt-4 text-[10px] text-center text-slate-400 italic font-medium">{t.lockedWinner}</p>
               </div>
 
@@ -1542,13 +1943,14 @@ export default function App() {
                       match={m} 
                       t={t} 
                       onUpdate={(h, a) => updateMatchResult(m.id, h, a)} 
+                      isHockey={m.tournament_id === "ms-hockey-2026"}
                     />
                   ))}
 
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 mt-8">
                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">{t.setFinalWinner}</h3>
                  <div className="grid grid-cols-4 gap-2 mb-4">
-                   {teams.filter(t => t.id !== 'tba').map(t => (
+                   {winnerPickerTeams.map(t => (
                      <button
                        key={t.id}
                        onClick={() => setSelectedWinner(t.id)}
@@ -1572,9 +1974,11 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+      ) : null}
 
       {/* Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t px-2 py-3 flex justify-around items-center rounded-t-[2rem] z-50 transition-colors border-slate-100">
+      {activeLobby && activeTournamentId && (
+        <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t px-2 py-3 flex justify-around items-center rounded-t-[2rem] z-50 transition-colors border-slate-100">
         <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'matches' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
           <Calendar className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.matches}</span>
@@ -1594,17 +1998,18 @@ export default function App() {
           </button>
         )}
         <button onClick={() => setTab('profile')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'profile' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden bg-slate-50 ${user.tournament_winner_id && tab === 'profile' ? 'ring-2 ring-red-600' : ''}`}>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden bg-slate-50 ${currentUserPickId && tab === 'profile' ? 'ring-2 ring-red-600' : ''}`}>
              {(() => {
-               const team = teams.find(tm => tm.id === user.tournament_winner_id);
+               const team = teams.find(tm => tm.id === currentUserPickId) || winnerPickerTeams.find(tm => tm.id === currentUserPickId);
                if (team) return <TeamFlag code={team.flag_code || team.id} className="w-5 h-3" />;
-               if (user.winner_flag) return <TeamFlag code={user.winner_flag || user.tournament_winner_id} className="w-5 h-3" />;
+               if (user.winner_flag) return <TeamFlag code={user.winner_flag || currentUserPickId} className="w-5 h-3" />;
                return <User className="w-4 h-4" />;
              })()}
           </div>
           <span className="text-[10px] font-bold uppercase">{t.profile}</span>
         </button>
       </nav>
+      )}
     </div>
   );
 }
