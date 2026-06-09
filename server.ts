@@ -170,7 +170,7 @@ async function startServer() {
   });
 
   app.post("/api/lobby/update-name", async (req, res) => {
-    const { userId, lobbyId, newName } = req.body;
+    const { userId, lobbyId, newName, shortDescription, longDescription } = req.body;
     
     if (!userId || !lobbyId || !newName) {
       return res.status(400).json({ error: "Chybějí povinné parametry." });
@@ -201,9 +201,20 @@ async function startServer() {
         }
       }
 
+      const updatePayload: Record<string, string | null> = {
+        name: String(newName).trim()
+      };
+
+      if ("shortDescription" in req.body) {
+        updatePayload.short_description = String(shortDescription || "").trim() || null;
+      }
+      if ("longDescription" in req.body) {
+        updatePayload.long_description = String(longDescription || "").trim() || null;
+      }
+
       const { error: updateErr } = await supabaseAdmin
         .from("lobbies")
-        .update({ name: newName })
+        .update(updatePayload)
         .eq("id", lobbyId);
 
       if (updateErr) throw updateErr;

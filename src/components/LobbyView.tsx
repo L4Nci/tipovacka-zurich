@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check } from 'lucide-react';
 import { Lobby, Player as AppUser } from '../types';
-import { addTournamentToLobby, updateLobbyName, deleteLobby } from '../lib/db';
+import { addTournamentToLobby, updateLobbyDetails, deleteLobby } from '../lib/db';
 
 interface LobbyViewProps {
   lobby: Lobby;
@@ -12,9 +12,15 @@ interface LobbyViewProps {
   onRefresh?: () => void;
   onLobbyDeleted?: () => void;
   membersCount?: number;
+  tournamentStats?: Record<string, {
+    total: number;
+    scheduled: number;
+    finished: number;
+    nextStart?: string | null;
+  }>;
 }
 
-export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, onLobbyDeleted, membersCount = 1 }: LobbyViewProps) {
+export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, onLobbyDeleted, membersCount = 1, tournamentStats = {} }: LobbyViewProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
@@ -22,19 +28,29 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
   // Owner controls state
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState(lobby.name);
+  const [editShortDescription, setEditShortDescription] = useState(lobby.short_description || '');
+  const [editLongDescription, setEditLongDescription] = useState(lobby.long_description || '');
   const [isUpdatingName, setIsUpdatingName] = useState(false);
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const canEditLobby = Boolean(lobby.is_owner || user.role === 'admin');
+
   const handleUpdateName = async () => {
-    if (!editNameValue.trim() || editNameValue.trim() === lobby.name) {
+    if (!editNameValue.trim()) {
       setIsEditingName(false);
       return;
     }
     setIsUpdatingName(true);
     try {
-      await updateLobbyName(user.id, lobby.id, editNameValue.trim());
+      await updateLobbyDetails(
+        user.id,
+        lobby.id,
+        editNameValue.trim(),
+        editShortDescription.trim(),
+        editLongDescription.trim()
+      );
       setIsEditingName(false);
       if (onRefresh) onRefresh();
     } catch (err: any) {
@@ -61,6 +77,7 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
     .map(lt => ({
       id: lt.tournament_id,
       name: lt.tournament?.name || (lt.tournament_id === 'ms-hockey-2026' ? 'MS v hokeji 2026' : 'FIFA World Cup 2026'),
+      description: lt.tournament?.description || '',
       status: 'active' as const
     }));
 
@@ -69,6 +86,7 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
     .map(lt => ({
       id: lt.tournament_id,
       name: lt.tournament?.name || (lt.tournament_id === 'ms-hockey-2026' ? 'MS v hokeji 2026' : 'FIFA World Cup 2026'),
+      description: lt.tournament?.description || '',
       status: 'archived' as const
     }));
 
@@ -78,6 +96,7 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
       {
         id: lobby.tournament_id || 'fifa-world-cup-2026',
         name: lobby.tournament_name || (lobby.tournament_id === 'ms-hockey-2026' ? 'MS v hokeji 2026' : 'FIFA World Cup 2026'),
+        description: '',
         status: 'active'
       }
     ];
@@ -129,25 +148,55 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
           </p>
           
           {isEditingName ? (
-            <div className="flex items-center gap-2 max-w-sm mt-1">
+            <div className="space-y-2 max-w-sm mt-1">
               <input
                 type="text"
                 value={editNameValue}
                 onChange={e => setEditNameValue(e.target.value)}
-                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-red-600"
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-red-600"
                 autoFocus
               />
-              <button disabled={isUpdatingName} onClick={handleUpdateName} className="p-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors">
-                <Check className="w-4 h-4" />
-              </button>
-              <button disabled={isUpdatingName} onClick={() => { setIsEditingName(false); setEditNameValue(lobby.name); }} className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
+              <input
+                type="text"
+                value={editShortDescription}
+                onChange={e => setEditShortDescription(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-600"
+                placeholder={lang === 'cz' ? 'Krátký popis' : 'Short description'}
+                maxLength={120}
+              />
+              <textarea
+                value={editLongDescription}
+                onChange={e => setEditLongDescription(e.target.value)}
+                className="w-full min-h-[96px] bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-600 resize-y"
+                placeholder={lang === 'cz' ? 'Pravidla, buy-in, platba, poznámky...' : 'Rules, buy-in, payment, notes...'}
+              />
+              <div className="flex items-center gap-2">
+                <button disabled={isUpdatingName} onClick={handleUpdateName} className="p-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors">
+                  <Check className="w-4 h-4" />
+                </button>
+                <button
+                  disabled={isUpdatingName}
+                  onClick={() => {
+                    setIsEditingName(false);
+                    setEditNameValue(lobby.name);
+                    setEditShortDescription(lobby.short_description || '');
+                    setEditLongDescription(lobby.long_description || '');
+                  }}
+                  className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ) : (
-            <h1 className="text-3xl font-black text-slate-900 uppercase break-words w-full">
-              {lobby.name}
-            </h1>
+            <>
+              <h1 className="text-3xl font-black text-slate-900 uppercase break-words w-full">
+                {lobby.name}
+              </h1>
+              {lobby.short_description && (
+                <p className="text-sm text-slate-500 font-semibold mt-2">{lobby.short_description}</p>
+              )}
+            </>
           )}
           
           <div className="flex flex-wrap items-center gap-3 mt-3">
@@ -160,13 +209,23 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                 <span className="text-xs font-bold font-mono">{membersCount}</span>
               </div>
           </div>
+          {!isEditingName && lobby.long_description && (
+            <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-sm text-slate-600 font-medium leading-relaxed whitespace-pre-wrap">
+              {lobby.long_description}
+            </div>
+          )}
         </div>
 
         {/* OWNER CONTROLS */}
-        {lobby.is_owner && (
+        {canEditLobby && (
           <div className="flex sm:flex-col gap-2 shrink-0">
             <button 
-              onClick={() => setIsEditingName(true)}
+              onClick={() => {
+                setEditNameValue(lobby.name);
+                setEditShortDescription(lobby.short_description || '');
+                setEditLongDescription(lobby.long_description || '');
+                setIsEditingName(true);
+              }}
               className="px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
             >
               <Pencil className="w-3 h-3" />
@@ -206,26 +265,62 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
               {lang === 'cz' ? 'Aktivní soutěže' : 'Active Tournaments'}
             </h2>
             <div className="space-y-3">
-              {activeTournaments.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => onSelectTournament(t.id)}
-                  className="w-full relative group overflow-hidden bg-slate-50 hover:bg-slate-900 rounded-2xl p-4 flex items-center justify-between transition-all"
-                >
-                  <div className="relative z-10 text-left">
-                    <p className="text-sm font-black text-slate-700 group-hover:text-white transition-colors uppercase">
-                      {t.name}
-                    </p>
-                  </div>
-                  <div className="relative z-10 w-8 h-8 rounded-full bg-white group-hover:bg-slate-800 flex items-center justify-center transition-colors">
-                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
-                  </div>
-                </button>
-              ))}
+              {activeTournaments.map(t => {
+                const stats = tournamentStats[t.id] || { total: 0, scheduled: 0, finished: 0, nextStart: null };
+                const progress = stats.total > 0 ? Math.round((stats.finished / stats.total) * 100) : 0;
+                const nextLabel = stats.nextStart
+                  ? new Date(stats.nextStart).toLocaleDateString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                  : (lang === 'cz' ? 'Čeká na rozpis' : 'Schedule pending');
+
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => onSelectTournament(t.id)}
+                    className="w-full relative group overflow-hidden bg-slate-50 hover:bg-slate-900 rounded-2xl p-4 text-left transition-all"
+                  >
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-slate-700 group-hover:text-white transition-colors uppercase">
+                          {t.name}
+                        </p>
+                        {(t.description || lobby.short_description) && (
+                          <p className="mt-1 text-[11px] font-semibold text-slate-400 group-hover:text-slate-300 line-clamp-2">
+                            {t.description || lobby.short_description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 w-8 h-8 rounded-full bg-white group-hover:bg-slate-800 flex items-center justify-center transition-colors">
+                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+                      </div>
+                    </div>
+
+                    <div className="relative z-10 mt-4 grid grid-cols-3 gap-2">
+                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Zápasy' : 'Matches'}</p>
+                        <p className="text-sm font-black text-slate-800 group-hover:text-white">{stats.total}</p>
+                      </div>
+                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Hotovo' : 'Done'}</p>
+                        <p className="text-sm font-black text-slate-800 group-hover:text-white">{progress}%</p>
+                      </div>
+                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10 min-w-0">
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Další' : 'Next'}</p>
+                        <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{nextLabel}</p>
+                      </div>
+                    </div>
+
+                    {stats.total > 0 && (
+                      <div className="relative z-10 mt-3 h-1.5 rounded-full bg-white overflow-hidden group-hover:bg-white/10">
+                        <div className="h-full bg-red-600 group-hover:bg-white transition-all" style={{ width: `${progress}%` }} />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* ACTION: ADD TOURNAMENT TO LOBBY */}
-            {lobby.is_owner && availableToAdd.length > 0 && (
+            {canEditLobby && availableToAdd.length > 0 && (
               <div className="mt-6 pt-4 border-t border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                   {lang === 'cz' ? 'Správa turnajů (Owner)' : 'Manage Tournaments (Owner)'}

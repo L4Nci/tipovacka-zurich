@@ -3,6 +3,8 @@ export type Player = {
   username: string;
   role: 'player' | 'admin';
   lobby_role?: 'owner' | 'admin' | 'member';
+  avatar_emoji?: string | null;
+  avatar_bg?: string | null;
   // TODO: Legacy (profiles.tournament_winner_id) - no longer used in new longterm_predictions logic
   tournament_winner_id?: string;
   winner_flag?: string;
@@ -30,6 +32,7 @@ export type Match = {
   away_score: number | null;
   status: 'scheduled' | 'finished';
   stage: string;
+  tournament_id?: string;
   home_name: string;
   home_flag: string;
   away_name: string;
@@ -46,6 +49,9 @@ export type Prediction = {
   predicted_away_score: number;
   points_earned: number;
   username?: string;
+  avatar_emoji?: string | null;
+  avatar_bg?: string | null;
+  winner_flag?: string;
 };
 
 export type Tournament = {
@@ -77,6 +83,8 @@ export type Lobby = {
   name: string;
   owner_id: string;
   tournament_id: string; // legacy fallback
+  short_description?: string | null;
+  long_description?: string | null;
   join_code: string;
   visibility: 'private' | 'public';
   created_at?: string;
@@ -90,6 +98,8 @@ export type LobbyMember = {
   username: string;
   role: 'player' | 'admin';
   lobby_role: 'owner' | 'admin' | 'member';
+  avatar_emoji?: string | null;
+  avatar_bg?: string | null;
   joined_at: string;
   tournament_winner_id?: string | null;
 };
@@ -103,4 +113,3 @@ export type TournamentParticipant = {
   status: 'active' | 'qualified' | 'eliminated';
   created_at?: string;
 };
-

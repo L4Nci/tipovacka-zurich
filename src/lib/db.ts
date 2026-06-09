@@ -21,7 +21,9 @@ export const checkSession = async () => {
     id: profile.id,
     username: profile.username,
     role: profile.role || "player",
-    tournament_winner_id: profile.tournament_winner_id
+    tournament_winner_id: profile.tournament_winner_id,
+    avatar_emoji: profile.avatar_emoji || "😀",
+    avatar_bg: profile.avatar_bg || "#fee2e2"
   } as Player;
 };
 
@@ -53,7 +55,9 @@ export const loginUser = async (emailOrUsername: string, pass: string) => {
     return {
       id: data.user.id,
       username: data.user.user_metadata?.username || data.user.email?.split("@")[0] || "Hráč",
-      role: "player"
+      role: "player",
+      avatar_emoji: "😀",
+      avatar_bg: "#fee2e2"
     } as Player;
   }
 
@@ -61,7 +65,9 @@ export const loginUser = async (emailOrUsername: string, pass: string) => {
     id: profile.id,
     username: profile.username,
     role: profile.role || "player",
-    tournament_winner_id: profile.tournament_winner_id
+    tournament_winner_id: profile.tournament_winner_id,
+    avatar_emoji: profile.avatar_emoji || "😀",
+    avatar_bg: profile.avatar_bg || "#fee2e2"
   } as Player;
 };
 
@@ -93,7 +99,7 @@ export const registerUser = async (username: string, pass: string, adminId?: str
   if (trimmedUsername) {
     const { data: existingProfile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, avatar_emoji, avatar_bg")
       .eq("id", data.user.id)
       .maybeSingle();
 
@@ -102,7 +108,9 @@ export const registerUser = async (username: string, pass: string, adminId?: str
       .upsert({
         id: data.user.id,
         username: trimmedUsername,
-        role: existingProfile?.role || "player"
+        role: existingProfile?.role || "player",
+        avatar_emoji: existingProfile?.avatar_emoji || "😀",
+        avatar_bg: existingProfile?.avatar_bg || "#fee2e2"
       });
       
     if (upsertErr) {
@@ -115,6 +123,8 @@ export const registerUser = async (username: string, pass: string, adminId?: str
     id: data.user.id,
     username: trimmedUsername || username,
     role: "player",
+    avatar_emoji: "😀",
+    avatar_bg: "#fee2e2",
     tournament_winner_id: undefined
   } as Player;
 };
@@ -209,6 +219,8 @@ export const fetchUserLobbies = async (userId: string) => {
           name,
           owner_id,
           tournament_id,
+          short_description,
+          long_description,
           join_code,
           visibility,
           tournament:tournaments (
@@ -243,6 +255,8 @@ export const fetchUserLobbies = async (userId: string) => {
           name,
           owner_id,
           tournament_id,
+          short_description,
+          long_description,
           join_code,
           visibility,
           tournament:tournaments (
@@ -276,6 +290,8 @@ export const fetchUserLobbies = async (userId: string) => {
         name: lob.name,
         owner_id: lob.owner_id,
         tournament_id: lob.tournament_id, // legacy fallback 
+        short_description: lob.short_description || null,
+        long_description: lob.long_description || null,
         join_code: lob.join_code,
         visibility: lob.visibility,
         tournament_name: lob.tournament?.name || "FIFA World Cup 2026",
@@ -291,7 +307,14 @@ export const fetchUserLobbies = async (userId: string) => {
 /**
  * Create new lobby and auto-enroll owner (FÁZE S7)
  */
-export const createLobby = async (userId: string, name: string, tournamentId: string, visibility: 'private' | 'public' = 'public') => {
+export const createLobby = async (
+  userId: string,
+  name: string,
+  tournamentId: string,
+  visibility: 'private' | 'public' = 'public',
+  shortDescription = "",
+  longDescription = ""
+) => {
   // Generate random unique 8-character code
   const joinCode = Math.random().toString(36).substring(2, 10).toUpperCase();
   const lobbyId = "lobby-" + Math.random().toString(36).substring(2, 10);
@@ -304,6 +327,8 @@ export const createLobby = async (userId: string, name: string, tournamentId: st
       name,
       owner_id: userId,
       tournament_id: tournamentId,
+      short_description: shortDescription.trim() || null,
+      long_description: longDescription.trim() || null,
       join_code: joinCode,
       visibility
     });
@@ -328,6 +353,8 @@ export const createLobby = async (userId: string, name: string, tournamentId: st
     name,
     owner_id: userId,
     tournament_id: tournamentId,
+    short_description: shortDescription.trim() || null,
+    long_description: longDescription.trim() || null,
     join_code: joinCode,
     visibility
   };
@@ -611,6 +638,7 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
 
     return {
       id: m.id,
+      tournament_id: m.tournament_id,
       home_team_id: m.home_participant_id,
       away_team_id: m.away_participant_id,
       start_time_utc: m.start_time_utc,
@@ -694,7 +722,9 @@ export const fetchMatchPredictions = async (lobbyId: string, matchId: string) =>
       predicted_away_score,
       points_earned,
       profile:profiles (
-        username
+        username,
+        avatar_emoji,
+        avatar_bg
       )
     `)
     .eq("lobby_id", lobbyId)
@@ -731,6 +761,8 @@ export const fetchMatchPredictions = async (lobbyId: string, matchId: string) =>
       predicted_away_score: p.predicted_away_score,
       points_earned: p.points_earned,
       username: prof?.username || "Uživatel",
+      avatar_emoji: prof?.avatar_emoji || "😀",
+      avatar_bg: prof?.avatar_bg || "#fee2e2",
       winner_flag: pWinnerId ? pFlags.get(pWinnerId) : undefined
     } as Prediction;
   });
@@ -750,7 +782,9 @@ export const fetchLobbyLeaderboard = async (lobbyId: string, tournamentId?: stri
       role,
       profile:profiles (
         username,
-        role
+        role,
+        avatar_emoji,
+        avatar_bg
       )
     `)
     .eq("lobby_id", lobbyId);
@@ -829,6 +863,8 @@ export const fetchLobbyLeaderboard = async (lobbyId: string, tournamentId?: stri
       username: prof?.username || "Tipující",
       role: prof?.role || "player",
       lobby_role: m.role || "member",
+      avatar_emoji: prof?.avatar_emoji || "😀",
+      avatar_bg: prof?.avatar_bg || "#fee2e2",
       tournament_winner_id: ltWinnerMap.get(m.user_id) || undefined,
       total_points: stats.total,
       exact_hits: stats.exact,
@@ -897,6 +933,18 @@ export const pickTournamentWinner = async (
  */
 export const changePassword = async (userId: string, newPass: string) => {
   const { error } = await supabase.auth.updateUser({ password: newPass });
+  if (error) throw error;
+};
+
+export const updateProfileAvatar = async (userId: string, avatarEmoji: string, avatarBg: string) => {
+  const { error } = await supabase
+    .from("profiles")
+    .update({
+      avatar_emoji: avatarEmoji,
+      avatar_bg: avatarBg
+    })
+    .eq("id", userId);
+
   if (error) throw error;
 };
 
@@ -1046,6 +1094,31 @@ export const updateLobbyName = async (userId: string, lobbyId: string, newName: 
   if (!response.ok) {
     const data = await response.json();
     throw new Error(data.error || "Nepodařilo se přejmenovat lobby.");
+  }
+};
+
+export const updateLobbyDetails = async (
+  userId: string,
+  lobbyId: string,
+  name: string,
+  shortDescription: string,
+  longDescription: string
+) => {
+  const response = await fetch("/api/lobby/update-name", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      userId,
+      lobbyId,
+      newName: name,
+      shortDescription,
+      longDescription
+    })
+  });
+
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.error || "Nepodařilo se uložit nastavení lobby.");
   }
 };
 
