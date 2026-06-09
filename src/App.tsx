@@ -4,7 +4,6 @@ import {
   Trophy, 
   Calendar, 
   CheckCircle2, 
-  User, 
   UserPlus,
   ShieldCheck, 
   ChevronRight, 
@@ -13,7 +12,9 @@ import {
   Clock,
   LogOut,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  X,
+  Pencil
 } from 'lucide-react';
 import { Player, Team, Match, Prediction, Lobby } from './types.ts';
 import { LobbyView } from './components/LobbyView.tsx';
@@ -28,6 +29,8 @@ import {
   setTournamentWinner as setWinnerDB,
   pickTournamentWinner as pickWinnerDB,
   changePassword as changePassDB,
+  updateProfileAvatar,
+  updateLobbyDetails,
   checkSession,
   createLobby,
   joinLobbyByCode,
@@ -80,9 +83,6 @@ const translations = {
     setFinalChampion: "Potvrdit šampiona",
     updateResult: "Uložit výsledek a přepočítat",
     loading: "Načítání...",
-    groupA: "Skupina A",
-    groupB: "Skupina B",
-    playoffs: "Play-off",
     all: "Vše",
     tipsCount: "tipů",
     createUser: "Vytvořit nového hráče",
@@ -149,9 +149,6 @@ const translations = {
     setFinalChampion: "Set Final Champion",
     updateResult: "Update Final Result & Recalculate",
     loading: "Loading...",
-    groupA: "Group A",
-    groupB: "Group B",
-    playoffs: "Playoffs",
     all: "All",
     tipsCount: "tips",
     createUser: "Create New Player",
@@ -174,6 +171,31 @@ const translations = {
 };
 
 // --- Components ---
+
+const avatarEmojis = ['😀', '😎', '🤖', '👑', '🦊', '🐺', '🦁', '🚀', '⚽', '🏒'];
+const avatarColors = ['#fee2e2', '#ffedd5', '#fef3c7', '#dcfce7', '#ccfbf1', '#dbeafe', '#e0e7ff', '#f3e8ff', '#fce7f3', '#e2e8f0'];
+
+const UserAvatar = ({ player, size = 'md' }: { player?: Pick<Player, 'username' | 'avatar_emoji' | 'avatar_bg'> | null, size?: 'sm' | 'md' | 'lg' }) => {
+  const sizeClass = size === 'lg' ? 'w-20 h-20 text-4xl' : size === 'sm' ? 'w-7 h-7 text-sm' : 'w-10 h-10 text-xl';
+  return (
+    <div
+      className={`${sizeClass} rounded-full flex items-center justify-center shrink-0 border border-white shadow-sm`}
+      style={{ backgroundColor: player?.avatar_bg || '#fee2e2' }}
+      title={player?.username || undefined}
+    >
+      <span aria-hidden="true">{player?.avatar_emoji || '😀'}</span>
+    </div>
+  );
+};
+
+const formatStageLabel = (stage: string, lang: 'cz' | 'en') => {
+  if (lang === 'cz') return stage.replace(/^Group\s+/i, 'Skupina ');
+  return stage;
+};
+
+const getGroupCode = (stage: string) => {
+  return stage.match(/^Group\s+([A-Z])$/i)?.[1]?.toUpperCase() || null;
+};
 
 const TeamFlag = ({ code, className = "w-6 h-4" }: { code: string | null | undefined, className?: string }) => {
   const [error, setError] = React.useState(false);
@@ -582,6 +604,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                           }`}
                         >
                         <div className="flex items-center gap-1 mb-0.5">
+                          <UserAvatar player={{ username: p.username || 'Uživatel', avatar_emoji: p.avatar_emoji, avatar_bg: p.avatar_bg }} size="sm" />
                           <span className={`text-[9px] font-black uppercase truncate max-w-[55px] ${p.player_id === userId ? 'text-red-600' : ''}`}>
                             {p.player_id === userId ? 'VY' : p.username}
                           </span>
@@ -687,7 +710,7 @@ export default function App() {
   });
   
   const [tab, setTab] = useState<'matches' | 'results' | 'leaderboard' | 'admin' | 'profile'>('matches');
-  const [matchFilter, setMatchFilter] = useState<'all' | 'A' | 'B' | 'playoffs'>('all');
+  const [matchFilter, setMatchFilter] = useState('all');
   const [lang, setLang] = useState<'cz' | 'en'>(() => {
     const saved = localStorage.getItem('lang');
     return (saved as 'cz' | 'en') || 'cz';
@@ -708,7 +731,10 @@ export default function App() {
   const [activeLobbyName, setActiveLobbyName] = useState<string>("");
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
   const [lobbyExpanded, setLobbyExpanded] = useState(false);
+  const [isLobbyRulesOpen, setIsLobbyRulesOpen] = useState(false);
   const [newLobbyName, setNewLobbyName] = useState("");
+  const [newLobbyShortDescription, setNewLobbyShortDescription] = useState("");
+  const [newLobbyLongDescription, setNewLobbyLongDescription] = useState("");
   const [newLobbyTournament, setNewLobbyTournament] = useState("fifa-world-cup-2026");
   const [joinCodeInput, setJoinCodeInput] = useState(() => {
     return new URLSearchParams(window.location.search).get("join") || "";
@@ -716,35 +742,92 @@ export default function App() {
 
   const activeLobby = lobbies.find(l => l.id === activeLobbyId);
   const isHockey = activeTournamentId === "ms-hockey-2026";
+  const canEditActiveLobby = Boolean(activeLobby && (activeLobby.is_owner || user?.role === 'admin'));
 
   const [winnerPickerTeams, setWinnerPickerTeams] = useState<any[]>([]);
+  const [isEditingLobbyInfo, setIsEditingLobbyInfo] = useState(false);
+  const [editLobbyShortDescription, setEditLobbyShortDescription] = useState('');
+  const [editLobbyLongDescription, setEditLobbyLongDescription] = useState('');
+  const [lobbyInfoMsg, setLobbyInfoMsg] = useState('');
+  const [lobbyInfoError, setLobbyInfoError] = useState('');
+  const [isLobbyInfoSaving, setIsLobbyInfoSaving] = useState(false);
 
   useEffect(() => {
+    setEditLobbyShortDescription(activeLobby?.short_description || '');
+    setEditLobbyLongDescription(activeLobby?.long_description || '');
+    setIsEditingLobbyInfo(false);
+    setLobbyInfoMsg('');
+    setLobbyInfoError('');
+  }, [activeLobby?.id, activeLobby?.short_description, activeLobby?.long_description]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const getEmergencyFallbackTeams = () => {
+      console.warn("Winner picker official participants unavailable; using loaded football teams fallback.");
+      return (teams ?? []).filter((tm: any) => {
+        const id = String(tm.id ?? '');
+        return String(tm.sport_id ?? '') === 'football' &&
+          id.startsWith('football-') &&
+          !id.toLowerCase().includes('-tba');
+      });
+    };
+
     const fetchWinnerPickerTeams = async () => {
+      if (!activeTournamentId) {
+        setWinnerPickerTeams([]);
+        return;
+      }
+
       try {
-        const { data, error } = await supabase
-          .from('participants')
-          .select('*')
-          .eq('sport_id', 'football')
-          .order('name');
-          
-        if (error) {
-           console.error("Error fetching participants for winner picker:", error);
+        const { data: matchRows, error: matchesError } = await supabase
+          .from('matches')
+          .select('home_participant_id, away_participant_id')
+          .eq('tournament_id', activeTournamentId);
+
+        if (matchesError) throw matchesError;
+
+        const uniqueIds = Array.from(new Set(
+          (matchRows ?? [])
+            .flatMap((match: any) => [match.home_participant_id, match.away_participant_id])
+            .filter((id: any) => {
+              const normalizedId = String(id ?? '');
+              return normalizedId && !normalizedId.toLowerCase().includes('-tba');
+            })
+        ));
+
+        if (uniqueIds.length === 0) {
+          if (!isCancelled) setWinnerPickerTeams(getEmergencyFallbackTeams());
+          return;
         }
 
-        const validTeams = (data ?? []).filter((p) => {
-          const id = String(p.id ?? '');
-          return id.startsWith('football-') && !id.includes('tba');
-        });
+        const { data: participantRows, error: participantsError } = await supabase
+          .from('participants')
+          .select('*')
+          .in('id', uniqueIds);
 
-        setWinnerPickerTeams(validTeams);
-        
+        if (participantsError) throw participantsError;
+
+        const participantsById = new Map((participantRows ?? []).map((participant: any) => [participant.id, participant]));
+        const officialTeams = uniqueIds
+          .map((id) => participantsById.get(id))
+          .filter(Boolean);
+
+        if (!isCancelled) {
+          setWinnerPickerTeams(officialTeams.length > 0 ? officialTeams : getEmergencyFallbackTeams());
+        }
       } catch (err) {
-        console.error("Error fetching winner teams:", err);
+        console.warn("Winner picker official participants fetch failed; using loaded football teams fallback.", err);
+        if (!isCancelled) setWinnerPickerTeams(getEmergencyFallbackTeams());
       }
     };
-    if (activeLobby || user) fetchWinnerPickerTeams();
-  }, [activeLobby, user, activeTournamentId]);
+
+    fetchWinnerPickerTeams();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTournamentId, teams]);
 
   const [lobbyFormActive, setLobbyFormActive] = useState<'none' | 'create' | 'join'>(() => {
     if (new URLSearchParams(window.location.search).get("join")) return 'join';
@@ -755,13 +838,21 @@ export default function App() {
 
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
   const [adminMatchFilter, setAdminMatchFilter] = useState<'scheduled' | 'finished'>('scheduled');
-  const [adminGroupFilter, setAdminGroupFilter] = useState<'all' | 'A' | 'B' | 'playoffs'>('all');
+  const [adminGroupFilter, setAdminGroupFilter] = useState('all');
   const [showCreatePlayer, setShowCreatePlayer] = useState(false);
   const [newUserData, setNewUserData] = useState({ username: '', password: '' });
   const [createUserMsg, setCreateUserMsg] = useState('');
   const [passData, setPassData] = useState({ newPass: '', confirmPass: '' });
   const [passMsg, setPassMsg] = useState('');
   const [passError, setPassError] = useState('');
+  const [isPassSaving, setIsPassSaving] = useState(false);
+  const [avatarData, setAvatarData] = useState({
+    emoji: user?.avatar_emoji || '😀',
+    bg: user?.avatar_bg || '#fee2e2'
+  });
+  const [avatarMsg, setAvatarMsg] = useState('');
+  const [avatarError, setAvatarError] = useState('');
+  const [showAvatarEditor, setShowAvatarEditor] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('lang', lang);
@@ -771,13 +862,93 @@ export default function App() {
     if (activeLobbyId) {
       localStorage.setItem('activeLobbyId', activeLobbyId);
       setActiveTournamentId(null); // Reset when switching lobby
+      setIsLobbyRulesOpen(false);
     } else {
       localStorage.removeItem('activeLobbyId');
       setActiveTournamentId(null);
+      setIsLobbyRulesOpen(false);
     }
   }, [activeLobbyId]);
 
+  useEffect(() => {
+    setIsLobbyRulesOpen(false);
+  }, [activeTournamentId]);
+
   const t = (translations as any)[lang];
+
+  const stageFilters = useMemo(() => {
+    const byStage = new Map<string, number>();
+    matches.forEach(match => {
+      const stage = String(match.stage || '').trim();
+      if (!stage) return;
+      const time = new Date(match.start_time_utc).getTime();
+      const current = byStage.get(stage);
+      if (current === undefined || time < current) {
+        byStage.set(stage, time);
+      }
+    });
+
+    return [
+      { id: 'all', label: t.all },
+      ...Array.from(byStage.entries())
+        .sort((a, b) => {
+          const groupA = getGroupCode(a[0]);
+          const groupB = getGroupCode(b[0]);
+          if (groupA && groupB) return groupA.localeCompare(groupB);
+          if (groupA) return -1;
+          if (groupB) return 1;
+          return a[1] - b[1] || a[0].localeCompare(b[0]);
+        })
+        .map(([stage]) => ({
+          id: stage,
+          label: formatStageLabel(stage, lang)
+        }))
+    ];
+  }, [matches, t.all, lang]);
+
+  const matchPassesStageFilter = (match: Match, filter: string) => {
+    return filter === 'all' || match.stage === filter;
+  };
+
+  const tournamentStats = useMemo(() => {
+    const defaultTournamentId = activeTournamentId
+      || activeLobby?.tournaments?.find(tournament => tournament.status === 'active')?.tournament_id
+      || activeLobby?.tournament_id;
+
+    if (!defaultTournamentId) return {};
+
+    const tournamentMatches = matches.filter(match => !match.tournament_id || match.tournament_id === defaultTournamentId);
+    const scheduledMatches = tournamentMatches.filter(match => match.status === 'scheduled');
+    const nextMatch = scheduledMatches
+      .slice()
+      .sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
+
+    return {
+      [defaultTournamentId]: {
+        total: tournamentMatches.length,
+        scheduled: scheduledMatches.length,
+        finished: tournamentMatches.filter(match => match.status === 'finished').length,
+        nextStart: nextMatch?.start_time_utc || null
+      }
+    };
+  }, [activeLobby, activeTournamentId, matches]);
+
+  useEffect(() => {
+    if (!stageFilters.some(filter => filter.id === matchFilter)) {
+      setMatchFilter('all');
+    }
+    if (!stageFilters.some(filter => filter.id === adminGroupFilter)) {
+      setAdminGroupFilter('all');
+    }
+  }, [stageFilters, matchFilter, adminGroupFilter]);
+
+  useEffect(() => {
+    if (!user) return;
+    setAvatarData({
+      emoji: user.avatar_emoji || '😀',
+      bg: user.avatar_bg || '#fee2e2'
+    });
+  }, [user?.id, user?.avatar_emoji, user?.avatar_bg]);
 
   // Try to restore Supabase session automatically on launch
   useEffect(() => {
@@ -930,8 +1101,13 @@ export default function App() {
   };
 
   const currentUserPickId = user ? leaderboard.find(l => l.id === user.id)?.tournament_winner_id : undefined;
+  const isWinnerPickerLocked = useMemo(() => {
+    const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
+    const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
+    return firstTime > 0 && Date.now() > firstTime;
+  }, [matches]);
 
-  const pickWinner = async (teamId: string) => {
+  const pickTournamentWinner = async (teamId: string) => {
     try {
       await pickWinnerDB(
         user?.id || '', 
@@ -955,17 +1131,69 @@ export default function App() {
       setPassError(t.passMismatch);
       return;
     }
-    if (passData.newPass.length < 4) {
-      setPassError(lang === 'cz' ? 'Heslo musí mít aspoň 4 znaky' : 'Password must be at least 4 characters');
+    if (passData.newPass.length < 6) {
+      setPassError(lang === 'cz' ? 'Heslo musí mít aspoň 6 znaků' : 'Password must be at least 6 characters');
       return;
     }
 
+    setIsPassSaving(true);
     try {
       await changePassDB(user?.id || '', passData.newPass);
       setPassMsg(t.passUpdated);
       setPassData({ newPass: '', confirmPass: '' });
     } catch (err: any) {
       setPassError(err.message);
+    } finally {
+      setIsPassSaving(false);
+    }
+  };
+
+  const handleSaveAvatar = async (nextEmoji = avatarData.emoji, nextBg = avatarData.bg) => {
+    if (!user) return;
+    setAvatarMsg('');
+    setAvatarError('');
+
+    try {
+      await updateProfileAvatar(user.id, nextEmoji, nextBg);
+      const updatedUser = {
+        ...user,
+        avatar_emoji: nextEmoji,
+        avatar_bg: nextBg
+      };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setAvatarData({ emoji: nextEmoji, bg: nextBg });
+      setAvatarMsg(lang === 'cz' ? 'Avatar uložen.' : 'Avatar saved.');
+      await fetchAll();
+    } catch (err: any) {
+      setAvatarError(err.message || (lang === 'cz' ? 'Avatar se nepodařilo uložit.' : 'Could not save avatar.'));
+    }
+  };
+
+  const handleSaveLobbyInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !activeLobby) return;
+
+    setLobbyInfoMsg('');
+    setLobbyInfoError('');
+    setIsLobbyInfoSaving(true);
+
+    try {
+      await updateLobbyDetails(
+        user.id,
+        activeLobby.id,
+        activeLobby.name,
+        editLobbyShortDescription,
+        editLobbyLongDescription
+      );
+      await fetchAll(activeLobby.id);
+      setIsEditingLobbyInfo(false);
+      setIsLobbyRulesOpen(true);
+      setLobbyInfoMsg(lang === 'cz' ? 'Informace o lobby uloženy.' : 'Lobby information saved.');
+    } catch (err: any) {
+      setLobbyInfoError(err.message || (lang === 'cz' ? 'Informace se nepodařilo uložit.' : 'Could not save lobby information.'));
+    } finally {
+      setIsLobbyInfoSaving(false);
     }
   };
 
@@ -1209,6 +1437,9 @@ export default function App() {
                       <div className="flex justify-between items-start">
                          <div>
                            <h3 className="text-sm uppercase font-black text-slate-800">{l.name}</h3>
+                           {l.short_description && (
+                             <p className="text-xs text-slate-500 font-medium mt-1 line-clamp-1">{l.short_description}</p>
+                           )}
                            <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">{l.tournament_name || "Football"}</p>
                          </div>
                          <div className="flex items-center gap-2">
@@ -1287,9 +1518,18 @@ export default function App() {
                     setLobbyError(""); setLobbySuccess("");
                     try {
                       if (!newLobbyName.trim()) throw new Error("Prosím zadejte název lobby.");
-                      const created = await createLobby(user.id, newLobbyName.trim(), newLobbyTournament);
+                      const created = await createLobby(
+                        user.id,
+                        newLobbyName.trim(),
+                        newLobbyTournament,
+                        'public',
+                        newLobbyShortDescription,
+                        newLobbyLongDescription
+                      );
                       setLobbySuccess(`Lobby "${created.name}" vytvořena! Kód: ${created.join_code}`);
                       setNewLobbyName("");
+                      setNewLobbyShortDescription("");
+                      setNewLobbyLongDescription("");
                       setLobbyFormActive('none');
                       setActiveLobbyId(created.id);
                       setActiveTournamentId(null);
@@ -1306,6 +1546,26 @@ export default function App() {
                         type="text" required value={newLobbyName} onChange={e => setNewLobbyName(e.target.value)}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
                         placeholder="e.g. Kolegové z práce"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">O lobby</label>
+                      <input 
+                        type="text"
+                        value={newLobbyShortDescription}
+                        onChange={e => setNewLobbyShortDescription(e.target.value)}
+                        className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
+                        placeholder="Friends League Brno"
+                        maxLength={120}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Informace o lobby</label>
+                      <textarea
+                        value={newLobbyLongDescription}
+                        onChange={e => setNewLobbyLongDescription(e.target.value)}
+                        className="w-full min-h-[88px] p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-medium resize-y"
+                        placeholder="Entry fee 200 CZK. Payment deadline 10.6.2026. Winner takes all."
                       />
                     </div>
                     <div>
@@ -1414,6 +1674,7 @@ export default function App() {
               fetchAll();
             }}
             membersCount={leaderboard.length}
+            tournamentStats={tournamentStats}
           />
         </main>
       ) : activeLobby && activeTournamentId ? (
@@ -1421,15 +1682,10 @@ export default function App() {
           {/* Match Filter Bar */}
           {(tab === 'matches' || tab === 'results') && (
             <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 bg-slate-50 py-1 transition-colors">
-              {[
-                { id: 'all', label: t.all },
-              { id: 'A', label: t.groupA },
-              { id: 'B', label: t.groupB },
-              { id: 'playoffs', label: t.playoffs },
-            ].map(f => (
+              {stageFilters.map(f => (
               <button
                 key={f.id}
-                onClick={() => setMatchFilter(f.id as any)}
+                onClick={() => setMatchFilter(f.id)}
                 className={`flex-none px-4 py-1.5 rounded-full text-[10px] font-black transition-all ${
                   matchFilter === f.id 
                     ? 'bg-red-600 text-white shadow-lg shadow-red-100' 
@@ -1450,15 +1706,27 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
             >
-              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                 <Calendar className="w-4 h-4" /> {t.upcoming}
+              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 min-w-0">
+                  <Calendar className="w-4 h-4 shrink-0" /> {t.upcoming}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab('profile');
+                    setIsLobbyRulesOpen(true);
+                  }}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white border border-slate-100 text-slate-400 hover:text-slate-600 hover:border-slate-200 transition-colors shadow-sm"
+                  aria-label={lang === 'cz' ? 'O lobby' : 'About lobby'}
+                >
+                  <span className="text-sm font-black normal-case tracking-normal" aria-hidden="true">ⓘ</span>
+                </button>
               </h2>
               {matches
                 .filter(m => {
                   if (m.status !== 'scheduled') return false;
                   if (matchFilter === 'all') return true;
-                  if (matchFilter === 'playoffs') return !m.stage?.includes('Group');
-                  return m.stage?.includes(`Group ${matchFilter}`);
+                  return matchPassesStageFilter(m, matchFilter);
                 })
                 .map(m => (
                  <MatchCard 
@@ -1475,8 +1743,7 @@ export default function App() {
               {matches.filter(m => {
                   if (m.status !== 'scheduled') return false;
                   if (matchFilter === 'all') return true;
-                  if (matchFilter === 'playoffs') return !m.stage?.includes('Group');
-                  return m.stage?.includes(`Group ${matchFilter}`);
+                  return matchPassesStageFilter(m, matchFilter);
                }).length === 0 && (
                 <div className="text-center py-12 text-slate-400">{t.noUpcoming}</div>
               )}
@@ -1497,8 +1764,7 @@ export default function App() {
                 .filter(m => {
                   if (m.status !== 'finished') return false;
                   if (matchFilter === 'all') return true;
-                  if (matchFilter === 'playoffs') return !m.stage?.includes('Group');
-                  return m.stage?.includes(`Group ${matchFilter}`);
+                  return matchPassesStageFilter(m, matchFilter);
                 })
                 .reverse()
                 .map(m => (
@@ -1516,8 +1782,7 @@ export default function App() {
                {matches.filter(m => {
                   if (m.status !== 'finished') return false;
                   if (matchFilter === 'all') return true;
-                  if (matchFilter === 'playoffs') return !m.stage?.includes('Group');
-                  return m.stage?.includes(`Group ${matchFilter}`);
+                  return matchPassesStageFilter(m, matchFilter);
                }).length === 0 && (
                 <div className="text-center py-12 text-slate-400">{t.noResults}</div>
               )}
@@ -1554,83 +1819,74 @@ export default function App() {
                 </div>
               )}
 
-              <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden transition-colors">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-slate-50">
-                      <th className="px-5 py-4 text-[10px] font-black text-slate-400 uppercase">{t.pos}</th>
-                      <th className="px-5 py-4 text-[10px] font-black text-slate-400 uppercase">{t.player}</th>
-                      <th className="px-5 py-4 text-[10px] font-black text-slate-400 uppercase text-right">{t.pts}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {leaderboardWithStreaks.map((p, i) => (
-                      <tr 
-                        key={p.id} 
-                        className={`border-b border-slate-50 last:border-none transition-colors ${p.id === user.id ? 'bg-red-50/50' : ''}`}
-                      >
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-1.5">
-                            <div className={`w-6 h-6 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${
-                              i === 0 ? 'bg-yellow-400 text-yellow-900 shadow-sm shadow-yellow-100' :
-                              i === 1 ? 'bg-slate-300 text-slate-700' :
-                              i === 2 ? 'bg-amber-600 text-amber-50' :
-                              'bg-slate-100 text-slate-500'
-                            }`}>
-                              {i + 1}
+              <div className="space-y-3">
+                {leaderboardWithStreaks.map((p, i) => {
+                  const pTeamInfo = teams.find(tm => tm.id === p.tournament_winner_id) || winnerPickerTeams.find(tm => tm.id === p.tournament_winner_id);
+                  const rankTone = i === 0 ? 'bg-yellow-400 text-yellow-900' :
+                    i === 1 ? 'bg-slate-300 text-slate-700' :
+                    i === 2 ? 'bg-amber-600 text-amber-50' :
+                    'bg-slate-100 text-slate-500';
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`bg-white rounded-2xl border shadow-sm p-4 transition-colors ${p.id === user.id ? 'border-red-200 bg-red-50/40' : 'border-slate-100'}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black shadow-sm ${rankTone}`}>
+                            {i + 1}
+                          </div>
+                          <UserAvatar player={p} size="md" />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-black text-slate-800 truncate">{p.username}</span>
+                              {p.lobby_role === 'owner' && <span title="Správce lobby">👑</span>}
+                              {p.currentStreak >= 3 && (
+                                <span className="text-xs">
+                                  {p.currentStreak >= 7 ? '🐐' : p.currentStreak >= 5 ? '🔥🔥' : '🔥'}
+                                </span>
+                              )}
                             </div>
-                            <div className="flex items-center min-w-[28px] ml-1">
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
                               {p.rankChange > 0 ? (
-                                <div className="flex items-center text-[10px] font-black text-emerald-500">
-                                  <ChevronUp className="w-3.5 h-3.5 stroke-[3]" />
-                                  <span>{p.rankChange}</span>
-                                </div>
+                                <span className="inline-flex items-center text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
+                                  <ChevronUp className="w-3 h-3 stroke-[3]" /> {p.rankChange}
+                                </span>
                               ) : p.rankChange < 0 ? (
-                                <div className="flex items-center text-[10px] font-black text-rose-500">
-                                  <ChevronDown className="w-3.5 h-3.5 stroke-[3]" />
-                                  <span>{Math.abs(p.rankChange)}</span>
-                                </div>
+                                <span className="inline-flex items-center text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-md">
+                                  <ChevronDown className="w-3 h-3 stroke-[3]" /> {Math.abs(p.rankChange)}
+                                </span>
                               ) : (
-                                <span className="text-slate-400 font-bold text-[10px] ml-1.5 opacity-40">•</span>
+                                <span className="text-[10px] font-black text-slate-300 bg-slate-50 px-1.5 py-0.5 rounded-md">=</span>
+                              )}
+                              {pTeamInfo && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200/60">
+                                  <TeamFlag code={pTeamInfo.flag_code || pTeamInfo.id} className="w-4 h-2.5 shadow-sm" />
+                                  {pTeamInfo.short_name || pTeamInfo.name.substring(0, 3).toUpperCase()}
+                                </span>
                               )}
                             </div>
                           </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2">
-                             <span className="font-bold text-slate-700">{p.username}</span>
-                             {p.lobby_role === 'owner' && <span title="Správce lobby">👑</span>}
-                             
-                             {(() => {
-                               const pTeamInfo = teams.find(tm => tm.id === p.tournament_winner_id) || winnerPickerTeams.find(tm => tm.id === p.tournament_winner_id);
-                               if (!pTeamInfo) return null;
-                               return (
-                                 <span className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)] ml-1 border border-slate-200/50">
-                                   <TeamFlag code={pTeamInfo.flag_code || pTeamInfo.id} className="w-4 h-2.5 shadow-sm" />
-                                   {pTeamInfo.short_name || pTeamInfo.name.substring(0, 3).toUpperCase()}
-                                 </span>
-                               );
-                             })()}
-
-                             {p.currentStreak >= 3 && (
-                               <span className="flex items-center scale-75 origin-left">
-                                 {p.currentStreak >= 7 ? '🐐' : 
-                                  p.currentStreak >= 5 ? '🔥🔥' : '🔥'}
-                               </span>
-                             )}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-medium flex items-center gap-2">
-                            <span>🎯 {p.exact_hits ?? 0}</span>
-                            <span>✅ {p.outcome_hits ?? 0}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <span className="text-xl font-black text-slate-900 transition-colors">{p.total_points ?? 0}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-2xl font-black text-slate-900 leading-none">{p.total_points ?? 0}</p>
+                          <p className="text-[9px] font-black uppercase text-slate-400 mt-1">{t.pts}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="rounded-xl bg-slate-50 px-3 py-2">
+                          <p className="text-[9px] font-black uppercase text-slate-400">{t.exact}</p>
+                          <p className="text-sm font-black text-slate-800">{p.exact_hits ?? 0}</p>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 px-3 py-2">
+                          <p className="text-[9px] font-black uppercase text-slate-400">{t.winner}</p>
+                          <p className="text-sm font-black text-slate-800">{p.outcome_hits ?? 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           )}
@@ -1644,14 +1900,16 @@ export default function App() {
               className="space-y-6"
             >
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                 <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-4 border-white shadow-md overflow-hidden">
-                   {/* TODO: Profilovka - avatar/emoji will be a separate future phase */}
-                   {(() => {
-                     const team = teams.find(tm => tm.id === currentUserPickId) || winnerPickerTeams.find(tm => tm.id === currentUserPickId);
-                     if (team) return <TeamFlag code={team.flag_code || team.id} className="w-12 h-8" />;
-                     if (user.winner_flag) return <TeamFlag code={user.winner_flag || currentUserPickId} className="w-12 h-8" />;
-                     return <User className="w-10 h-10 text-slate-400" />;
-                   })()}
+                 <div className="mb-4 relative">
+                   <UserAvatar player={user} size="lg" />
+                   <button
+                     type="button"
+                     onClick={() => setShowAvatarEditor(true)}
+                     className="absolute -right-1 -bottom-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg ring-4 ring-white active:scale-95 transition-all"
+                     aria-label={lang === 'cz' ? 'Upravit avatar' : 'Edit avatar'}
+                   >
+                     <Pencil className="w-3.5 h-3.5" />
+                   </button>
                  </div>
                  <h2 className="text-xl font-black text-slate-900 uppercase transition-colors">{user.username}</h2>
                  {currentUserStats.currentStreak >= 3 && (
@@ -1662,6 +1920,71 @@ export default function App() {
                    </div>
                  )}
               </div>
+
+              <AnimatePresence>
+                {showAvatarEditor && (
+                  <motion.div
+                    key="avatar-modal"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[80] bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center px-4 pb-4"
+                    onClick={() => setShowAvatarEditor(false)}
+                  >
+                    <motion.div
+                      initial={{ y: 24, scale: 0.98 }}
+                      animate={{ y: 0, scale: 1 }}
+                      exit={{ y: 24, scale: 0.98 }}
+                      className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100"
+                      onClick={event => event.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                          {lang === 'cz' ? 'Avatar' : 'Avatar'}
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => setShowAvatarEditor(false)}
+                          className="w-8 h-8 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100"
+                          aria-label={lang === 'cz' ? 'Zavřít avatar editor' : 'Close avatar editor'}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="flex justify-center mb-4">
+                        <UserAvatar player={{ username: user.username, avatar_emoji: avatarData.emoji, avatar_bg: avatarData.bg }} size="lg" />
+                      </div>
+                      <div className="grid grid-cols-5 gap-2 mb-4">
+                        {avatarEmojis.map(emoji => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => handleSaveAvatar(emoji, avatarData.bg)}
+                            className={`h-10 rounded-xl text-xl border transition-all ${avatarData.emoji === emoji ? 'border-red-600 bg-red-50 shadow-sm scale-105' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+                            aria-label={`Avatar ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-5 gap-2">
+                        {avatarColors.map(color => (
+                          <button
+                            key={color}
+                            type="button"
+                            onClick={() => handleSaveAvatar(avatarData.emoji, color)}
+                            className={`h-9 rounded-xl border transition-all ${avatarData.bg === color ? 'border-slate-900 ring-2 ring-slate-900/10 scale-105' : 'border-white hover:border-slate-200'}`}
+                            style={{ backgroundColor: color }}
+                            aria-label={`Avatar color ${color}`}
+                          />
+                        ))}
+                      </div>
+                      {avatarMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-3">{avatarMsg}</p>}
+                      {avatarError && <p className="text-[10px] text-red-600 font-bold text-center mt-3">{avatarError}</p>}
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 text-center">{lang === 'cz' ? 'Historie (posledních 5)' : 'History (last 5)'}</h3>
@@ -1706,42 +2029,33 @@ export default function App() {
                  </div>
               </div>
 
+              {(() => {
+                const pickerOptions = winnerPickerTeams;
+
+                return (
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
-                   {t.pickWinner} ({winnerPickerTeams.length} TEAMS AVAILABLE)
-                   {(() => {
-                     const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
-                     const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
-                     const isLocked = firstTime > 0 && Date.now() > firstTime;
-                     return isLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null;
-                   })()}
+                   {t.pickWinner} ({pickerOptions.length} TEAMS AVAILABLE)
+                   {isWinnerPickerLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null}
                  </h3>
-                 {(() => {
-                   console.log({
-                     activeTournamentId,
-                     winnerPickerTeamsTotal: winnerPickerTeams.length,
-                     winnerPickerFirst5: winnerPickerTeams.slice(0, 5),
-                     winnerPickerRendered: true
-                   });
-                   return (
-                     <div className="grid grid-cols-4 gap-2">
-                       {winnerPickerTeams.map(tm => {
-                     const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
-                     const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
-                     const isLocked = firstTime > 0 && Date.now() > firstTime;
-                     const isSelected = currentUserPickId === tm.id;
+                 <div className="grid grid-cols-4 gap-2">
+                   {pickerOptions.map(tm => {
+                     const isSelected = tm.id === currentUserPickId;
+                     let buttonStateClass = 'bg-slate-50 border-transparent hover:border-slate-200';
+                     if (isWinnerPickerLocked) {
+                       buttonStateClass = 'bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed';
+                     }
+                     if (isSelected) {
+                       buttonStateClass = 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]';
+                     }
                      
                      return (
                        <motion.button
                          key={tm.id}
-                         whileTap={!isLocked ? { scale: 0.9 } : {}}
-                         onClick={() => !isLocked && pickWinner(tm.id)}
-                         disabled={isLocked}
-                         className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${
-                           isSelected 
-                           ? 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]' 
-                           : isLocked ? 'bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed' : 'bg-slate-50 border-transparent hover:border-slate-200'
-                         }`}
+                         whileTap={!isWinnerPickerLocked ? { scale: 0.9 } : {}}
+                         onClick={() => !isWinnerPickerLocked && pickTournamentWinner(tm.id)}
+                         disabled={isWinnerPickerLocked}
+                         className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${buttonStateClass}`}
                        >
                          {isSelected && (
                            <motion.div 
@@ -1759,11 +2073,11 @@ export default function App() {
                        </motion.button>
                      );
                     })}
-                     </div>
-                   );
-                 })()}
+                 </div>
                  <p className="mt-4 text-[10px] text-center text-slate-400 italic font-medium">{t.lockedWinner}</p>
               </div>
+                );
+              })()}
 
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 italic">{t.changePass}</h3>
@@ -1778,7 +2092,7 @@ export default function App() {
                    />
                    <input 
                      type="password"
-                     placeholder={t.confirmPass}                    
+                     placeholder={t.confirmPass}
                      value={passData.confirmPass}
                      onChange={e => setPassData(p => ({ ...p, confirmPass: e.target.value }))}
                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm focus:ring-2 focus:ring-red-500 transition-all outline-none"
@@ -1786,9 +2100,10 @@ export default function App() {
                    />
                    <button 
                      type="submit"
-                     className="w-full py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all shadow-md"
+                     disabled={isPassSaving}
+                     className="w-full py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
                    >
-                     {t.changePass}
+                     {isPassSaving ? (lang === 'cz' ? 'Ukládám...' : 'Saving...') : t.changePass}
                    </button>
                    {passMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-2">{passMsg}</p>}
                    {passError && <p className="text-[10px] text-red-600 font-bold text-center mt-2">{passError}</p>}
@@ -1811,6 +2126,118 @@ export default function App() {
                       English
                     </button>
                  </div>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsLobbyRulesOpen(open => !open)}
+                    className="flex flex-1 items-center gap-3 min-w-0 text-left"
+                    aria-expanded={isLobbyRulesOpen}
+                  >
+                    <span className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-black shrink-0">
+                      ⓘ
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                        {lang === 'cz' ? 'O lobby' : 'About lobby'}
+                      </span>
+                      <span className="block text-[10px] font-semibold text-slate-400 mt-0.5">
+                        {lang === 'cz' ? 'Informace o skupině, komunikaci a domluvě' : 'Group information, communication and notes'}
+                      </span>
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {canEditActiveLobby && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingLobbyInfo(true);
+                          setIsLobbyRulesOpen(true);
+                          setLobbyInfoMsg('');
+                          setLobbyInfoError('');
+                        }}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                        aria-label={lang === 'cz' ? 'Upravit O lobby' : 'Edit about lobby'}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsLobbyRulesOpen(open => !open)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 transition-colors"
+                      aria-label={isLobbyRulesOpen ? (lang === 'cz' ? 'Sbalit O lobby' : 'Collapse about lobby') : (lang === 'cz' ? 'Rozbalit O lobby' : 'Expand about lobby')}
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform ${isLobbyRulesOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+                <AnimatePresence initial={false}>
+                  {isLobbyRulesOpen && (
+                    <motion.div
+                      key="profile-lobby-about"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      {isEditingLobbyInfo ? (
+                        <form onSubmit={handleSaveLobbyInfo} className="mt-4 space-y-3">
+                          <input
+                            type="text"
+                            value={editLobbyShortDescription}
+                            onChange={e => setEditLobbyShortDescription(e.target.value)}
+                            className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-semibold focus:ring-2 focus:ring-red-500 transition-all outline-none"
+                            placeholder={lang === 'cz' ? 'Krátké shrnutí skupiny' : 'Short group summary'}
+                            maxLength={120}
+                          />
+                          <textarea
+                            value={editLobbyLongDescription}
+                            onChange={e => setEditLobbyLongDescription(e.target.value)}
+                            className="w-full min-h-[120px] px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-medium focus:ring-2 focus:ring-red-500 transition-all outline-none resize-y"
+                            placeholder={lang === 'cz' ? 'Zatím bez popisu skupiny.' : 'No group description yet.'}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsEditingLobbyInfo(false);
+                                setEditLobbyShortDescription(activeLobby?.short_description || '');
+                                setEditLobbyLongDescription(activeLobby?.long_description || '');
+                                setLobbyInfoError('');
+                              }}
+                              className="px-3 py-2 rounded-xl bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-wider"
+                            >
+                              {lang === 'cz' ? 'Zrušit' : 'Cancel'}
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isLobbyInfoSaving}
+                              className="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider disabled:opacity-60"
+                            >
+                              {isLobbyInfoSaving ? (lang === 'cz' ? 'Ukládám...' : 'Saving...') : (lang === 'cz' ? 'Uložit' : 'Save')}
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4">
+                          {activeLobby.short_description && (
+                            <p className="mb-2 text-xs font-black text-slate-700 uppercase tracking-wider">
+                              {activeLobby.short_description}
+                            </p>
+                          )}
+                          <p className="text-xs font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
+                            {activeLobby.long_description || (lang === 'cz' ? 'Zatím bez popisu skupiny.' : 'No group description yet.')}
+                          </p>
+                        </div>
+                      )}
+                      {lobbyInfoMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-3">{lobbyInfoMsg}</p>}
+                      {lobbyInfoError && <p className="text-[10px] text-red-600 font-bold text-center mt-3">{lobbyInfoError}</p>}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               <button 
@@ -1907,15 +2334,10 @@ export default function App() {
                </div>
 
                <div className="flex gap-1 overflow-x-auto pb-4 no-scrollbar mb-4">
-                {[
-                  { id: 'all', label: t.all },
-                  { id: 'A', label: t.groupA },
-                  { id: 'B', label: t.groupB },
-                  { id: 'playoffs', label: t.playoffs },
-                ].map(f => (
+                {stageFilters.map(f => (
                   <button
                     key={f.id}
-                    onClick={() => setAdminGroupFilter(f.id as any)}
+                    onClick={() => setAdminGroupFilter(f.id)}
                     className={`flex-none px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${
                       adminGroupFilter === f.id ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-100'
                     }`}
@@ -1929,8 +2351,7 @@ export default function App() {
                  .filter(m => {
                     if (m.status !== adminMatchFilter) return false;
                     if (adminGroupFilter === 'all') return true;
-                    if (adminGroupFilter === 'playoffs') return !m.stage?.includes('Group');
-                    return m.stage?.includes(`Group ${adminGroupFilter}`);
+                    return matchPassesStageFilter(m, adminGroupFilter);
                  })
                  .sort((a, b) => {
                     const timeA = new Date(a.start_time_utc).getTime();
@@ -1950,7 +2371,7 @@ export default function App() {
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 mt-8">
                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">{t.setFinalWinner}</h3>
                  <div className="grid grid-cols-4 gap-2 mb-4">
-                   {winnerPickerTeams.map(t => (
+                   {teams.map(t => (
                      <button
                        key={t.id}
                        onClick={() => setSelectedWinner(t.id)}
@@ -1998,13 +2419,8 @@ export default function App() {
           </button>
         )}
         <button onClick={() => setTab('profile')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'profile' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center overflow-hidden bg-slate-50 ${currentUserPickId && tab === 'profile' ? 'ring-2 ring-red-600' : ''}`}>
-             {(() => {
-               const team = teams.find(tm => tm.id === currentUserPickId) || winnerPickerTeams.find(tm => tm.id === currentUserPickId);
-               if (team) return <TeamFlag code={team.flag_code || team.id} className="w-5 h-3" />;
-               if (user.winner_flag) return <TeamFlag code={user.winner_flag || currentUserPickId} className="w-5 h-3" />;
-               return <User className="w-4 h-4" />;
-             })()}
+          <div className={`${tab === 'profile' ? 'ring-2 ring-red-600 rounded-full' : ''}`}>
+             <UserAvatar player={user} size="sm" />
           </div>
           <span className="text-[10px] font-bold uppercase">{t.profile}</span>
         </button>
