@@ -1349,7 +1349,7 @@ export default function App() {
             )}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">
-                {isRegistering ? loginT.username : (lang === 'cz' ? "E-mail nebo Uživatelské jméno" : "Email or Username")}
+                {loginT.username}
               </label>
               <input 
                 required
@@ -1357,7 +1357,7 @@ export default function App() {
                 value={loginData.username}
                 onChange={e => setLoginData(prev => ({ ...prev, username: e.target.value }))}
                 className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all focus:bg-white font-semibold text-slate-800"
-                placeholder={isRegistering ? "e.g. lukas" : "e.g. test@tipovacka.cz"}
+                placeholder={isRegistering ? "e.g. lukas" : "e.g. Hana"}
               />
             </div>
             <div>
