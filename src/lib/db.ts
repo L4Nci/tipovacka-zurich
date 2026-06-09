@@ -31,30 +31,47 @@ export const checkSession = async () => {
  * Sign In
  */
 export const loginUser = async (emailOrUsername: string, pass: string) => {
-  let email = emailOrUsername.trim();
-  if (!email.includes("@")) {
-    email = `${email.toLowerCase().replace(/\s+/g, "")}@tipovacka.cz`;
+  const login = emailOrUsername.trim();
+  const normalizedUsername = login.toLowerCase().replace(/\s+/g, "");
+  const loginEmails = login.includes("@")
+    ? [login]
+    : [
+        `${normalizedUsername}@tipovacka.local`,
+        `${normalizedUsername}@tipovacka.cz`
+      ];
+
+  let authData = null;
+  let authError = null;
+
+  for (const email of loginEmails) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password: pass
+    });
+
+    if (!error && data.user) {
+      authData = data;
+      authError = null;
+      break;
+    }
+
+    authError = error;
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password: pass
-  });
-
-  if (error) throw error;
-  if (!data.user) throw new Error("Chyba při přihlašování.");
+  if (authError) throw authError;
+  if (!authData?.user) throw new Error("Chyba při přihlašování.");
 
   // Fetch corresponding profile
   const { data: profile, error: pErr } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", data.user.id)
+    .eq("id", authData.user.id)
     .single();
 
   if (pErr) {
     return {
-      id: data.user.id,
-      username: data.user.user_metadata?.username || data.user.email?.split("@")[0] || "Hráč",
+      id: authData.user.id,
+      username: authData.user.user_metadata?.username || authData.user.email?.split("@")[0] || "Hráč",
       role: "player",
       avatar_emoji: "😀",
       avatar_bg: "#fee2e2"
@@ -802,7 +819,18 @@ export const fetchLobbyLeaderboard = async (lobbyId: string, tournamentId?: stri
   // 2. Get predictions of this lobby to count earned points
   let predsQuery = supabase
     .from("predictions")
-    .select("user_id, points_earned, match_id")
+    .select(`
+      user_id,
+      points_earned,
+      match_id,
+      predicted_home_score,
+      predicted_away_score,
+      match:matches (
+        home_score,
+        away_score,
+        tournament_id
+      )
+    `)
     .eq("lobby_id", lobbyId);
 
   if (tournamentId) {
@@ -849,9 +877,25 @@ export const fetchLobbyLeaderboard = async (lobbyId: string, tournamentId?: stri
   const userPointsMap = new Map<string, { total: number; exact: number; outcome: number }>();
   preds?.forEach(p => {
     const curr = userPointsMap.get(p.user_id) || { total: 0, exact: 0, outcome: 0 };
-    curr.total += p.points_earned;
-    if (p.points_earned === 5) curr.exact++;
-    else if (p.points_earned > 0) curr.outcome++;
+    const rawMatch = (p as any).match;
+    const match = Array.isArray(rawMatch) ? rawMatch[0] : rawMatch;
+    const hasFinishedScore = match?.home_score !== null &&
+      match?.away_score !== null &&
+      match?.home_score !== undefined &&
+      match?.away_score !== undefined;
+    const points = hasFinishedScore
+      ? calculatePoints(
+          p.predicted_home_score,
+          p.predicted_away_score,
+          match.home_score,
+          match.away_score,
+          match.tournament_id === "ms-hockey-2026" ? "hockey" : "football"
+        )
+      : (p.points_earned || 0);
+
+    curr.total += points;
+    if (points === 5) curr.exact++;
+    else if (points > 0) curr.outcome++;
     userPointsMap.set(p.user_id, curr);
   });
 
@@ -1028,13 +1072,21 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
 
   const { data: allPreds } = await predsQuery;
 
-  const formattedPreds: Prediction[] = (allPreds || []).map(p => ({
-    player_id: p.user_id,
-    match_id: p.match_id,
-    predicted_home_score: p.predicted_home_score,
-    predicted_away_score: p.predicted_away_score,
-    points_earned: p.points_earned
-  }));
+  const matchById = new Map(matches.map(match => [match.id, match]));
+  const formattedPreds: Prediction[] = (allPreds || []).map(p => {
+    const match = matchById.get(p.match_id);
+    return {
+      player_id: p.user_id,
+      match_id: p.match_id,
+      predicted_home_score: p.predicted_home_score,
+      predicted_away_score: p.predicted_away_score,
+      points_earned: p.points_earned,
+      home_score: match?.home_score,
+      away_score: match?.away_score,
+      start_time_utc: match?.start_time_utc,
+      tournament_id: match?.tournament_id
+    } as Prediction;
+  });
 
   // Map participants to Teams interface for compatibility in profile selection
   const teams: Team[] = participants.map(p => ({
