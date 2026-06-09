@@ -278,9 +278,9 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                         <p className="text-sm font-black text-slate-700 group-hover:text-white transition-colors uppercase">
                           {t.name}
                         </p>
-                        {(t.description || lobby.short_description) && (
+                        {t.description && (
                           <p className="mt-1 text-[11px] font-semibold text-slate-400 group-hover:text-slate-300 line-clamp-2">
-                            {t.description || lobby.short_description}
+                            {t.description}
                           </p>
                         )}
                       </div>

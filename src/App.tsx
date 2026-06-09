@@ -998,14 +998,25 @@ export default function App() {
       if (res.leaderboard) {
         const myPlayer = res.leaderboard.find(p => p.id === user.id);
         if (myPlayer) {
-          const updated = { ...user, tournament_winner_id: myPlayer.tournament_winner_id || undefined };
-          setUser(updated);
-          localStorage.setItem('user', JSON.stringify(updated));
+          setUser(prev => {
+            if (!prev) return prev;
+            const updated = {
+              ...prev,
+              avatar_emoji: myPlayer.avatar_emoji || prev.avatar_emoji || '😀',
+              avatar_bg: myPlayer.avatar_bg || prev.avatar_bg || '#fee2e2',
+              tournament_winner_id: myPlayer.tournament_winner_id || undefined
+            };
+            localStorage.setItem('user', JSON.stringify(updated));
+            return updated;
+          });
         } else {
           // If not in the leaderboard yet, clear it
-          const updated = { ...user, tournament_winner_id: undefined };
-          setUser(updated);
-          localStorage.setItem('user', JSON.stringify(updated));
+          setUser(prev => {
+            if (!prev) return prev;
+            const updated = { ...prev, tournament_winner_id: undefined };
+            localStorage.setItem('user', JSON.stringify(updated));
+            return updated;
+          });
         }
       }
     } catch (e: any) {
@@ -2223,11 +2234,6 @@ export default function App() {
                         </form>
                       ) : (
                         <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4">
-                          {activeLobby.short_description && (
-                            <p className="mb-2 text-xs font-black text-slate-700 uppercase tracking-wider">
-                              {activeLobby.short_description}
-                            </p>
-                          )}
                           <p className="text-xs font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
                             {activeLobby.long_description || (lang === 'cz' ? 'Zatím bez popisu skupiny.' : 'No group description yet.')}
                           </p>

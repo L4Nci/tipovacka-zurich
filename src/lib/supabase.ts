@@ -1,8 +1,13 @@
 /// <reference types="vite/client" />
 import { createClient } from "@supabase/supabase-js";
 
-let supabaseUrl = (typeof import.meta !== "undefined" && import.meta.env ? import.meta.env.VITE_SUPABASE_URL : undefined) || process.env.VITE_SUPABASE_URL || "https://placeholder-url.supabase.co";
-const supabaseAnonKey = (typeof import.meta !== "undefined" && import.meta.env ? import.meta.env.VITE_SUPABASE_ANON_KEY : undefined) || process.env.VITE_SUPABASE_ANON_KEY || "placeholder-anon-key";
+let supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("Missing Supabase environment variables");
+  throw new Error("Missing Supabase environment variables");
+}
 
 if (supabaseUrl && !supabaseUrl.startsWith("http")) {
   if (supabaseUrl.includes(".supabase.co")) {
