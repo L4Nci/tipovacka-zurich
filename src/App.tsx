@@ -13,7 +13,8 @@ import {
   LogOut,
   ChevronDown,
   ChevronUp,
-  X
+  X,
+  Pencil
 } from 'lucide-react';
 import { Player, Team, Match, Prediction, Lobby } from './types.ts';
 import { LobbyView } from './components/LobbyView.tsx';
@@ -29,6 +30,7 @@ import {
   pickTournamentWinner as pickWinnerDB,
   changePassword as changePassDB,
   updateProfileAvatar,
+  updateLobbyDetails,
   checkSession,
   createLobby,
   joinLobbyByCode,
@@ -729,6 +731,7 @@ export default function App() {
   const [activeLobbyName, setActiveLobbyName] = useState<string>("");
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
   const [lobbyExpanded, setLobbyExpanded] = useState(false);
+  const [isLobbyRulesOpen, setIsLobbyRulesOpen] = useState(false);
   const [newLobbyName, setNewLobbyName] = useState("");
   const [newLobbyShortDescription, setNewLobbyShortDescription] = useState("");
   const [newLobbyLongDescription, setNewLobbyLongDescription] = useState("");
@@ -739,8 +742,23 @@ export default function App() {
 
   const activeLobby = lobbies.find(l => l.id === activeLobbyId);
   const isHockey = activeTournamentId === "ms-hockey-2026";
+  const canEditActiveLobby = Boolean(activeLobby && (activeLobby.is_owner || user?.role === 'admin'));
 
   const [winnerPickerTeams, setWinnerPickerTeams] = useState<any[]>([]);
+  const [isEditingLobbyInfo, setIsEditingLobbyInfo] = useState(false);
+  const [editLobbyShortDescription, setEditLobbyShortDescription] = useState('');
+  const [editLobbyLongDescription, setEditLobbyLongDescription] = useState('');
+  const [lobbyInfoMsg, setLobbyInfoMsg] = useState('');
+  const [lobbyInfoError, setLobbyInfoError] = useState('');
+  const [isLobbyInfoSaving, setIsLobbyInfoSaving] = useState(false);
+
+  useEffect(() => {
+    setEditLobbyShortDescription(activeLobby?.short_description || '');
+    setEditLobbyLongDescription(activeLobby?.long_description || '');
+    setIsEditingLobbyInfo(false);
+    setLobbyInfoMsg('');
+    setLobbyInfoError('');
+  }, [activeLobby?.id, activeLobby?.short_description, activeLobby?.long_description]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -844,11 +862,17 @@ export default function App() {
     if (activeLobbyId) {
       localStorage.setItem('activeLobbyId', activeLobbyId);
       setActiveTournamentId(null); // Reset when switching lobby
+      setIsLobbyRulesOpen(false);
     } else {
       localStorage.removeItem('activeLobbyId');
       setActiveTournamentId(null);
+      setIsLobbyRulesOpen(false);
     }
   }, [activeLobbyId]);
+
+  useEffect(() => {
+    setIsLobbyRulesOpen(false);
+  }, [activeTournamentId]);
 
   const t = (translations as any)[lang];
 
@@ -1143,6 +1167,33 @@ export default function App() {
       await fetchAll();
     } catch (err: any) {
       setAvatarError(err.message || (lang === 'cz' ? 'Avatar se nepodařilo uložit.' : 'Could not save avatar.'));
+    }
+  };
+
+  const handleSaveLobbyInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !activeLobby) return;
+
+    setLobbyInfoMsg('');
+    setLobbyInfoError('');
+    setIsLobbyInfoSaving(true);
+
+    try {
+      await updateLobbyDetails(
+        user.id,
+        activeLobby.id,
+        activeLobby.name,
+        editLobbyShortDescription,
+        editLobbyLongDescription
+      );
+      await fetchAll(activeLobby.id);
+      setIsEditingLobbyInfo(false);
+      setIsLobbyRulesOpen(true);
+      setLobbyInfoMsg(lang === 'cz' ? 'Informace o lobby uloženy.' : 'Lobby information saved.');
+    } catch (err: any) {
+      setLobbyInfoError(err.message || (lang === 'cz' ? 'Informace se nepodařilo uložit.' : 'Could not save lobby information.'));
+    } finally {
+      setIsLobbyInfoSaving(false);
     }
   };
 
@@ -1498,7 +1549,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Krátký popis</label>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">O lobby</label>
                       <input 
                         type="text"
                         value={newLobbyShortDescription}
@@ -1509,7 +1560,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Dlouhý popis</label>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Informace o lobby</label>
                       <textarea
                         value={newLobbyLongDescription}
                         onChange={e => setNewLobbyLongDescription(e.target.value)}
@@ -1647,21 +1698,6 @@ export default function App() {
           </div>
         )}
 
-        {(activeLobby.short_description || activeLobby.long_description) && (tab === 'matches' || tab === 'results') && (
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 mb-4 shadow-sm">
-            {activeLobby.short_description && (
-              <p className="text-[10px] font-black uppercase tracking-wider text-red-600 mb-1">
-                {activeLobby.short_description}
-              </p>
-            )}
-            {activeLobby.long_description && (
-              <p className="text-xs font-medium text-slate-500 leading-relaxed whitespace-pre-wrap">
-                {activeLobby.long_description}
-              </p>
-            )}
-          </div>
-        )}
-
         <AnimatePresence mode="wait">
           {tab === 'matches' && (
             <motion.div 
@@ -1670,8 +1706,21 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
             >
-              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                 <Calendar className="w-4 h-4" /> {t.upcoming}
+              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 min-w-0">
+                  <Calendar className="w-4 h-4 shrink-0" /> {t.upcoming}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTab('profile');
+                    setIsLobbyRulesOpen(true);
+                  }}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white border border-slate-100 text-slate-400 hover:text-slate-600 hover:border-slate-200 transition-colors shadow-sm"
+                  aria-label={lang === 'cz' ? 'O lobby' : 'About lobby'}
+                >
+                  <span className="text-sm font-black normal-case tracking-normal" aria-hidden="true">ⓘ</span>
+                </button>
               </h2>
               {matches
                 .filter(m => {
@@ -1851,17 +1900,18 @@ export default function App() {
               className="space-y-6"
             >
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                 <div className="mb-4">
+                 <div className="mb-4 relative">
                    <UserAvatar player={user} size="lg" />
+                   <button
+                     type="button"
+                     onClick={() => setShowAvatarEditor(true)}
+                     className="absolute -right-1 -bottom-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg ring-4 ring-white active:scale-95 transition-all"
+                     aria-label={lang === 'cz' ? 'Upravit avatar' : 'Edit avatar'}
+                   >
+                     <Pencil className="w-3.5 h-3.5" />
+                   </button>
                  </div>
                  <h2 className="text-xl font-black text-slate-900 uppercase transition-colors">{user.username}</h2>
-                 <button
-                   type="button"
-                   onClick={() => setShowAvatarEditor(true)}
-                   className="mt-3 px-4 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider active:scale-95 transition-all"
-                 >
-                   {lang === 'cz' ? 'Upravit avatar' : 'Edit avatar'}
-                 </button>
                  {currentUserStats.currentStreak >= 3 && (
                    <div className="mt-2 flex items-center gap-1 text-orange-500 font-black italic text-sm">
                       <Flame className="w-4 h-4 fill-current" />
@@ -2042,7 +2092,7 @@ export default function App() {
                    />
                    <input 
                      type="password"
-                     placeholder={t.confirmPass}                    
+                     placeholder={t.confirmPass}
                      value={passData.confirmPass}
                      onChange={e => setPassData(p => ({ ...p, confirmPass: e.target.value }))}
                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm focus:ring-2 focus:ring-red-500 transition-all outline-none"
@@ -2076,6 +2126,118 @@ export default function App() {
                       English
                     </button>
                  </div>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsLobbyRulesOpen(open => !open)}
+                    className="flex flex-1 items-center gap-3 min-w-0 text-left"
+                    aria-expanded={isLobbyRulesOpen}
+                  >
+                    <span className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-black shrink-0">
+                      ⓘ
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-black text-slate-800 uppercase tracking-wider">
+                        {lang === 'cz' ? 'O lobby' : 'About lobby'}
+                      </span>
+                      <span className="block text-[10px] font-semibold text-slate-400 mt-0.5">
+                        {lang === 'cz' ? 'Informace o skupině, komunikaci a domluvě' : 'Group information, communication and notes'}
+                      </span>
+                    </span>
+                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {canEditActiveLobby && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsEditingLobbyInfo(true);
+                          setIsLobbyRulesOpen(true);
+                          setLobbyInfoMsg('');
+                          setLobbyInfoError('');
+                        }}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                        aria-label={lang === 'cz' ? 'Upravit O lobby' : 'Edit about lobby'}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsLobbyRulesOpen(open => !open)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 transition-colors"
+                      aria-label={isLobbyRulesOpen ? (lang === 'cz' ? 'Sbalit O lobby' : 'Collapse about lobby') : (lang === 'cz' ? 'Rozbalit O lobby' : 'Expand about lobby')}
+                    >
+                      <ChevronDown className={`w-4 h-4 transition-transform ${isLobbyRulesOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+                <AnimatePresence initial={false}>
+                  {isLobbyRulesOpen && (
+                    <motion.div
+                      key="profile-lobby-about"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      {isEditingLobbyInfo ? (
+                        <form onSubmit={handleSaveLobbyInfo} className="mt-4 space-y-3">
+                          <input
+                            type="text"
+                            value={editLobbyShortDescription}
+                            onChange={e => setEditLobbyShortDescription(e.target.value)}
+                            className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-semibold focus:ring-2 focus:ring-red-500 transition-all outline-none"
+                            placeholder={lang === 'cz' ? 'Krátké shrnutí skupiny' : 'Short group summary'}
+                            maxLength={120}
+                          />
+                          <textarea
+                            value={editLobbyLongDescription}
+                            onChange={e => setEditLobbyLongDescription(e.target.value)}
+                            className="w-full min-h-[120px] px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-medium focus:ring-2 focus:ring-red-500 transition-all outline-none resize-y"
+                            placeholder={lang === 'cz' ? 'Zatím bez popisu skupiny.' : 'No group description yet.'}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsEditingLobbyInfo(false);
+                                setEditLobbyShortDescription(activeLobby?.short_description || '');
+                                setEditLobbyLongDescription(activeLobby?.long_description || '');
+                                setLobbyInfoError('');
+                              }}
+                              className="px-3 py-2 rounded-xl bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-wider"
+                            >
+                              {lang === 'cz' ? 'Zrušit' : 'Cancel'}
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isLobbyInfoSaving}
+                              className="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider disabled:opacity-60"
+                            >
+                              {isLobbyInfoSaving ? (lang === 'cz' ? 'Ukládám...' : 'Saving...') : (lang === 'cz' ? 'Uložit' : 'Save')}
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4">
+                          {activeLobby.short_description && (
+                            <p className="mb-2 text-xs font-black text-slate-700 uppercase tracking-wider">
+                              {activeLobby.short_description}
+                            </p>
+                          )}
+                          <p className="text-xs font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
+                            {activeLobby.long_description || (lang === 'cz' ? 'Zatím bez popisu skupiny.' : 'No group description yet.')}
+                          </p>
+                        </div>
+                      )}
+                      {lobbyInfoMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-3">{lobbyInfoMsg}</p>}
+                      {lobbyInfoError && <p className="text-[10px] text-red-600 font-bold text-center mt-3">{lobbyInfoError}</p>}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
 
               <button 

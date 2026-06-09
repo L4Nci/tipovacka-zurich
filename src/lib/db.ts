@@ -489,6 +489,8 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
       .select(`
         tournament_id,
         name,
+        short_description,
+        long_description,
         tournament:tournaments (
           actual_tournament_winner_id
         ),
@@ -519,6 +521,8 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
         .select(`
           tournament_id,
           name,
+          short_description,
+          long_description,
           tournament:tournaments (
             actual_tournament_winner_id
           )
@@ -538,6 +542,8 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
         .select(`
           tournament_id,
           name,
+          short_description,
+          long_description,
           tournament:tournaments (
             name
           )
@@ -658,6 +664,8 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
 
   return {
     lobbyName: lobby.name,
+    lobbyShortDescription: lobby.short_description || null,
+    lobbyLongDescription: lobby.long_description || null,
     tournamentId, // legacy primary tournament
     active_tournaments,
     archived_tournaments,
@@ -979,8 +987,24 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
     targetTournamentId = activeTournObj?.tournament_id || activeLOB.tournament_id;
   }
 
-  const { lobbyName, tournamentId: finalTournamentId, matches, participants } = await fetchLobbyDashboard(activeLobbyId!, userId, targetTournamentId);
+  const {
+    lobbyName,
+    lobbyShortDescription,
+    lobbyLongDescription,
+    tournamentId: finalTournamentId,
+    matches,
+    participants
+  } = await fetchLobbyDashboard(activeLobbyId!, userId, targetTournamentId);
   const leaderboard = await fetchLobbyLeaderboard(activeLobbyId!, targetTournamentId);
+  const hydratedLobbiesList = lobbiesList.map(lobby => (
+    lobby.id === activeLobbyId
+      ? {
+          ...lobby,
+          short_description: lobbyShortDescription ?? lobby.short_description ?? null,
+          long_description: lobbyLongDescription ?? lobby.long_description ?? null
+        }
+      : lobby
+  ));
 
   // Fetch all predictions in this lobby for streak mathematical evaluations
   let predsQuery = supabase
@@ -1026,7 +1050,7 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
   return {
     lobbyId: activeLobbyId,
     lobbyName,
-    lobbies: lobbiesList,
+    lobbies: hydratedLobbiesList,
     matches,
     teams,
     leaderboard,
@@ -1098,27 +1122,23 @@ export const updateLobbyName = async (userId: string, lobbyId: string, newName: 
 };
 
 export const updateLobbyDetails = async (
-  userId: string,
+  _userId: string,
   lobbyId: string,
   name: string,
   shortDescription: string,
   longDescription: string
 ) => {
-  const response = await fetch("/api/lobby/update-name", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      userId,
-      lobbyId,
-      newName: name,
-      shortDescription,
-      longDescription
+  const { error } = await supabase
+    .from("lobbies")
+    .update({
+      name: name.trim(),
+      short_description: shortDescription.trim() || null,
+      long_description: longDescription.trim() || null
     })
-  });
+    .eq("id", lobbyId);
 
-  if (!response.ok) {
-    const data = await response.json();
-    throw new Error(data.error || "Nepodařilo se uložit nastavení lobby.");
+  if (error) {
+    throw new Error(error.message || "Nepodařilo se uložit nastavení lobby.");
   }
 };
 

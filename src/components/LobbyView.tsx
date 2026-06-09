@@ -161,14 +161,14 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                 value={editShortDescription}
                 onChange={e => setEditShortDescription(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-600"
-                placeholder={lang === 'cz' ? 'Krátký popis' : 'Short description'}
+                placeholder={lang === 'cz' ? 'O lobby' : 'About lobby'}
                 maxLength={120}
               />
               <textarea
                 value={editLongDescription}
                 onChange={e => setEditLongDescription(e.target.value)}
                 className="w-full min-h-[96px] bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-600 resize-y"
-                placeholder={lang === 'cz' ? 'Pravidla, buy-in, platba, poznámky...' : 'Rules, buy-in, payment, notes...'}
+                placeholder={lang === 'cz' ? 'Informace o skupině, komunikaci a domluvě...' : 'Group information, communication and notes...'}
               />
               <div className="flex items-center gap-2">
                 <button disabled={isUpdatingName} onClick={handleUpdateName} className="p-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors">
@@ -209,11 +209,6 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                 <span className="text-xs font-bold font-mono">{membersCount}</span>
               </div>
           </div>
-          {!isEditingName && lobby.long_description && (
-            <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-sm text-slate-600 font-medium leading-relaxed whitespace-pre-wrap">
-              {lobby.long_description}
-            </div>
-          )}
         </div>
 
         {/* OWNER CONTROLS */}
