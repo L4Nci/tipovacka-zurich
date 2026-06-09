@@ -720,31 +720,73 @@ export default function App() {
   const [winnerPickerTeams, setWinnerPickerTeams] = useState<any[]>([]);
 
   useEffect(() => {
+    let isCancelled = false;
+
+    const getEmergencyFallbackTeams = () => {
+      console.warn("Winner picker official participants unavailable; using loaded football teams fallback.");
+      return (teams ?? []).filter((tm: any) => {
+        const id = String(tm.id ?? '');
+        return String(tm.sport_id ?? '') === 'football' &&
+          id.startsWith('football-') &&
+          !id.toLowerCase().includes('-tba');
+      });
+    };
+
     const fetchWinnerPickerTeams = async () => {
+      if (!activeTournamentId) {
+        setWinnerPickerTeams([]);
+        return;
+      }
+
       try {
-        const { data, error } = await supabase
-          .from('participants')
-          .select('*')
-          .eq('sport_id', 'football')
-          .order('name');
-          
-        if (error) {
-           console.error("Error fetching participants for winner picker:", error);
+        const { data: matchRows, error: matchesError } = await supabase
+          .from('matches')
+          .select('home_participant_id, away_participant_id')
+          .eq('tournament_id', activeTournamentId);
+
+        if (matchesError) throw matchesError;
+
+        const uniqueIds = Array.from(new Set(
+          (matchRows ?? [])
+            .flatMap((match: any) => [match.home_participant_id, match.away_participant_id])
+            .filter((id: any) => {
+              const normalizedId = String(id ?? '');
+              return normalizedId && !normalizedId.toLowerCase().includes('-tba');
+            })
+        ));
+
+        if (uniqueIds.length === 0) {
+          if (!isCancelled) setWinnerPickerTeams(getEmergencyFallbackTeams());
+          return;
         }
 
-        const validTeams = (data ?? []).filter((p) => {
-          const id = String(p.id ?? '');
-          return id.startsWith('football-') && !id.includes('tba');
-        });
+        const { data: participantRows, error: participantsError } = await supabase
+          .from('participants')
+          .select('*')
+          .in('id', uniqueIds);
 
-        setWinnerPickerTeams(validTeams);
-        
+        if (participantsError) throw participantsError;
+
+        const participantsById = new Map((participantRows ?? []).map((participant: any) => [participant.id, participant]));
+        const officialTeams = uniqueIds
+          .map((id) => participantsById.get(id))
+          .filter(Boolean);
+
+        if (!isCancelled) {
+          setWinnerPickerTeams(officialTeams.length > 0 ? officialTeams : getEmergencyFallbackTeams());
+        }
       } catch (err) {
-        console.error("Error fetching winner teams:", err);
+        console.warn("Winner picker official participants fetch failed; using loaded football teams fallback.", err);
+        if (!isCancelled) setWinnerPickerTeams(getEmergencyFallbackTeams());
       }
     };
-    if (activeLobby || user) fetchWinnerPickerTeams();
-  }, [activeLobby, user, activeTournamentId]);
+
+    fetchWinnerPickerTeams();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTournamentId, teams]);
 
   const [lobbyFormActive, setLobbyFormActive] = useState<'none' | 'create' | 'join'>(() => {
     if (new URLSearchParams(window.location.search).get("join")) return 'join';
@@ -930,8 +972,13 @@ export default function App() {
   };
 
   const currentUserPickId = user ? leaderboard.find(l => l.id === user.id)?.tournament_winner_id : undefined;
+  const isWinnerPickerLocked = useMemo(() => {
+    const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
+    const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
+    return firstTime > 0 && Date.now() > firstTime;
+  }, [matches]);
 
-  const pickWinner = async (teamId: string) => {
+  const pickTournamentWinner = async (teamId: string) => {
     try {
       await pickWinnerDB(
         user?.id || '', 
@@ -1706,42 +1753,33 @@ export default function App() {
                  </div>
               </div>
 
+              {(() => {
+                const pickerOptions = winnerPickerTeams;
+
+                return (
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
-                   {t.pickWinner} ({winnerPickerTeams.length} TEAMS AVAILABLE)
-                   {(() => {
-                     const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
-                     const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
-                     const isLocked = firstTime > 0 && Date.now() > firstTime;
-                     return isLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null;
-                   })()}
+                   {t.pickWinner} ({pickerOptions.length} TEAMS AVAILABLE)
+                   {isWinnerPickerLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null}
                  </h3>
-                 {(() => {
-                   console.log({
-                     activeTournamentId,
-                     winnerPickerTeamsTotal: winnerPickerTeams.length,
-                     winnerPickerFirst5: winnerPickerTeams.slice(0, 5),
-                     winnerPickerRendered: true
-                   });
-                   return (
-                     <div className="grid grid-cols-4 gap-2">
-                       {winnerPickerTeams.map(tm => {
-                     const firstMatch = [...matches].sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
-                     const firstTime = firstMatch ? new Date(firstMatch.start_time_utc).getTime() : 0;
-                     const isLocked = firstTime > 0 && Date.now() > firstTime;
-                     const isSelected = currentUserPickId === tm.id;
+                 <div className="grid grid-cols-4 gap-2">
+                   {pickerOptions.map(tm => {
+                     const isSelected = tm.id === currentUserPickId;
+                     let buttonStateClass = 'bg-slate-50 border-transparent hover:border-slate-200';
+                     if (isWinnerPickerLocked) {
+                       buttonStateClass = 'bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed';
+                     }
+                     if (isSelected) {
+                       buttonStateClass = 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]';
+                     }
                      
                      return (
                        <motion.button
                          key={tm.id}
-                         whileTap={!isLocked ? { scale: 0.9 } : {}}
-                         onClick={() => !isLocked && pickWinner(tm.id)}
-                         disabled={isLocked}
-                         className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${
-                           isSelected 
-                           ? 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]' 
-                           : isLocked ? 'bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed' : 'bg-slate-50 border-transparent hover:border-slate-200'
-                         }`}
+                         whileTap={!isWinnerPickerLocked ? { scale: 0.9 } : {}}
+                         onClick={() => !isWinnerPickerLocked && pickTournamentWinner(tm.id)}
+                         disabled={isWinnerPickerLocked}
+                         className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${buttonStateClass}`}
                        >
                          {isSelected && (
                            <motion.div 
@@ -1759,11 +1797,11 @@ export default function App() {
                        </motion.button>
                      );
                     })}
-                     </div>
-                   );
-                 })()}
+                 </div>
                  <p className="mt-4 text-[10px] text-center text-slate-400 italic font-medium">{t.lockedWinner}</p>
               </div>
+                );
+              })()}
 
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 italic">{t.changePass}</h3>
@@ -1950,7 +1988,7 @@ export default function App() {
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 mt-8">
                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">{t.setFinalWinner}</h3>
                  <div className="grid grid-cols-4 gap-2 mb-4">
-                   {winnerPickerTeams.map(t => (
+                   {teams.map(t => (
                      <button
                        key={t.id}
                        onClick={() => setSelectedWinner(t.id)}

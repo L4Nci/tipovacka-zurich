@@ -310,7 +310,7 @@ export const createLobby = async (userId: string, name: string, tournamentId: st
 
   if (lobbyErr) throw lobbyErr;
 
-  // 1.5. Dual Write to lobby_tournaments (F10.1B)
+  // Keep the Supabase lobby_tournaments relation in sync with the created lobby.
   const { error: ltErr } = await supabase
     .from("lobby_tournaments")
     .insert({
@@ -320,7 +320,7 @@ export const createLobby = async (userId: string, name: string, tournamentId: st
     });
     
   if (ltErr) {
-    console.warn("Dual write to lobby_tournaments failed (migration might be missing):", ltErr);
+    console.warn("Creating lobby_tournaments relation failed (migration might be missing):", ltErr);
   }
 
   const lobby = {
@@ -351,7 +351,7 @@ export const createLobby = async (userId: string, name: string, tournamentId: st
 };
 
 /**
- * Add a new tournament to an existing lobby (Dual-write for F10.1B)
+ * Add a new tournament to an existing lobby.
  */
 export const addTournamentToLobby = async (lobbyId: string, tournamentId: string) => {
   // We use the authenticated Supabase client, which will be protected by RLS
@@ -634,18 +634,10 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
     active_tournaments,
     archived_tournaments,
     matches: formattedMatches,
-    participants: (participants || [])
-      .filter(p => {
-        if (tpSet.size > 0) return tpSet.has(p.id);
-        // Fallback if tournament_participants is empty
-        const isTargetSport = p.sport_id === (tournamentId === "ms-hockey-2026" ? "hockey" : "football");
-        const isNotTba = !p.id.includes("tba");
-        return isTargetSport && isNotTba;
-      })
-      .map(p => ({
-        ...p,
-        is_final_winner: p.id === actualWinnerId ? 1 : 0
-      }))
+    participants: (participants || []).map(p => ({
+      ...p,
+      is_final_winner: p.id === actualWinnerId ? 1 : 0
+    }))
   };
 };
 
@@ -978,6 +970,7 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
     name: p.name,
     flag_code: p.flag_code || "🏳️",
     group_name: p.short_name || "A",
+    sport_id: p.sport_id || String(p.id).split("-")[0],
     short_name: p.short_name,
     is_final_winner: p.is_final_winner
   }));

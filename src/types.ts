@@ -16,6 +16,7 @@ export type Team = {
   name: string;
   flag_code: string;
   group_name: string;
+  sport_id?: string;
   short_name?: string;
   is_final_winner?: number;
 };
@@ -102,5 +103,4 @@ export type TournamentParticipant = {
   status: 'active' | 'qualified' | 'eliminated';
   created_at?: string;
 };
-
 
