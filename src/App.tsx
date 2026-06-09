@@ -172,7 +172,12 @@ const translations = {
 
 // --- Components ---
 
-const avatarEmojis = ['😀', '😎', '🤖', '👑', '🦊', '🐺', '🦁', '🚀', '⚽', '🏒'];
+const avatarEmojis = [
+  '😀', '😎', '🤖', '👑', '🦊', '🐺', '🦁', '🚀', '⚽', '🏒',
+  '🐯', '🐼', '🐨', '🐵', '🦅', '🦉', '🦈', '🐙', '🦖', '🐉',
+  '🦄', '🐸', '🐧', '🦔', '🦥', '🐻', '🐗', '🦇', '🐬', '🐢',
+  '🦂', '🐍', '🦋', '🐞', '🐝', '🐿️', '🦝', '🐱', '🐶'
+];
 const avatarColors = ['#fee2e2', '#ffedd5', '#fef3c7', '#dcfce7', '#ccfbf1', '#dbeafe', '#e0e7ff', '#f3e8ff', '#fce7f3', '#e2e8f0'];
 
 const UserAvatar = ({ player, size = 'md' }: { player?: Pick<Player, 'username' | 'avatar_emoji' | 'avatar_bg'> | null, size?: 'sm' | 'md' | 'lg' }) => {
@@ -928,7 +933,8 @@ export default function App() {
         total: tournamentMatches.length,
         scheduled: scheduledMatches.length,
         finished: tournamentMatches.filter(match => match.status === 'finished').length,
-        nextStart: nextMatch?.start_time_utc || null
+        nextStart: nextMatch?.start_time_utc || null,
+        nextMatchLabel: nextMatch ? `${nextMatch.home_name} vs ${nextMatch.away_name}` : null
       }
     };
   }, [activeLobby, activeTournamentId, matches]);

@@ -17,6 +17,7 @@ interface LobbyViewProps {
     scheduled: number;
     finished: number;
     nextStart?: string | null;
+    nextMatchLabel?: string | null;
   }>;
 }
 
@@ -266,6 +267,7 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                 const nextLabel = stats.nextStart
                   ? new Date(stats.nextStart).toLocaleDateString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
                   : (lang === 'cz' ? 'Čeká na rozpis' : 'Schedule pending');
+                const nextMatchLabel = stats.nextMatchLabel || null;
 
                 return (
                   <button
@@ -300,7 +302,10 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                       </div>
                       <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10 min-w-0">
                         <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Další' : 'Next'}</p>
-                        <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{nextLabel}</p>
+                        {nextMatchLabel && (
+                          <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{nextMatchLabel}</p>
+                        )}
+                        <p className={`${nextMatchLabel ? 'text-[9px]' : 'text-[10px]'} font-black text-slate-500 group-hover:text-slate-300 truncate`}>{nextLabel}</p>
                       </div>
                     </div>
 
