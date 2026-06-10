@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
@@ -734,7 +734,9 @@ export default function App() {
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
   const [activeLobbyId, setActiveLobbyId] = useState<string | null>(() => localStorage.getItem('activeLobbyId'));
   const [activeLobbyName, setActiveLobbyName] = useState<string>("");
-  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(null);
+  const [activeTournamentId, setActiveTournamentId] = useState<string | null>(() => sessionStorage.getItem('activeTournamentId'));
+  const [suppressAutoEnter, setSuppressAutoEnter] = useState(() => sessionStorage.getItem('suppressAutoEnter') === 'true');
+  const previousActiveLobbyIdRef = useRef<string | null>(activeLobbyId);
   const [lobbyExpanded, setLobbyExpanded] = useState(false);
   const [isLobbyRulesOpen, setIsLobbyRulesOpen] = useState(false);
   const [newLobbyName, setNewLobbyName] = useState("");
@@ -866,18 +868,50 @@ export default function App() {
   useEffect(() => {
     if (activeLobbyId) {
       localStorage.setItem('activeLobbyId', activeLobbyId);
-      setActiveTournamentId(null); // Reset when switching lobby
       setIsLobbyRulesOpen(false);
+      if (previousActiveLobbyIdRef.current && previousActiveLobbyIdRef.current !== activeLobbyId) {
+        setActiveTournamentId(null);
+        sessionStorage.removeItem('activeTournamentId');
+      }
     } else {
       localStorage.removeItem('activeLobbyId');
       setActiveTournamentId(null);
+      sessionStorage.removeItem('activeTournamentId');
       setIsLobbyRulesOpen(false);
     }
+    previousActiveLobbyIdRef.current = activeLobbyId;
   }, [activeLobbyId]);
 
   useEffect(() => {
+    if (activeTournamentId) {
+      sessionStorage.setItem('activeTournamentId', activeTournamentId);
+    } else {
+      sessionStorage.removeItem('activeTournamentId');
+    }
     setIsLobbyRulesOpen(false);
   }, [activeTournamentId]);
+
+  useEffect(() => {
+    if (suppressAutoEnter) {
+      sessionStorage.setItem('suppressAutoEnter', 'true');
+    } else {
+      sessionStorage.removeItem('suppressAutoEnter');
+    }
+  }, [suppressAutoEnter]);
+
+  useEffect(() => {
+    if (!user || activeLobbyId || activeTournamentId || suppressAutoEnter || lobbyFormActive !== 'none') return;
+    if (lobbies.length !== 1) return;
+
+    const onlyLobby = lobbies[0];
+    const activeTournaments = (onlyLobby.tournaments || []).filter(tournament => tournament.status === 'active');
+    if (activeTournaments.length !== 1) return;
+
+    setActiveLobbyId(onlyLobby.id);
+    setActiveLobbyName(onlyLobby.name);
+    setActiveTournamentId(activeTournaments[0].tournament_id);
+    setTab('matches');
+  }, [user, lobbies, activeLobbyId, activeTournamentId, suppressAutoEnter, lobbyFormActive]);
 
   const t = (translations as any)[lang];
 
@@ -1057,6 +1091,7 @@ export default function App() {
         // Sign in using email (or username) and password
         data = await loginUser(loginData.email || loginData.username, loginData.password);
       }
+      setSuppressAutoEnter(false);
       setUser(data);
       localStorage.setItem('user', JSON.stringify(data));
     } catch (err: any) {
@@ -1069,12 +1104,16 @@ export default function App() {
     setUser(null);
     localStorage.removeItem('user');
     localStorage.removeItem('activeLobbyId');
+    sessionStorage.removeItem('activeTournamentId');
+    sessionStorage.removeItem('suppressAutoEnter');
     setMatches([]);
     setLeaderboard([]);
     setAllPredictions([]);
     setLobbies([]);
     setActiveLobbyId(null);
     setActiveLobbyName("");
+    setActiveTournamentId(null);
+    setSuppressAutoEnter(false);
   };
 
   const savePrediction = async (matchId: string, h: number, a: number) => {
@@ -1649,7 +1688,10 @@ export default function App() {
           <div className="flex items-center gap-3">
             {activeTournamentId ? (
               <button 
-                onClick={() => setActiveTournamentId(null)}
+                onClick={() => {
+                  setSuppressAutoEnter(true);
+                  setActiveTournamentId(null);
+                }}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
                 title="Zpět do Lobby"
               >
@@ -1658,6 +1700,7 @@ export default function App() {
             ) : activeLobbyId ? (
               <button 
                 onClick={() => {
+                  setSuppressAutoEnter(true);
                   setActiveLobbyId(null);
                   setActiveTournamentId(null);
                 }}
@@ -1683,7 +1726,10 @@ export default function App() {
             lobby={activeLobby}
             user={{ ...user, username: user.username || '' }}
             lang={lang as 'cz' | 'en'}
-            onSelectTournament={id => setActiveTournamentId(id)}
+            onSelectTournament={id => {
+              setActiveTournamentId(id);
+              setTab('matches');
+            }}
             onRefresh={() => fetchAll()}
             onLobbyDeleted={() => {
               setActiveLobbyId(null);
