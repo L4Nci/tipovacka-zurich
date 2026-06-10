@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.ts";
+import { calculatePoints } from "./scoring.ts";
 import { Player, Team, Match, Prediction, Lobby, TournamentParticipant } from "../types.ts";
 
 /**
@@ -154,32 +155,7 @@ export const logoutUser = async () => {
   if (error) throw error;
 };
 
-/**
- * Dynamic Scoring points system math (FÁZE S11)
- * Správný vítěz: +2 body.
- * Přesný výsledek: +5 bodů.
- * Maximum: 5 bodů.
- */
-export const calculatePoints = (ph: number, pa: number, mh: number, ma: number, sport: 'football' | 'hockey' = 'football'): number => {
-  if (ph === mh && pa === ma) return 5;
-  if (sport === 'football') {
-    const isActualDraw = mh === ma;
-    const isPredictedDraw = ph === pa;
-    if (isActualDraw) {
-      if (isPredictedDraw) return 2; // Correctly predicted draw, not exact
-    } else {
-      const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
-      if (correctWinner) {
-        if (ph - pa === mh - ma) return 3; // Correct winner + correct goal difference
-        return 2; // Correct winner without correct goal difference
-      }
-    }
-  } else {
-    // Hockey
-    if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) return 2;
-  }
-  return 0;
-};
+export { calculatePoints };
 
 /**
  * Fetch list of tournaments

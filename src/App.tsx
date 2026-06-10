@@ -1131,8 +1131,9 @@ export default function App() {
 
   const updateMatchResult = async (matchId: string, h: number, a: number) => {
     try {
-      await updateMatchResDB(user?.id || '', matchId, h, a);
+      const result = await updateMatchResDB(user?.id || '', matchId, h, a);
       await fetchAll();
+      alert(`Výsledek uložen. Přepočteno ${result.updated_predictions_count}/${result.expected_predictions_count} tipů.`);
     } catch (err: any) {
       alert(err.message);
     }

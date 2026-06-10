@@ -5,26 +5,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import "dotenv/config";
 import { getSupabaseAdmin } from "./server/lib/supabaseAdmin.ts";
-
-const calculatePoints = (ph: number, pa: number, mh: number, ma: number, sport: 'football' | 'hockey' = 'football'): number => {
-  if (ph === mh && pa === ma) return 5;
-  if (sport === 'football') {
-    const isActualDraw = mh === ma;
-    const isPredictedDraw = ph === pa;
-    if (isActualDraw) {
-      if (isPredictedDraw) return 2;
-    } else {
-      const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
-      if (correctWinner) {
-        if (ph - pa === mh - ma) return 3;
-        return 2;
-      }
-    }
-  } else {
-    if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) return 2;
-  }
-  return 0;
-};
+import { calculatePoints } from "./src/lib/scoring.ts";
 
 async function startServer() {
   const app = express();
@@ -93,6 +74,10 @@ async function startServer() {
       return res.status(400).json({ error: "Chybějící parametry." });
     }
 
+    if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeScore < 0 || awayScore < 0) {
+      return res.status(400).json({ error: "Skóre musí být nezáporné celé číslo." });
+    }
+
     try {
       const supabaseAdmin = getSupabaseAdmin();
 
@@ -122,24 +107,36 @@ async function startServer() {
         return res.status(400).json({ error: "V hokeji není remíza povolena. Výsledek po prodloužení nebo nájezdech musí určit vítěze!" });
       }
 
-      const { error: matchUpdateErr } = await supabaseAdmin
-        .from("matches")
-        .update({
-          home_score: homeScore,
-          away_score: awayScore,
-          status: "finished",
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", matchId);
-
-      if (matchUpdateErr) throw matchUpdateErr;
-
       const { data: predictions, error: predsErr } = await supabaseAdmin
         .from("predictions")
         .select("*")
         .eq("match_id", matchId);
 
       if (predsErr) throw predsErr;
+
+      const previousPoints = new Map<string, number>();
+      for (const pred of predictions || []) {
+        previousPoints.set(`${pred.user_id}:${pred.lobby_id}`, pred.points_earned || 0);
+      }
+
+      const rollbackPredictionPoints = async () => {
+        for (const pred of predictions || []) {
+          const previous = previousPoints.get(`${pred.user_id}:${pred.lobby_id}`) || 0;
+          const { error: rollbackErr } = await supabaseAdmin
+            .from("predictions")
+            .update({ points_earned: previous })
+            .eq("user_id", pred.user_id)
+            .eq("lobby_id", pred.lobby_id)
+            .eq("match_id", matchId);
+
+          if (rollbackErr) {
+            console.error(`Rollback error for prediction user: ${pred.user_id}`, rollbackErr);
+          }
+        }
+      };
+
+      const recalculationFailures: Array<{ user_id: string; lobby_id: string; message: string }> = [];
+      let updatedPredictionsCount = 0;
 
       for (const pred of predictions || []) {
         const points = calculatePoints(
@@ -150,19 +147,115 @@ async function startServer() {
           sport
         );
 
-        const { error: updatePredErr } = await supabaseAdmin
+        const { data: updatedPredictionRows, error: updatePredErr } = await supabaseAdmin
           .from("predictions")
           .update({ points_earned: points })
           .eq("user_id", pred.user_id)
           .eq("lobby_id", pred.lobby_id)
-          .eq("match_id", matchId);
+          .eq("match_id", matchId)
+          .select("user_id,lobby_id,match_id,points_earned");
 
-        if (updatePredErr) {
-          console.error(`Recalculate error for prediction user: ${pred.user_id}`, updatePredErr);
+        if (updatePredErr || !updatedPredictionRows || updatedPredictionRows.length !== 1) {
+          recalculationFailures.push({
+            user_id: pred.user_id,
+            lobby_id: pred.lobby_id,
+            message: updatePredErr?.message || `Expected 1 updated row, got ${updatedPredictionRows?.length ?? 0}`
+          });
+        } else {
+          updatedPredictionsCount += 1;
         }
       }
 
-      res.json({ success: true });
+      if (recalculationFailures.length > 0) {
+        console.error("Prediction recalculation failures:", recalculationFailures);
+        await rollbackPredictionPoints();
+        return res.status(500).json({
+          error: "Nepodařilo se přepočítat všechny tipy, výsledek zápasu nebyl uložen.",
+          match_id: matchId,
+          updated_predictions_count: updatedPredictionsCount,
+          expected_predictions_count: predictions?.length || 0,
+          result: {
+            home_score: homeScore,
+            away_score: awayScore
+          },
+          status: "not_saved",
+          failures: recalculationFailures
+        });
+      }
+
+      const { data: verifiedPredictions, error: verifyErr } = await supabaseAdmin
+        .from("predictions")
+        .select("user_id,lobby_id,predicted_home_score,predicted_away_score,points_earned")
+        .eq("match_id", matchId);
+
+      if (verifyErr) throw verifyErr;
+
+      const stalePredictions = (verifiedPredictions || []).filter(pred => {
+        const expectedPoints = calculatePoints(
+          pred.predicted_home_score,
+          pred.predicted_away_score,
+          homeScore,
+          awayScore,
+          sport
+        );
+        return pred.points_earned !== expectedPoints;
+      });
+
+      if (stalePredictions.length > 0) {
+        console.error("Stale points detected after recalculation:", stalePredictions);
+        await rollbackPredictionPoints();
+        return res.status(500).json({
+          error: "Po přepočtu zůstaly nesedící body u některých tipů, výsledek zápasu nebyl uložen.",
+          match_id: matchId,
+          updated_predictions_count: updatedPredictionsCount,
+          expected_predictions_count: predictions?.length || 0,
+          result: {
+            home_score: homeScore,
+            away_score: awayScore
+          },
+          status: "not_saved",
+          stale_predictions_count: stalePredictions.length,
+          stale_predictions: stalePredictions.map(pred => ({
+            user_id: pred.user_id,
+            lobby_id: pred.lobby_id,
+            points_earned: pred.points_earned,
+            expected_points: calculatePoints(
+              pred.predicted_home_score,
+              pred.predicted_away_score,
+              homeScore,
+              awayScore,
+              sport
+            )
+          }))
+        });
+      }
+
+      const { error: matchUpdateErr } = await supabaseAdmin
+        .from("matches")
+        .update({
+          home_score: homeScore,
+          away_score: awayScore,
+          status: "finished",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", matchId);
+
+      if (matchUpdateErr) {
+        await rollbackPredictionPoints();
+        throw matchUpdateErr;
+      }
+
+      res.json({
+        success: true,
+        match_id: matchId,
+        updated_predictions_count: updatedPredictionsCount,
+        expected_predictions_count: predictions?.length || 0,
+        result: {
+          home_score: homeScore,
+          away_score: awayScore
+        },
+        status: "finished"
+      });
     } catch (err: any) {
       console.error("Match result admin error:", err);
       res.status(500).json({ error: "Chyba při ukládání výsledků: " + err.message });
