@@ -384,7 +384,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
   const predictionStats = useMemo(() => {
     const total = matchPredictions.length;
-    if (total === 0) return { home: 50, away: 50, draw: 0, isEmpty: true };
+    if (total === 0) return { home: 0, away: 0, draw: 0, isEmpty: true };
     
     const homeWins = matchPredictions.filter(p => p.predicted_home_score > p.predicted_away_score).length;
     const draws = matchPredictions.filter(p => p.predicted_home_score === p.predicted_away_score).length;
@@ -402,6 +402,9 @@ const MatchCard: React.FC<MatchCardProps> = ({
     if (match.home_score === null || match.away_score === null) return 0;
     return calculatePoints(ph, pa, match.home_score, match.away_score, isHockey ? 'hockey' : 'football');
   };
+
+  const homeOutcomeLabel = (match.home_name || match.home_team_id.replace(/^(football|hockey)-/, '')).toUpperCase();
+  const awayOutcomeLabel = (match.away_name || match.away_team_id.replace(/^(football|hockey)-/, '')).toUpperCase();
 
   return (
     <motion.div 
@@ -449,31 +452,32 @@ const MatchCard: React.FC<MatchCardProps> = ({
         {!isFinished && (
           <div className="flex flex-col gap-3">
             <div className="px-1 mb-1">
-              <div className="flex justify-between items-center mb-1.5 text-[9px] font-black uppercase text-slate-400 px-1">
-                <span className={!predictionStats.isEmpty && predictionStats.home > predictionStats.away && predictionStats.home > predictionStats.draw ? 'text-red-600 font-bold' : ''}>
-                  {predictionStats.isEmpty ? '---' : `${predictionStats.home}%`}
+              <div className="grid grid-cols-3 items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase">
+                <span className="text-left text-[#ce1126]">
+                  <span className="block text-[8px] text-slate-400 truncate">{homeOutcomeLabel}</span>
+                  {predictionStats.home}%
                 </span>
-                {!predictionStats.isEmpty && predictionStats.draw > 0 && (
-                  <span className="text-slate-400">
-                    Remíza {predictionStats.draw}%
-                  </span>
-                )}
-                <span className={!predictionStats.isEmpty && predictionStats.away > predictionStats.home && predictionStats.away > predictionStats.draw ? 'text-slate-800 font-bold' : ''}>
-                  {predictionStats.isEmpty ? '---' : `${predictionStats.away}%`}
+                <span className="text-center text-[#1f2937]">
+                  <span className="block text-[8px] text-slate-400">Remíza</span>
+                  {predictionStats.draw}%
+                </span>
+                <span className="text-right text-[#006847]">
+                  <span className="block text-[8px] text-slate-400 truncate">{awayOutcomeLabel}</span>
+                  {predictionStats.away}%
                 </span>
               </div>
-              <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner border border-white">
+              <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner ring-1 ring-slate-100">
                 <div 
                   style={{ width: `${predictionStats.home}%` }} 
-                  className={`h-full transition-all duration-1000 ease-out ${predictionStats.isEmpty ? 'bg-slate-200' : 'bg-red-600'}`} 
+                  className="h-full bg-[#ce1126] transition-[width] duration-700 ease-out" 
                 />
                 <div 
                   style={{ width: `${predictionStats.draw}%` }} 
-                  className={`h-full transition-all duration-1000 ease-out ${predictionStats.isEmpty ? 'bg-slate-200' : 'bg-slate-300'}`} 
+                  className="h-full bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.12)] transition-[width] duration-700 ease-out" 
                 />
                 <div 
                   style={{ width: `${predictionStats.away}%` }} 
-                  className={`h-full transition-all duration-1000 ease-out ${predictionStats.isEmpty ? 'bg-slate-200' : 'bg-slate-700'}`} 
+                  className="h-full bg-[#006847] transition-[width] duration-700 ease-out" 
                 />
               </div>
             </div>
