@@ -34,7 +34,7 @@ const translations = {
     results: "Výsledky",
     rank: "Pořadí",
     admin: "Admin",
-    profile: "Ja",
+    profile: "Já",
     upcoming: "Nadcházející zápasy",
     finished: "Odehrané zápasy",
     pts: "body",
@@ -50,6 +50,8 @@ const translations = {
     player: "Hráč",
     tournamentWinner: "Tvůj vítěz turnaje",
     pickWinner: "Vyber vítěze turnaje",
+    currentStreak: "Aktuální série",
+    bestStreak: "Nejlepší série",
     totalPoints: "Celkem bodů",
     exactScores: "Přesné skóre",
     langSelect: "Jazyk / Language",
@@ -195,7 +197,7 @@ const TeamFlag = ({ code, className = "w-6 h-4" }: { code: string | null | undef
     'aut': 'at', 'fra': 'fr', 'slo': 'si', 'hun': 'hu',
     'gbr': 'gb', 'pol': 'pl', 'ita': 'it', 'slv': 'si',
     'kor': 'kr', 'jpn': 'jp', 'aus': 'au', 'bel': 'be', 
-    'ukr': 'ua', 'kaz': 'kz'
+    'ukr': 'ua'
   };
 
   const clean = code.trim().toLowerCase();
