@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import "dotenv/config";
 import { getSupabaseAdmin } from "./server/lib/supabaseAdmin.ts";
+import { fetchTheSportsDbFixturesForLocalMatches } from "./server/lib/resultProviders/theSportsDb.ts";
 import { calculatePoints } from "./src/lib/scoring.ts";
 
 
@@ -59,12 +60,15 @@ type ApiFootballFixture = {
 };
 
 type ApiFixtureSummary = {
-  id: number | null;
+  id: string | number | null;
+  provider?: string;
   homeName: string;
   awayName: string;
   kickoffUtc: string | null;
   statusShort: string | null;
   statusLong: string | null;
+  rawStatus?: string | null;
+  source?: string;
   score: {
     home: number | null;
     away: number | null;
@@ -302,6 +306,7 @@ async function startServer() {
     const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : null;
     const providedSecret = bearerToken || req.header("x-result-sync-secret") || req.body?.secret;
     const expectedSecret = process.env.RESULT_SYNC_SECRET;
+    const provider = String(req.query.provider || req.body?.provider || "api-football");
 
     if (!expectedSecret) {
       return res.status(503).json({ error: "RESULT_SYNC_SECRET is not configured." });
@@ -311,14 +316,13 @@ async function startServer() {
       return res.status(401).json({ error: "Unauthorized dry-run request." });
     }
 
-    const apiKey = process.env.API_FOOTBALL_KEY;
-    if (!apiKey) {
-      return res.status(503).json({ error: "API_FOOTBALL_KEY is not configured." });
-    }
-
     const tournamentId = String(req.body?.tournamentId || WORLD_CUP_TOURNAMENT_ID);
     if (tournamentId !== WORLD_CUP_TOURNAMENT_ID) {
       return res.status(400).json({ error: `Unsupported tournamentId for this dry-run: ${tournamentId}` });
+    }
+
+    if (provider !== "api-football" && provider !== "thesportsdb") {
+      return res.status(400).json({ error: `Unsupported dry-run provider: ${provider}` });
     }
 
     try {
@@ -332,6 +336,165 @@ async function startServer() {
 
       const participants = new Map<string, Participant>();
       (participantsResult.data || []).forEach(participant => participants.set(participant.id, participant));
+
+      if (provider === "thesportsdb") {
+        const providerResult = await fetchTheSportsDbFixturesForLocalMatches({
+          matches: localMatches,
+          participants,
+          from: req.body?.from ? String(req.body.from) : null,
+          to: req.body?.to ? String(req.body.to) : null
+        });
+
+        const items: Array<{
+          action: "mapping_candidate" | "would_update" | "skip_not_finished" | "skip_already_finished" | "conflict" | "unmapped";
+          mapping_quality: MappingResult["quality"];
+          [key: string]: unknown;
+        }> = providerResult.fixtures.map(apiFixture => {
+          const mapping = findMappingCandidate(apiFixture, localMatches, participants);
+          const localMatch = mapping.match;
+          const isFinished = apiFixture.statusShort === "FT";
+          const hasScore = Number.isInteger(apiFixture.score.home) && Number.isInteger(apiFixture.score.away);
+
+          let action: "mapping_candidate" | "would_update" | "skip_not_finished" | "skip_already_finished" | "conflict" | "unmapped" = "mapping_candidate";
+          let reason = mapping.reason;
+
+          if (mapping.quality === "conflict") {
+            action = "conflict";
+          } else if (!localMatch) {
+            action = "unmapped";
+          } else if (!isFinished) {
+            action = "skip_not_finished";
+            reason = `TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT.`;
+          } else if (localMatch.status === "finished" || (localMatch.home_score !== null && localMatch.away_score !== null)) {
+            action = "skip_already_finished";
+            reason = "Local match already has a finished status or stored score; dry-run will not overwrite it.";
+          } else if (!hasScore) {
+            action = "conflict";
+            reason = "TheSportsDB fixture is FT but final score is missing.";
+          } else if (mapping.quality === "exact match" || mapping.quality === "likely match") {
+            action = "would_update";
+            reason = "Dry-run only: finished TheSportsDB event maps to an unfinished local match and would be eligible for the existing result flow later.";
+          }
+
+          return {
+            api_fixture_id: apiFixture.id,
+            provider_match_id: apiFixture.id,
+            provider: "thesportsdb",
+            api_home: apiFixture.homeName,
+            api_away: apiFixture.awayName,
+            api_kickoff_utc: apiFixture.kickoffUtc,
+            api_status: {
+              short: apiFixture.statusShort,
+              long: apiFixture.statusLong,
+              raw: apiFixture.rawStatus,
+              is_finished: isFinished
+            },
+            api_score: apiFixture.score,
+            mapping_quality: mapping.quality,
+            mapping_score: mapping.score,
+            matched_local_match_id: localMatch?.id || null,
+            local_provider_name: localMatch?.provider_name ?? null,
+            local_provider_match_id: localMatch?.provider_match_id ?? null,
+            local_home: localMatch ? describeLocalTeam(localMatch.home_participant_id, participants) : null,
+            local_away: localMatch ? describeLocalTeam(localMatch.away_participant_id, participants) : null,
+            local_start_time_utc: localMatch?.start_time_utc || null,
+            local_status: localMatch?.status || null,
+            local_score: localMatch ? { home: localMatch.home_score, away: localMatch.away_score } : null,
+            action,
+            reason,
+            candidates: mapping.candidates
+          };
+        });
+
+        providerResult.misses.forEach(miss => {
+          items.push({
+            api_fixture_id: null,
+            provider_match_id: null,
+            provider: "thesportsdb",
+            api_home: null,
+            api_away: null,
+            api_kickoff_utc: null,
+            api_status: {
+              short: null,
+              long: null,
+              raw: null,
+              is_finished: false
+            },
+            api_score: { home: null, away: null, source: "not_found" },
+            mapping_quality: "no match",
+            mapping_score: 0,
+            matched_local_match_id: miss.localMatch.id,
+            local_provider_name: miss.localMatch.provider_name ?? null,
+            local_provider_match_id: miss.localMatch.provider_match_id ?? null,
+            local_home: miss.localHome,
+            local_away: miss.localAway,
+            local_start_time_utc: miss.localMatch.start_time_utc,
+            local_status: miss.localMatch.status,
+            local_score: { home: miss.localMatch.home_score, away: miss.localMatch.away_score },
+            action: "unmapped",
+            reason: miss.reason,
+            candidates: [],
+            provider_requests: miss.requests
+          });
+        });
+
+        const countByAction = items.reduce<Record<string, number>>((acc, item) => {
+          acc[item.action] = (acc[item.action] || 0) + 1;
+          return acc;
+        }, {});
+
+        return res.json({
+          success: true,
+          mode: "dry_run",
+          dry_run: true,
+          wrote_to_db: false,
+          provider: "thesportsdb",
+          requested_at: new Date().toISOString(),
+          tournament_id: tournamentId,
+          api_request: {
+            endpoint: "searchfilename.php + searchevents.php",
+            league: "4429",
+            season: "2026",
+            from: req.body?.from || null,
+            to: req.body?.to || null,
+            local_matches_in_window: providerResult.local_matches_in_window,
+            provider_requests_count: providerResult.requests.length
+          },
+          local_schema: {
+            provider_columns_available: providerColumnsAvailable,
+            provider_column_warning: providerColumnWarning
+          },
+          summary: {
+            api_fixtures_received: providerResult.fixtures.length,
+            provider_matches_received: providerResult.fixtures.length,
+            local_matches_checked: localMatches.length,
+            local_matches_in_window: providerResult.local_matches_in_window,
+            exact_matches: items.filter(item => item.mapping_quality === "exact match").length,
+            likely_matches: items.filter(item => item.mapping_quality === "likely match").length,
+            conflicts: countByAction.conflict || 0,
+            unmapped: countByAction.unmapped || 0,
+            would_update: countByAction.would_update || 0,
+            skip_not_finished: countByAction.skip_not_finished || 0,
+            skip_already_finished: countByAction.skip_already_finished || 0,
+            mapping_candidates: countByAction.mapping_candidate || 0
+          },
+          safety: {
+            db_writes_performed: false,
+            matches_updated: 0,
+            predictions_updated: 0,
+            points_updated: 0,
+            profiles_updated: 0,
+            write_mode_endpoint_created: false
+          },
+          provider_requests: providerResult.requests,
+          items
+        });
+      }
+
+      const apiKey = process.env.API_FOOTBALL_KEY;
+      if (!apiKey) {
+        return res.status(503).json({ error: "API_FOOTBALL_KEY is not configured." });
+      }
 
       const apiUrl = new URL(`${process.env.API_FOOTBALL_BASE_URL || API_FOOTBALL_BASE_URL}/fixtures`);
       apiUrl.searchParams.set("league", String(req.body?.league || API_FOOTBALL_WORLD_CUP_LEAGUE));
