@@ -176,6 +176,31 @@ const describeLocalTeam = (participantId: string, participants: Map<string, Part
 const isGroupStageMatch = (match?: LocalMatch | null) =>
   Boolean(match?.stage && /^Group\b/i.test(match.stage));
 
+const utcDate = (date: Date) => date.toISOString().slice(0, 10);
+
+const resolveDateWindow = (body: any) => {
+  if (body?.from || body?.to) {
+    return {
+      from: body?.from ? String(body.from) : null,
+      to: body?.to ? String(body.to) : null,
+      source: "explicit" as const
+    };
+  }
+
+  const now = new Date();
+  const fromDate = new Date(now);
+  fromDate.setUTCDate(fromDate.getUTCDate() - 1);
+
+  const toDate = new Date(now);
+  toDate.setUTCDate(toDate.getUTCDate() + 1);
+
+  return {
+    from: utcDate(fromDate),
+    to: utcDate(toDate),
+    source: "default_dynamic" as const
+  };
+};
+
 const findMappingCandidate = (
   apiFixture: ApiFixtureSummary,
   localMatches: LocalMatch[],
@@ -544,11 +569,12 @@ async function startServer() {
       (participantsResult.data || []).forEach(participant => participants.set(participant.id, participant));
 
       if (provider === "thesportsdb") {
+        const dateWindow = resolveDateWindow(req.body);
         const providerResult = await fetchTheSportsDbFixturesForLocalMatches({
           matches: localMatches,
           participants,
-          from: req.body?.from ? String(req.body.from) : null,
-          to: req.body?.to ? String(req.body.to) : null
+          from: dateWindow.from,
+          to: dateWindow.to
         });
 
         const items: Array<{
@@ -661,8 +687,9 @@ async function startServer() {
             endpoint: "searchfilename.php + searchevents.php",
             league: "4429",
             season: "2026",
-            from: req.body?.from || null,
-            to: req.body?.to || null,
+            from: dateWindow.from,
+            to: dateWindow.to,
+            date_window_source: dateWindow.source,
             local_matches_in_window: providerResult.local_matches_in_window,
             provider_requests_count: providerResult.requests.length,
             provider_requests_failed: providerResult.provider_requests_failed,
@@ -905,6 +932,7 @@ async function startServer() {
     }
 
     try {
+      const dateWindow = resolveDateWindow(req.body);
       const supabaseAdmin = getSupabaseAdmin();
       const [{ matches: localMatches }, participantsResult] = await Promise.all([
         fetchWorldCupMatchesReadOnly(supabaseAdmin),
@@ -919,8 +947,8 @@ async function startServer() {
       const providerResult = await fetchTheSportsDbFixturesForLocalMatches({
         matches: localMatches,
         participants,
-        from: req.body?.from ? String(req.body.from) : null,
-        to: req.body?.to ? String(req.body.to) : null
+        from: dateWindow.from,
+        to: dateWindow.to
       });
 
       const items: Array<Record<string, unknown> & { action: "updated" | "skipped" | "conflict" | "failed" }> = [];
@@ -1046,8 +1074,9 @@ async function startServer() {
           endpoint: "searchfilename.php + searchevents.php",
           league: "4429",
           season: "2026",
-          from: req.body?.from || null,
-          to: req.body?.to || null,
+          from: dateWindow.from,
+          to: dateWindow.to,
+          date_window_source: dateWindow.source,
           local_matches_in_window: providerResult.local_matches_in_window,
           provider_requests_count: providerResult.requests.length,
           provider_requests_failed: providerResult.provider_requests_failed,

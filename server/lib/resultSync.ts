@@ -64,6 +64,31 @@ type SyncRequest = {
   tournamentId?: string | null;
 };
 
+const utcDate = (date: Date) => date.toISOString().slice(0, 10);
+
+const resolveDateWindow = (request: SyncRequest) => {
+  if (request.from || request.to) {
+    return {
+      from: request.from || null,
+      to: request.to || null,
+      source: "explicit" as const
+    };
+  }
+
+  const now = new Date();
+  const fromDate = new Date(now);
+  fromDate.setUTCDate(fromDate.getUTCDate() - 1);
+
+  const toDate = new Date(now);
+  toDate.setUTCDate(toDate.getUTCDate() + 1);
+
+  return {
+    from: utcDate(fromDate),
+    to: utcDate(toDate),
+    source: "default_dynamic" as const
+  };
+};
+
 const normalizeName = (value?: string | null) =>
   String(value || "")
     .normalize("NFD")
@@ -512,12 +537,13 @@ export async function buildTheSportsDbDryRunResponse(supabaseAdmin: SupabaseClie
     return { statusCode: 400, body: { error: `Unsupported tournamentId for this dry-run: ${tournamentId}` } };
   }
 
+  const dateWindow = resolveDateWindow(request);
   const { matches, participants, providerColumnsAvailable, providerColumnWarning } = await loadWorldCupContext(supabaseAdmin);
   const providerResult = await fetchTheSportsDbFixturesForLocalMatches({
     matches,
     participants,
-    from: request.from || null,
-    to: request.to || null
+    from: dateWindow.from,
+    to: dateWindow.to
   });
 
   const items: Array<Record<string, any> & { action: string; mapping_quality: string }> =
@@ -566,8 +592,9 @@ export async function buildTheSportsDbDryRunResponse(supabaseAdmin: SupabaseClie
         endpoint: "searchfilename.php + searchevents.php",
         league: "4429",
         season: "2026",
-        from: request.from || null,
-        to: request.to || null,
+        from: dateWindow.from,
+        to: dateWindow.to,
+        date_window_source: dateWindow.source,
         local_matches_in_window: providerResult.local_matches_in_window,
         provider_requests_count: providerResult.requests.length,
         provider_requests_failed: providerResult.provider_requests_failed,
@@ -620,6 +647,7 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
   }
 
   if (process.env.RESULT_SYNC_WRITE_ENABLED !== "true") {
+    const dateWindow = resolveDateWindow(request);
     return {
       statusCode: 403,
       body: {
@@ -629,6 +657,12 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
         write_enabled: false,
         wrote_to_db: false,
         error: "Result sync write mode is disabled. Set RESULT_SYNC_WRITE_ENABLED=true to allow guarded writes.",
+        api_request: {
+          provider: "thesportsdb",
+          from: dateWindow.from,
+          to: dateWindow.to,
+          date_window_source: dateWindow.source
+        },
         summary: {
           provider_matches_received: 0,
           local_matches_checked: 0,
@@ -652,12 +686,13 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
     };
   }
 
+  const dateWindow = resolveDateWindow(request);
   const { matches, participants } = await loadWorldCupContext(supabaseAdmin);
   const providerResult = await fetchTheSportsDbFixturesForLocalMatches({
     matches,
     participants,
-    from: request.from || null,
-    to: request.to || null
+    from: dateWindow.from,
+    to: dateWindow.to
   });
 
   const items: Array<Record<string, unknown> & { action: "updated" | "skipped" | "conflict" | "failed" }> = [];
@@ -753,8 +788,9 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
         endpoint: "searchfilename.php + searchevents.php",
         league: "4429",
         season: "2026",
-          from: request.from || null,
-          to: request.to || null,
+          from: dateWindow.from,
+          to: dateWindow.to,
+          date_window_source: dateWindow.source,
           local_matches_in_window: providerResult.local_matches_in_window,
           provider_requests_count: providerResult.requests.length,
           provider_requests_failed: providerResult.provider_requests_failed,
