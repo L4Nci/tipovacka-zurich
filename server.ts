@@ -104,10 +104,19 @@ const normalizeName = (value?: string | null) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
+const TEAM_NAME_CANONICAL_ALIASES: Record<string, string> = {
+  "bosnia herzegovina": "bosnia and herzegovina"
+};
+
+const canonicalName = (value?: string | null) => {
+  const normalized = normalizeName(value);
+  return TEAM_NAME_CANONICAL_ALIASES[normalized] || normalized;
+};
+
 const namesMatch = (apiName: string, participant?: Participant | null) => {
-  const api = normalizeName(apiName);
+  const api = canonicalName(apiName);
   const candidates = [participant?.name, participant?.short_name, participant?.id]
-    .map(normalizeName)
+    .map(canonicalName)
     .filter(Boolean);
 
   return candidates.some(candidate =>
