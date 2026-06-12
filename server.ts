@@ -7,11 +7,472 @@ import "dotenv/config";
 import { getSupabaseAdmin } from "./server/lib/supabaseAdmin.ts";
 import { calculatePoints } from "./src/lib/scoring.ts";
 
+
+const API_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
+const API_FOOTBALL_WORLD_CUP_LEAGUE = "1";
+const API_FOOTBALL_WORLD_CUP_SEASON = "2026";
+const WORLD_CUP_TOURNAMENT_ID = "fifa-world-cup-2026";
+const FINISHED_API_STATUSES = new Set(["FT", "AET", "PEN"]);
+
+type LocalMatch = {
+  id: string;
+  tournament_id: string;
+  home_participant_id: string;
+  away_participant_id: string;
+  start_time_utc: string;
+  home_score: number | null;
+  away_score: number | null;
+  status: string | null;
+  stage?: string | null;
+  provider_name?: string | null;
+  provider_match_id?: string | number | null;
+};
+
+type Participant = {
+  id: string;
+  name?: string | null;
+  short_name?: string | null;
+};
+
+type ApiFootballFixture = {
+  fixture?: {
+    id?: number;
+    date?: string;
+    status?: {
+      short?: string;
+      long?: string;
+    };
+  };
+  teams?: {
+    home?: { name?: string };
+    away?: { name?: string };
+  };
+  goals?: {
+    home?: number | null;
+    away?: number | null;
+  };
+  score?: {
+    fulltime?: { home?: number | null; away?: number | null };
+    extratime?: { home?: number | null; away?: number | null };
+    penalty?: { home?: number | null; away?: number | null };
+  };
+};
+
+type ApiFixtureSummary = {
+  id: number | null;
+  homeName: string;
+  awayName: string;
+  kickoffUtc: string | null;
+  statusShort: string | null;
+  statusLong: string | null;
+  score: {
+    home: number | null;
+    away: number | null;
+    source: string;
+    fulltime?: { home: number | null; away: number | null };
+    extratime?: { home: number | null; away: number | null };
+    penalty?: { home: number | null; away: number | null };
+  };
+};
+
+type MappingResult = {
+  quality: "exact match" | "likely match" | "no match" | "conflict";
+  match: LocalMatch | null;
+  reason: string;
+  score: number;
+  candidates: Array<{
+    match_id: string;
+    quality: "exact match" | "likely match";
+    score: number;
+    reason: string;
+    local_home: string;
+    local_away: string;
+    local_start_time_utc: string;
+    local_provider_match_id: string | number | null;
+  }>;
+};
+
+const normalizeName = (value?: string | null) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const namesMatch = (apiName: string, participant?: Participant | null) => {
+  const api = normalizeName(apiName);
+  const candidates = [participant?.name, participant?.short_name, participant?.id]
+    .map(normalizeName)
+    .filter(Boolean);
+
+  return candidates.some(candidate =>
+    candidate === api || candidate.includes(api) || api.includes(candidate)
+  );
+};
+
+const minutesBetween = (a?: string | null, b?: string | null) => {
+  if (!a || !b) return Number.POSITIVE_INFINITY;
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (Number.isNaN(aMs) || Number.isNaN(bMs)) return Number.POSITIVE_INFINITY;
+  return Math.abs(aMs - bMs) / 60000;
+};
+
+const normalizeApiFixture = (fixture: ApiFootballFixture): ApiFixtureSummary => {
+  const statusShort = fixture.fixture?.status?.short || null;
+  const fulltime = fixture.score?.fulltime || { home: null, away: null };
+  const extratime = fixture.score?.extratime || { home: null, away: null };
+  const penalty = fixture.score?.penalty || { home: null, away: null };
+
+  let home = fixture.goals?.home ?? fulltime.home ?? null;
+  let away = fixture.goals?.away ?? fulltime.away ?? null;
+  let source = fixture.goals?.home !== undefined || fixture.goals?.away !== undefined ? "goals" : "score.fulltime";
+
+  if (statusShort === "PEN" && penalty.home !== null && penalty.home !== undefined && penalty.away !== null && penalty.away !== undefined) {
+    const baseHome = home ?? 0;
+    const baseAway = away ?? 0;
+    home = baseHome + penalty.home;
+    away = baseAway + penalty.away;
+    source = "goals_plus_penalty";
+  }
+
+  return {
+    id: fixture.fixture?.id ?? null,
+    homeName: fixture.teams?.home?.name || "",
+    awayName: fixture.teams?.away?.name || "",
+    kickoffUtc: fixture.fixture?.date || null,
+    statusShort,
+    statusLong: fixture.fixture?.status?.long || null,
+    score: {
+      home,
+      away,
+      source,
+      fulltime: { home: fulltime.home ?? null, away: fulltime.away ?? null },
+      extratime: { home: extratime.home ?? null, away: extratime.away ?? null },
+      penalty: { home: penalty.home ?? null, away: penalty.away ?? null }
+    }
+  };
+};
+
+const describeLocalTeam = (participantId: string, participants: Map<string, Participant>) => {
+  const participant = participants.get(participantId);
+  return participant?.name || participant?.short_name || participantId;
+};
+
+const findMappingCandidate = (
+  apiFixture: ApiFixtureSummary,
+  localMatches: LocalMatch[],
+  participants: Map<string, Participant>
+): MappingResult => {
+  if (!apiFixture.id) {
+    return { quality: "no match", match: null, reason: "API fixture has no fixture.id.", score: 0, candidates: [] };
+  }
+
+  const providerMatch = localMatches.find(match => String(match.provider_match_id || "") === String(apiFixture.id));
+  if (providerMatch) {
+    return {
+      quality: "exact match",
+      match: providerMatch,
+      reason: "Matched by local provider_match_id.",
+      score: 100,
+      candidates: []
+    };
+  }
+
+  const candidates = localMatches
+    .map(match => {
+      const homeParticipant = participants.get(match.home_participant_id);
+      const awayParticipant = participants.get(match.away_participant_id);
+      const timeDeltaMinutes = minutesBetween(apiFixture.kickoffUtc, match.start_time_utc);
+      const homeMatches = namesMatch(apiFixture.homeName, homeParticipant);
+      const awayMatches = namesMatch(apiFixture.awayName, awayParticipant);
+      const swappedHomeMatches = namesMatch(apiFixture.homeName, awayParticipant);
+      const swappedAwayMatches = namesMatch(apiFixture.awayName, homeParticipant);
+      const sameTeams = homeMatches && awayMatches;
+      const swappedTeams = swappedHomeMatches && swappedAwayMatches;
+      const timeScore = timeDeltaMinutes <= 5 ? 60 : timeDeltaMinutes <= 60 ? 35 : timeDeltaMinutes <= 180 ? 15 : 0;
+      const teamScore = sameTeams ? 40 : swappedTeams ? 10 : (homeMatches || awayMatches ? 15 : 0);
+      const score = timeScore + teamScore;
+      let quality: "exact match" | "likely match" | null = null;
+
+      if (sameTeams && timeDeltaMinutes <= 5) quality = "exact match";
+      else if (sameTeams && timeDeltaMinutes <= 180) quality = "likely match";
+      else if (score >= 60) quality = "likely match";
+
+      return {
+        match,
+        quality,
+        score,
+        reason: `time_delta_minutes=${Number.isFinite(timeDeltaMinutes) ? Math.round(timeDeltaMinutes) : "unknown"}; home_match=${homeMatches}; away_match=${awayMatches}; swapped_teams=${swappedTeams}`,
+        local_home: describeLocalTeam(match.home_participant_id, participants),
+        local_away: describeLocalTeam(match.away_participant_id, participants),
+        local_start_time_utc: match.start_time_utc,
+        local_provider_match_id: match.provider_match_id ?? null
+      };
+    })
+    .filter(candidate => candidate.quality !== null)
+    .sort((a, b) => b.score - a.score);
+
+  if (candidates.length === 0) {
+    return { quality: "no match", match: null, reason: "No local match had close kickoff time and matching home/away participants.", score: 0, candidates: [] };
+  }
+
+  const top = candidates[0];
+  const tied = candidates.filter(candidate => candidate.score === top.score);
+  if (tied.length > 1) {
+    return {
+      quality: "conflict",
+      match: null,
+      reason: "Multiple local matches have the same best mapping score.",
+      score: top.score,
+      candidates: tied.map(candidate => ({
+        match_id: candidate.match.id,
+        quality: candidate.quality!,
+        score: candidate.score,
+        reason: candidate.reason,
+        local_home: candidate.local_home,
+        local_away: candidate.local_away,
+        local_start_time_utc: candidate.local_start_time_utc,
+        local_provider_match_id: candidate.local_provider_match_id
+      }))
+    };
+  }
+
+  return {
+    quality: top.quality!,
+    match: top.match,
+    reason: top.reason,
+    score: top.score,
+    candidates: candidates.slice(0, 3).map(candidate => ({
+      match_id: candidate.match.id,
+      quality: candidate.quality!,
+      score: candidate.score,
+      reason: candidate.reason,
+      local_home: candidate.local_home,
+      local_away: candidate.local_away,
+      local_start_time_utc: candidate.local_start_time_utc,
+      local_provider_match_id: candidate.local_provider_match_id
+    }))
+  };
+};
+
+const fetchWorldCupMatchesReadOnly = async (supabaseAdmin: ReturnType<typeof getSupabaseAdmin>) => {
+  const baseSelect = "id,tournament_id,home_participant_id,away_participant_id,start_time_utc,home_score,away_score,status,stage";
+  const providerSelect = `${baseSelect},provider_name,provider_match_id`;
+
+  const withProvider = await supabaseAdmin
+    .from("matches")
+    .select(providerSelect)
+    .eq("tournament_id", WORLD_CUP_TOURNAMENT_ID)
+    .order("start_time_utc", { ascending: true });
+
+  if (!withProvider.error) {
+    return {
+      matches: (withProvider.data || []) as LocalMatch[],
+      providerColumnsAvailable: true,
+      providerColumnWarning: null as string | null
+    };
+  }
+
+  const fallback = await supabaseAdmin
+    .from("matches")
+    .select(baseSelect)
+    .eq("tournament_id", WORLD_CUP_TOURNAMENT_ID)
+    .order("start_time_utc", { ascending: true });
+
+  if (fallback.error) throw fallback.error;
+
+  return {
+    matches: (fallback.data || []).map(match => ({ ...match, provider_name: null, provider_match_id: null })) as LocalMatch[],
+    providerColumnsAvailable: false,
+    providerColumnWarning: withProvider.error.message
+  };
+};
+
 async function startServer() {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
   app.use(cors());
+
+
+  app.post("/api/admin/sync-results-dry-run", async (req, res) => {
+    const authHeader = req.header("authorization") || "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : null;
+    const providedSecret = bearerToken || req.header("x-result-sync-secret") || req.body?.secret;
+    const expectedSecret = process.env.RESULT_SYNC_SECRET;
+
+    if (!expectedSecret) {
+      return res.status(503).json({ error: "RESULT_SYNC_SECRET is not configured." });
+    }
+
+    if (!providedSecret || providedSecret !== expectedSecret) {
+      return res.status(401).json({ error: "Unauthorized dry-run request." });
+    }
+
+    const apiKey = process.env.API_FOOTBALL_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: "API_FOOTBALL_KEY is not configured." });
+    }
+
+    const tournamentId = String(req.body?.tournamentId || WORLD_CUP_TOURNAMENT_ID);
+    if (tournamentId !== WORLD_CUP_TOURNAMENT_ID) {
+      return res.status(400).json({ error: `Unsupported tournamentId for this dry-run: ${tournamentId}` });
+    }
+
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
+      const [{ matches: localMatches, providerColumnsAvailable, providerColumnWarning }, participantsResult] = await Promise.all([
+        fetchWorldCupMatchesReadOnly(supabaseAdmin),
+        supabaseAdmin.from("participants").select("id,name,short_name")
+      ]);
+
+      if (participantsResult.error) throw participantsResult.error;
+
+      const participants = new Map<string, Participant>();
+      (participantsResult.data || []).forEach(participant => participants.set(participant.id, participant));
+
+      const apiUrl = new URL(`${process.env.API_FOOTBALL_BASE_URL || API_FOOTBALL_BASE_URL}/fixtures`);
+      apiUrl.searchParams.set("league", String(req.body?.league || API_FOOTBALL_WORLD_CUP_LEAGUE));
+      apiUrl.searchParams.set("season", String(req.body?.season || API_FOOTBALL_WORLD_CUP_SEASON));
+
+      if (req.body?.from) apiUrl.searchParams.set("from", String(req.body.from));
+      if (req.body?.to) apiUrl.searchParams.set("to", String(req.body.to));
+      if (Array.isArray(req.body?.fixtureIds) && req.body.fixtureIds.length > 0) {
+        apiUrl.searchParams.set("ids", req.body.fixtureIds.map(String).join("-"));
+      }
+
+      const apiResponse = await fetch(apiUrl, {
+        headers: {
+          "x-apisports-key": apiKey
+        }
+      });
+
+      const apiPayload = await apiResponse.json().catch(() => null);
+      if (!apiResponse.ok) {
+        return res.status(apiResponse.status).json({
+          error: "API-Football request failed.",
+          status: apiResponse.status,
+          provider: "api-football",
+          dry_run: true,
+          wrote_to_db: false,
+          api_error: apiPayload?.errors || apiPayload?.message || "Unknown API-Football error"
+        });
+      }
+
+      const apiFixtures = Array.isArray(apiPayload?.response) ? apiPayload.response as ApiFootballFixture[] : [];
+      const items = apiFixtures.map(rawFixture => {
+        const apiFixture = normalizeApiFixture(rawFixture);
+        const mapping = findMappingCandidate(apiFixture, localMatches, participants);
+        const localMatch = mapping.match;
+        const isFinished = apiFixture.statusShort ? FINISHED_API_STATUSES.has(apiFixture.statusShort) : false;
+        const hasScore = Number.isInteger(apiFixture.score.home) && Number.isInteger(apiFixture.score.away);
+
+        let action: "mapping_candidate" | "would_update" | "skip_not_finished" | "skip_already_finished" | "conflict" | "unmapped" = "mapping_candidate";
+        let reason = mapping.reason;
+
+        if (mapping.quality === "conflict") {
+          action = "conflict";
+        } else if (!localMatch) {
+          action = "unmapped";
+        } else if (!isFinished) {
+          action = "skip_not_finished";
+          reason = `API status ${apiFixture.statusShort || "unknown"} is not in finished statuses FT/AET/PEN.`;
+        } else if (localMatch.status === "finished" || (localMatch.home_score !== null && localMatch.away_score !== null)) {
+          action = "skip_already_finished";
+          reason = "Local match already has a finished status or stored score; dry-run will not overwrite it.";
+        } else if (!hasScore) {
+          action = "conflict";
+          reason = "API fixture is finished but final score is missing.";
+        } else if (mapping.quality === "exact match" || mapping.quality === "likely match") {
+          action = "would_update";
+          reason = "Dry-run only: finished API fixture maps to an unfinished local match and would be eligible for the existing result flow later.";
+        }
+
+        return {
+          api_fixture_id: apiFixture.id,
+          api_home: apiFixture.homeName,
+          api_away: apiFixture.awayName,
+          api_kickoff_utc: apiFixture.kickoffUtc,
+          api_status: {
+            short: apiFixture.statusShort,
+            long: apiFixture.statusLong,
+            is_finished: isFinished
+          },
+          api_score: apiFixture.score,
+          mapping_quality: mapping.quality,
+          mapping_score: mapping.score,
+          matched_local_match_id: localMatch?.id || null,
+          local_provider_name: localMatch?.provider_name ?? null,
+          local_provider_match_id: localMatch?.provider_match_id ?? null,
+          local_home: localMatch ? describeLocalTeam(localMatch.home_participant_id, participants) : null,
+          local_away: localMatch ? describeLocalTeam(localMatch.away_participant_id, participants) : null,
+          local_start_time_utc: localMatch?.start_time_utc || null,
+          local_status: localMatch?.status || null,
+          local_score: localMatch ? { home: localMatch.home_score, away: localMatch.away_score } : null,
+          action,
+          reason,
+          candidates: mapping.candidates
+        };
+      });
+
+      const countByAction = items.reduce<Record<string, number>>((acc, item) => {
+        acc[item.action] = (acc[item.action] || 0) + 1;
+        return acc;
+      }, {});
+
+      res.json({
+        success: true,
+        mode: "dry_run",
+        dry_run: true,
+        wrote_to_db: false,
+        provider: "api-football",
+        requested_at: new Date().toISOString(),
+        tournament_id: tournamentId,
+        api_request: {
+          endpoint: "/fixtures",
+          league: apiUrl.searchParams.get("league"),
+          season: apiUrl.searchParams.get("season"),
+          from: apiUrl.searchParams.get("from"),
+          to: apiUrl.searchParams.get("to"),
+          ids_count: req.body?.fixtureIds?.length || 0
+        },
+        local_schema: {
+          provider_columns_available: providerColumnsAvailable,
+          provider_column_warning: providerColumnWarning
+        },
+        summary: {
+          api_fixtures_received: apiFixtures.length,
+          local_matches_checked: localMatches.length,
+          exact_matches: items.filter(item => item.mapping_quality === "exact match").length,
+          likely_matches: items.filter(item => item.mapping_quality === "likely match").length,
+          conflicts: countByAction.conflict || 0,
+          unmapped: countByAction.unmapped || 0,
+          would_update: countByAction.would_update || 0,
+          skip_not_finished: countByAction.skip_not_finished || 0,
+          skip_already_finished: countByAction.skip_already_finished || 0,
+          mapping_candidates: countByAction.mapping_candidate || 0
+        },
+        safety: {
+          db_writes_performed: false,
+          matches_updated: 0,
+          predictions_updated: 0,
+          points_updated: 0,
+          profiles_updated: 0,
+          write_mode_endpoint_created: false
+        },
+        items
+      });
+    } catch (err: any) {
+      console.error("API-Football dry-run error:", err);
+      res.status(500).json({
+        error: "Chyba při API-Football dry-runu: " + err.message,
+        dry_run: true,
+        wrote_to_db: false
+      });
+    }
+  });
 
   app.post("/api/admin/set-tournament-winner", async (req, res) => {
     const { userId, teamId, tournamentId = "fifa-world-cup-2026" } = req.body;
