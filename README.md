@@ -1,20 +1,64 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+🏆 Tipovačka 2026
 
-# Run and deploy your AI Studio app
+Moderní webová aplikace pro soukromé sportovní tipovací ligy mezi přáteli, kolegy nebo rodinou.
 
-This contains everything you need to run your app locally.
+Cílem projektu je nabídnout jednoduchou, rychlou a přehlednou platformu, kde si může každý vytvořit vlastní lobby, pozvat ostatní hráče a soutěžit o co nejlepší skóre během velkých sportovních událostí.
 
-View your app in AI Studio: https://ai.studio/apps/e551b5ce-a3db-405d-8158-f896f5e357b8
+✨ Hlavní funkce
 
-## Run Locally
+* 👥 Zakládání a správa soukromých tipovacích lobby
+* ⚽ Podpora různých turnajů (FIFA World Cup, IIHF, EURO a další)
+* 📊 Přehledný leaderboard s průběžným pořadím hráčů
+* 🎯 Tipování výsledků jednotlivých zápasů
+* 🏆 Bonusové dlouhodobé tipy (např. vítěz turnaje)
+* 🔒 Automatické uzamčení tipů před začátkem utkání
+* 📱 Responzivní design pro mobil i desktop
+* 🌍 Připraveno pro vícejazyčné prostředí
+* 🔄 Automatická synchronizace výsledků přes sportovní API
+* 👑 Administrace zápasů, turnajů a bodování
 
-**Prerequisites:**  Node.js
+🎮 Bodovací systém
 
+Systém odměňuje přesnost tipů:
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+* Správný vítěz zápasu
+* Přesný výsledek
+* Bonusové body za dlouhodobé predikce
+
+Konkrétní bodování lze upravovat podle typu turnaje.
+
+🚀 Filosofie projektu
+
+Tipovačka není klasická sázková kancelář.
+
+Je navržena jako společenská platforma pro přátelské soutěžení, kde si skupina lidí může vytvořit vlastní uzavřenou ligu, porovnávat své tipy a sledovat vývoj pořadí v reálném čase.
+
+Veškeré případné finanční vyrovnání mezi hráči probíhá mimo aplikaci.
+
+🛠️ Technologie
+
+* React
+* TypeScript
+* Vite
+* Tailwind CSS
+* Supabase
+* Netlify
+* GitHub
+* TheSportsDB API
+
+📈 Roadmap
+
+* ✅ Více sportů (fotbal, hokej, MMA…)
+* ✅ Automatické načítání výsledků
+* ⏳ Push notifikace
+* ⏳ Statistiky hráčů
+* ⏳ Historie sezón
+* ⏳ Veřejné žebříčky
+* ⏳ Vlastní avatar a profil
+* ⏳ Mobilní aplikace (PWA)
+
+❤️ Proč vznikla?
+
+Projekt vznikl z jednoduché myšlenky – zpříjemnit sledování sportovních akcí a odstranit chaos excelových tabulek a ručního počítání bodů.
+
+Stačí vytvořit lobby, pozvat přátele, natipovat zápasy a nechat aplikaci počítat vše za vás.
