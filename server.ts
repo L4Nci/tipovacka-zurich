@@ -173,6 +173,9 @@ const describeLocalTeam = (participantId: string, participants: Map<string, Part
   return participant?.name || participant?.short_name || participantId;
 };
 
+const isGroupStageMatch = (match?: LocalMatch | null) =>
+  Boolean(match?.stage && /^Group\b/i.test(match.stage));
+
 const findMappingCandidate = (
   apiFixture: ApiFixtureSummary,
   localMatches: LocalMatch[],
@@ -835,6 +838,239 @@ async function startServer() {
       res.status(500).json({
         error: "Chyba při API-Football dry-runu: " + err.message,
         dry_run: true,
+        wrote_to_db: false
+      });
+    }
+  });
+
+  app.post("/api/admin/sync-results", async (req, res) => {
+    const authHeader = req.header("authorization") || "";
+    const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : null;
+    const providedSecret = bearerToken || req.header("x-result-sync-secret") || req.body?.secret;
+    const expectedSecret = process.env.RESULT_SYNC_SECRET;
+    const provider = String(req.query.provider || req.body?.provider || "");
+    const writeEnabled = process.env.RESULT_SYNC_WRITE_ENABLED === "true";
+
+    if (!expectedSecret) {
+      return res.status(503).json({ error: "RESULT_SYNC_SECRET is not configured." });
+    }
+
+    if (!providedSecret || providedSecret !== expectedSecret) {
+      return res.status(401).json({ error: "Unauthorized result sync request." });
+    }
+
+    if (provider !== "thesportsdb") {
+      return res.status(400).json({ error: `Unsupported write provider: ${provider || "missing"}` });
+    }
+
+    const tournamentId = String(req.body?.tournamentId || WORLD_CUP_TOURNAMENT_ID);
+    if (tournamentId !== WORLD_CUP_TOURNAMENT_ID) {
+      return res.status(400).json({ error: `Unsupported tournamentId for result sync: ${tournamentId}` });
+    }
+
+    if (!writeEnabled) {
+      return res.status(403).json({
+        success: false,
+        mode: "write",
+        provider: "thesportsdb",
+        write_enabled: false,
+        wrote_to_db: false,
+        error: "Result sync write mode is disabled. Set RESULT_SYNC_WRITE_ENABLED=true to allow guarded writes.",
+        summary: {
+          provider_matches_received: 0,
+          local_matches_checked: 0,
+          local_matches_in_window: 0,
+          updated: 0,
+          skipped: 0,
+          conflicts: 0,
+          failed: 0
+        },
+        safety: {
+          db_writes_performed: false,
+          matches_updated: 0,
+          predictions_updated: 0,
+          points_updated: 0,
+          profiles_updated: 0,
+          direct_prediction_writes: false,
+          direct_points_writes: false
+        },
+        items: []
+      });
+    }
+
+    try {
+      const supabaseAdmin = getSupabaseAdmin();
+      const [{ matches: localMatches }, participantsResult] = await Promise.all([
+        fetchWorldCupMatchesReadOnly(supabaseAdmin),
+        supabaseAdmin.from("participants").select("id,name,short_name")
+      ]);
+
+      if (participantsResult.error) throw participantsResult.error;
+
+      const participants = new Map<string, Participant>();
+      (participantsResult.data || []).forEach(participant => participants.set(participant.id, participant));
+
+      const providerResult = await fetchTheSportsDbFixturesForLocalMatches({
+        matches: localMatches,
+        participants,
+        from: req.body?.from ? String(req.body.from) : null,
+        to: req.body?.to ? String(req.body.to) : null
+      });
+
+      const items: Array<Record<string, unknown> & { action: "updated" | "skipped" | "conflict" | "failed" }> = [];
+      let matchesUpdated = 0;
+      let predictionsUpdated = 0;
+      let failed = 0;
+
+      for (const apiFixture of providerResult.fixtures) {
+        const mapping = findMappingCandidate(apiFixture, localMatches, participants);
+        const localMatch = mapping.match;
+        const isFinished = apiFixture.statusShort === "FT";
+        const hasScore = Number.isInteger(apiFixture.score.home) && Number.isInteger(apiFixture.score.away);
+        const baseItem = {
+          provider_match_id: apiFixture.id,
+          provider: "thesportsdb",
+          api_home: apiFixture.homeName,
+          api_away: apiFixture.awayName,
+          api_kickoff_utc: apiFixture.kickoffUtc,
+          api_status: {
+            short: apiFixture.statusShort,
+            long: apiFixture.statusLong,
+            raw: apiFixture.rawStatus,
+            is_finished: isFinished
+          },
+          api_score: apiFixture.score,
+          mapping_quality: mapping.quality,
+          mapping_score: mapping.score,
+          matched_local_match_id: localMatch?.id || null,
+          local_home: localMatch ? describeLocalTeam(localMatch.home_participant_id, participants) : null,
+          local_away: localMatch ? describeLocalTeam(localMatch.away_participant_id, participants) : null,
+          local_stage: localMatch?.stage || null,
+          local_start_time_utc: localMatch?.start_time_utc || null,
+          local_status: localMatch?.status || null,
+          local_score: localMatch ? { home: localMatch.home_score, away: localMatch.away_score } : null,
+          candidates: mapping.candidates
+        };
+
+        if (mapping.quality === "conflict") {
+          items.push({ ...baseItem, action: "conflict", reason: mapping.reason });
+          continue;
+        }
+
+        if (!localMatch) {
+          items.push({ ...baseItem, action: "conflict", reason: "No local match mapped for provider event." });
+          continue;
+        }
+
+        if (mapping.quality !== "exact match") {
+          items.push({ ...baseItem, action: "skipped", reason: "Write guard: mapping is not exact match." });
+          continue;
+        }
+
+        if (!isGroupStageMatch(localMatch)) {
+          items.push({ ...baseItem, action: "skipped", reason: "Write guard: local match is not group-stage." });
+          continue;
+        }
+
+        if (!isFinished) {
+          items.push({ ...baseItem, action: "skipped", reason: `Write guard: TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT.` });
+          continue;
+        }
+
+        if (!hasScore) {
+          items.push({ ...baseItem, action: "conflict", reason: "Write guard: provider score is missing or invalid." });
+          continue;
+        }
+
+        if (localMatch.status === "finished" || (localMatch.home_score !== null && localMatch.away_score !== null)) {
+          items.push({ ...baseItem, action: "skipped", reason: "Write guard: local match already has finished status or stored score." });
+          continue;
+        }
+
+        const result = await applyMatchResult({
+          supabaseAdmin,
+          matchId: localMatch.id,
+          homeScore: apiFixture.score.home!,
+          awayScore: apiFixture.score.away!,
+          source: "thesportsdb",
+          actor: "result-sync"
+        });
+
+        if (result.statusCode === 200) {
+          matchesUpdated += 1;
+          const updatedPredictions = Number(result.body.updated_predictions_count || 0);
+          predictionsUpdated += Number.isFinite(updatedPredictions) ? updatedPredictions : 0;
+          items.push({ ...baseItem, action: "updated", result: result.body });
+        } else {
+          failed += 1;
+          items.push({ ...baseItem, action: "failed", reason: "applyMatchResult rejected the result.", result: result.body });
+        }
+      }
+
+      providerResult.misses.forEach(miss => {
+        items.push({
+          action: "conflict",
+          provider: "thesportsdb",
+          provider_match_id: null,
+          matched_local_match_id: miss.localMatch.id,
+          local_home: miss.localHome,
+          local_away: miss.localAway,
+          local_stage: miss.localMatch.stage || null,
+          local_start_time_utc: miss.localMatch.start_time_utc,
+          local_status: miss.localMatch.status,
+          reason: miss.reason,
+          provider_requests: miss.requests
+        });
+      });
+
+      const countByAction = items.reduce<Record<string, number>>((acc, item) => {
+        acc[item.action] = (acc[item.action] || 0) + 1;
+        return acc;
+      }, {});
+
+      res.json({
+        success: failed === 0,
+        mode: "write",
+        provider: "thesportsdb",
+        write_enabled: true,
+        wrote_to_db: matchesUpdated > 0,
+        requested_at: new Date().toISOString(),
+        tournament_id: tournamentId,
+        api_request: {
+          endpoint: "searchfilename.php + searchevents.php",
+          league: "4429",
+          season: "2026",
+          from: req.body?.from || null,
+          to: req.body?.to || null,
+          local_matches_in_window: providerResult.local_matches_in_window,
+          provider_requests_count: providerResult.requests.length
+        },
+        summary: {
+          provider_matches_received: providerResult.fixtures.length,
+          local_matches_checked: localMatches.length,
+          local_matches_in_window: providerResult.local_matches_in_window,
+          updated: countByAction.updated || 0,
+          skipped: countByAction.skipped || 0,
+          conflicts: countByAction.conflict || 0,
+          failed: countByAction.failed || 0
+        },
+        safety: {
+          db_writes_performed: matchesUpdated > 0,
+          matches_updated: matchesUpdated,
+          predictions_updated: predictionsUpdated,
+          points_updated: predictionsUpdated,
+          profiles_updated: 0,
+          direct_prediction_writes: false,
+          direct_points_writes: false
+        },
+        items
+      });
+    } catch (err: any) {
+      console.error("TheSportsDB result sync error:", err);
+      res.status(500).json({
+        error: "Chyba při TheSportsDB result syncu: " + err.message,
+        mode: "write",
+        provider: "thesportsdb",
         wrote_to_db: false
       });
     }

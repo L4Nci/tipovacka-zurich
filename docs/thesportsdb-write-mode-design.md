@@ -1,6 +1,6 @@
 # TheSportsDB write-mode design, group stage only
 
-This is a design document only. No write endpoint is implemented by this document.
+The write endpoint exists, but it is disabled by default. It must not write unless `RESULT_SYNC_WRITE_ENABLED=true`.
 
 ## Scope
 
@@ -43,7 +43,7 @@ The alias belongs in provider/mapping code, not in production data. It is a read
 
 ## Endpoint shape
 
-Future endpoint:
+Endpoint:
 
 ```http
 POST /api/admin/sync-results?provider=thesportsdb
@@ -79,9 +79,20 @@ The endpoint must reject unless all of these are true:
 
 If any item fails a guard, the endpoint must skip it and report why. It must never partially overwrite a finished result.
 
+When `RESULT_SYNC_WRITE_ENABLED` is not exactly `true`, the endpoint returns before fetching local matches or provider data:
+
+```txt
+write_enabled = false
+wrote_to_db = false
+matches_updated = 0
+predictions_updated = 0
+points_updated = 0
+profiles_updated = 0
+```
+
 ## Shared result application
 
-Before a write endpoint exists, the current manual admin result logic should be refactored into one internal server-side function:
+The current manual admin result logic is shared through one internal server-side function:
 
 ```ts
 applyMatchResult({

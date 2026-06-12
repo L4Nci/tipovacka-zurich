@@ -10,6 +10,7 @@ export type TheSportsDbLocalMatch = {
   home_score: number | null;
   away_score: number | null;
   status: string | null;
+  stage?: string | null;
   provider_name?: string | null;
   provider_match_id?: string | number | null;
 };
