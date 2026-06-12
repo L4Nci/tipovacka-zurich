@@ -664,7 +664,9 @@ async function startServer() {
             from: req.body?.from || null,
             to: req.body?.to || null,
             local_matches_in_window: providerResult.local_matches_in_window,
-            provider_requests_count: providerResult.requests.length
+            provider_requests_count: providerResult.requests.length,
+            provider_requests_failed: providerResult.provider_requests_failed,
+            rate_limited_count: providerResult.rate_limited_count
           },
           local_schema: {
             provider_columns_available: providerColumnsAvailable,
@@ -682,7 +684,10 @@ async function startServer() {
             would_update: countByAction.would_update || 0,
             skip_not_finished: countByAction.skip_not_finished || 0,
             skip_already_finished: countByAction.skip_already_finished || 0,
-            mapping_candidates: countByAction.mapping_candidate || 0
+            mapping_candidates: countByAction.mapping_candidate || 0,
+            provider_requests_count: providerResult.requests.length,
+            provider_requests_failed: providerResult.provider_requests_failed,
+            rate_limited_count: providerResult.rate_limited_count
           },
           safety: {
             db_writes_performed: false,
@@ -692,6 +697,7 @@ async function startServer() {
             profiles_updated: 0,
             write_mode_endpoint_created: false
           },
+          provider_error: providerResult.provider_error,
           provider_requests: providerResult.requests,
           items
         });
@@ -1043,7 +1049,9 @@ async function startServer() {
           from: req.body?.from || null,
           to: req.body?.to || null,
           local_matches_in_window: providerResult.local_matches_in_window,
-          provider_requests_count: providerResult.requests.length
+          provider_requests_count: providerResult.requests.length,
+          provider_requests_failed: providerResult.provider_requests_failed,
+          rate_limited_count: providerResult.rate_limited_count
         },
         summary: {
           provider_matches_received: providerResult.fixtures.length,
@@ -1052,7 +1060,10 @@ async function startServer() {
           updated: countByAction.updated || 0,
           skipped: countByAction.skipped || 0,
           conflicts: countByAction.conflict || 0,
-          failed: countByAction.failed || 0
+          failed: countByAction.failed || 0,
+          provider_requests_count: providerResult.requests.length,
+          provider_requests_failed: providerResult.provider_requests_failed,
+          rate_limited_count: providerResult.rate_limited_count
         },
         safety: {
           db_writes_performed: matchesUpdated > 0,
@@ -1063,6 +1074,7 @@ async function startServer() {
           direct_prediction_writes: false,
           direct_points_writes: false
         },
+        provider_error: providerResult.provider_error,
         items
       });
     } catch (err: any) {

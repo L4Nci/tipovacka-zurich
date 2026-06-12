@@ -79,6 +79,8 @@ type TheSportsDbPayload = {
   error?: string | null;
 };
 
+const PROVIDER_REQUEST_DELAY_MS = 750;
+
 const TEAM_NAME_ALIASES: Record<string, string> = {
   "Bosnia and Herzegovina": "Bosnia-Herzegovina",
   "United States": "USA"
@@ -97,6 +99,8 @@ const parseScore = (value?: string | number | null) => {
   const numberValue = Number(value);
   return Number.isInteger(numberValue) ? numberValue : null;
 };
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const toDateOnly = (iso: string) => iso.slice(0, 10);
 
@@ -141,6 +145,21 @@ const kickoffUtcFromEvent = (event: TheSportsDbEvent) => {
   }
 
   return null;
+};
+
+const buildProviderError = (requests: TheSportsDbRequestLog[]) => {
+  const failedRequests = requests.filter(request => request.error || (request.http_status !== null && request.http_status >= 400));
+  if (failedRequests.length === 0) return null;
+
+  return {
+    message: "One or more TheSportsDB provider requests failed.",
+    failed_requests: failedRequests.map(request => ({
+      endpoint: request.endpoint,
+      query: request.query,
+      http_status: request.http_status,
+      error: request.error
+    }))
+  };
 };
 
 const normalizeEvent = (event: TheSportsDbEvent, localMatch: TheSportsDbLocalMatch, source: string): TheSportsDbFixtureSummary => ({
@@ -260,12 +279,62 @@ export async function fetchTheSportsDbFixturesForLocalMatches({
   const misses: TheSportsDbLocalMiss[] = [];
   const requests: TheSportsDbRequestLog[] = [];
   const seenEventIds = new Set<string>();
+  const matchedLocalMatchIds = new Set<string>();
+  const matchesByDate = new Map<string, TheSportsDbLocalMatch[]>();
+  const failedDailyRequests = new Map<string, TheSportsDbRequestLog>();
 
   for (const match of windowMatches) {
+    const localDate = toDateOnly(match.start_time_utc);
+    const dateMatches = matchesByDate.get(localDate) || [];
+    dateMatches.push(match);
+    matchesByDate.set(localDate, dateMatches);
+  }
+
+  const uniqueDates = [...matchesByDate.keys()].sort();
+  for (const [index, localDate] of uniqueDates.entries()) {
+    if (index > 0) await sleep(PROVIDER_REQUEST_DELAY_MS);
+
+    const dayResult = await fetchTheSportsDb(
+      "eventsday.php",
+      { d: localDate, l: THE_SPORTS_DB_WORLD_CUP_LEAGUE },
+      `date:${localDate}`
+    );
+    requests.push(dayResult.log);
+    if (dayResult.log.error || (dayResult.log.http_status !== null && dayResult.log.http_status >= 400)) {
+      failedDailyRequests.set(localDate, dayResult.log);
+      continue;
+    }
+
+    for (const match of matchesByDate.get(localDate) || []) {
+      const event = chooseEvent(dayResult.events, match, participants);
+      if (!event) continue;
+
+      if (event.idEvent && seenEventIds.has(event.idEvent)) continue;
+      if (event.idEvent) seenEventIds.add(event.idEvent);
+      matchedLocalMatchIds.add(match.id);
+      fixtures.push(normalizeEvent(event, match, "eventsday"));
+    }
+  }
+
+  for (const [index, match] of windowMatches.filter(match => !matchedLocalMatchIds.has(match.id)).entries()) {
     const localDate = toDateOnly(match.start_time_utc);
     const home = providerTeamName(match.home_participant_id, participants);
     const away = providerTeamName(match.away_participant_id, participants);
     const requestLogs: TheSportsDbRequestLog[] = [];
+    const failedDailyRequest = failedDailyRequests.get(localDate);
+
+    if (failedDailyRequest) {
+      misses.push({
+        localMatch: match,
+        localHome: home,
+        localAway: away,
+        reason: `TheSportsDB daily request failed for ${localDate}; targeted fallback skipped to avoid amplifying provider rate limits.`,
+        requests: [failedDailyRequest]
+      });
+      continue;
+    }
+
+    if (requests.length > 0 || index > 0) await sleep(PROVIDER_REQUEST_DELAY_MS);
 
     const filenameQuery = `FIFA_World_Cup_${localDate}_${eventToken(home)}_vs_${eventToken(away)}`;
     const filenameResult = await fetchTheSportsDb("searchfilename.php", { e: filenameQuery }, match.id);
@@ -297,13 +366,23 @@ export async function fetchTheSportsDbFixturesForLocalMatches({
 
     if (event.idEvent && seenEventIds.has(event.idEvent)) continue;
     if (event.idEvent) seenEventIds.add(event.idEvent);
+    matchedLocalMatchIds.add(match.id);
     fixtures.push(normalizeEvent(event, match, source));
   }
+
+  const providerRequestsFailed = requests.filter(request =>
+    request.error || (request.http_status !== null && request.http_status >= 400)
+  ).length;
+  const rateLimitedCount = requests.filter(request => request.http_status === 429).length;
+  const providerError = buildProviderError(requests);
 
   return {
     fixtures,
     misses,
     requests,
+    provider_requests_failed: providerRequestsFailed,
+    rate_limited_count: rateLimitedCount,
+    provider_error: providerError,
     local_matches_in_window: windowMatches.length
   };
 }

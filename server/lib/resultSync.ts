@@ -569,7 +569,9 @@ export async function buildTheSportsDbDryRunResponse(supabaseAdmin: SupabaseClie
         from: request.from || null,
         to: request.to || null,
         local_matches_in_window: providerResult.local_matches_in_window,
-        provider_requests_count: providerResult.requests.length
+        provider_requests_count: providerResult.requests.length,
+        provider_requests_failed: providerResult.provider_requests_failed,
+        rate_limited_count: providerResult.rate_limited_count
       },
       local_schema: {
         provider_columns_available: providerColumnsAvailable,
@@ -587,7 +589,10 @@ export async function buildTheSportsDbDryRunResponse(supabaseAdmin: SupabaseClie
         would_update: counts.would_update || 0,
         skip_not_finished: counts.skip_not_finished || 0,
         skip_already_finished: counts.skip_already_finished || 0,
-        mapping_candidates: counts.mapping_candidate || 0
+        mapping_candidates: counts.mapping_candidate || 0,
+        provider_requests_count: providerResult.requests.length,
+        provider_requests_failed: providerResult.provider_requests_failed,
+        rate_limited_count: providerResult.rate_limited_count
       },
       safety: {
         db_writes_performed: false,
@@ -597,6 +602,7 @@ export async function buildTheSportsDbDryRunResponse(supabaseAdmin: SupabaseClie
         profiles_updated: 0,
         write_mode_endpoint_created: false
       },
+      provider_error: providerResult.provider_error,
       provider_requests: providerResult.requests,
       items
     }
@@ -747,20 +753,25 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
         endpoint: "searchfilename.php + searchevents.php",
         league: "4429",
         season: "2026",
-        from: request.from || null,
-        to: request.to || null,
-        local_matches_in_window: providerResult.local_matches_in_window,
-        provider_requests_count: providerResult.requests.length
-      },
-      summary: {
-        provider_matches_received: providerResult.fixtures.length,
-        local_matches_checked: matches.length,
-        local_matches_in_window: providerResult.local_matches_in_window,
-        updated: counts.updated || 0,
-        skipped: counts.skipped || 0,
-        conflicts: counts.conflict || 0,
-        failed: counts.failed || 0
-      },
+          from: request.from || null,
+          to: request.to || null,
+          local_matches_in_window: providerResult.local_matches_in_window,
+          provider_requests_count: providerResult.requests.length,
+          provider_requests_failed: providerResult.provider_requests_failed,
+          rate_limited_count: providerResult.rate_limited_count
+        },
+        summary: {
+          provider_matches_received: providerResult.fixtures.length,
+          local_matches_checked: matches.length,
+          local_matches_in_window: providerResult.local_matches_in_window,
+          updated: counts.updated || 0,
+          skipped: counts.skipped || 0,
+          conflicts: counts.conflict || 0,
+          failed: counts.failed || 0,
+          provider_requests_count: providerResult.requests.length,
+          provider_requests_failed: providerResult.provider_requests_failed,
+          rate_limited_count: providerResult.rate_limited_count
+        },
       safety: {
         db_writes_performed: matchesUpdated > 0,
         matches_updated: matchesUpdated,
@@ -769,8 +780,9 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
         profiles_updated: 0,
         direct_prediction_writes: false,
         direct_points_writes: false
-      },
-      items
-    }
+        },
+        provider_error: providerResult.provider_error,
+        items
+      }
   };
 }
