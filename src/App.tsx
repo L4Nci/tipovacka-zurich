@@ -1392,7 +1392,7 @@ export default function App() {
         draw_hits: stats?.drawHits ?? 0,
         currentStreak: stats?.currentStreak ?? 0,
         bestStreak,
-        history: stats?.history.slice(-5) ?? [],
+        history: stats?.history.slice(-10) ?? [],
         rankChange: (prevIndex === -1 || currentIndex === -1) ? 0 : prevIndex - currentIndex
       };
     }).sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0) || (b.exact_hits ?? 0) - (a.exact_hits ?? 0) || (b.outcome_hits ?? 0) - (a.outcome_hits ?? 0) || a.username.localeCompare(b.username));
@@ -1404,6 +1404,18 @@ export default function App() {
     const stats = leaderboardWithStreaks.find(p => p.id === user.id);
     return stats || { exact: 0, winner: 0, total: 0, currentStreak: 0, bestStreak: 0, history: [] };
   }, [leaderboardWithStreaks, user]);
+
+  const currentUserRank = useMemo(() => {
+    if (!user) return null;
+    const index = leaderboardWithStreaks.findIndex(player => player.id === user.id);
+    return index >= 0 ? index + 1 : null;
+  }, [leaderboardWithStreaks, user]);
+
+  const currentUserLeaderGap = useMemo(() => {
+    if (!currentUserStats || leaderboardWithStreaks.length === 0) return 0;
+    const leaderPoints = leaderboardWithStreaks[0].total_points ?? 0;
+    return Math.min(0, (currentUserStats.total_points ?? 0) - leaderPoints);
+  }, [currentUserStats, leaderboardWithStreaks]);
 
   if (!user) {
     const loginT = translations.cz; 
@@ -2012,7 +2024,7 @@ export default function App() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
-              className="space-y-6"
+              className="space-y-4"
             >
               <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
                  <div className="mb-4 relative">
@@ -2101,45 +2113,73 @@ export default function App() {
                 )}
               </AnimatePresence>
 
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 text-center">{lang === 'cz' ? 'Historie (posledních 5)' : 'History (last 5)'}</h3>
-                 <div className="flex justify-center gap-3">
+              <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 transition-colors">
+                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">{lang === 'cz' ? 'Historie (posledních 10)' : 'History (last 10)'}</h3>
+                 <div className="grid grid-cols-10 gap-1">
                    {currentUserStats.history.map((h: any, idx: number) => (
-                      <div key={idx} className="flex flex-col items-center gap-1">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black border transition-colors ${
+                      <div key={idx} className="min-w-0 flex flex-col items-center gap-0.5">
+                        <div className={`aspect-square w-full rounded-lg flex items-center justify-center text-[9px] font-black border transition-colors ${
                           h.res === 'E' ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm shadow-emerald-100' :
                           h.res === 'W' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                           'bg-slate-50 text-slate-400 border-slate-100'
                         }`}>
                           {h.res === 'L' ? '0' : `+${h.points}`}
                         </div>
-                        <span className="text-[8px] font-bold text-slate-300">
+                        <span className="text-[7px] font-bold leading-none text-slate-300">
                           {h.res === 'E' ? '✔✔' : h.res === 'W' ? '✔' : '✖'}
                         </span>
                       </div>
                    ))}
-                   {currentUserStats.history.length === 0 && <p className="text-[10px] text-slate-400 italic">Zatím žádná historie</p>}
+                   {currentUserStats.history.length === 0 && <p className="col-span-10 text-center text-[10px] text-slate-400 italic">Zatím žádná historie</p>}
                  </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{t.totalPoints}</p>
-                    <p className="text-4xl font-black text-red-600 transition-colors">{currentUserStats.total_points}</p>
+              <div className="grid grid-cols-3 gap-2">
+                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{t.totalPoints}</p>
+                    <p className="mt-1 text-2xl font-black leading-none text-red-600 transition-colors">{currentUserStats.total_points}</p>
                  </div>
-                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{t.exactScores}</p>
-                    <p className="text-4xl font-black text-green-600 transition-colors">{currentUserStats.exact_hits}</p>
+                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Pořadí' : 'Rank'}</p>
+                    <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">#{currentUserRank ?? '-'}</p>
                  </div>
-                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{lang === 'cz' ? 'Nejlepší série' : 'Best Streak'}</p>
-                    <p className="text-4xl font-black text-slate-900 transition-colors">{currentUserStats.bestStreak}</p>
+                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Na lídra' : 'To Leader'}</p>
+                    <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">{currentUserLeaderGap}</p>
                  </div>
-                 <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 whitespace-nowrap">{lang === 'cz' ? 'Aktuální série' : 'Current Streak'}</p>
+              </div>
+
+              <div className="bg-white rounded-3xl p-3 shadow-sm border border-slate-100 transition-colors">
+                <div className="grid grid-cols-4 gap-1.5">
+                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-2">
+                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.exact}</p>
+                    <p className="mt-1 text-sm font-black leading-none text-slate-800">{currentUserStats.exact_hits ?? 0}</p>
+                  </div>
+                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-2">
+                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.goalDiff}</p>
+                    <p className="mt-1 text-sm font-black leading-none text-slate-800">{currentUserStats.goal_difference_hits ?? 0}</p>
+                  </div>
+                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-2">
+                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.winner}</p>
+                    <p className="mt-1 text-sm font-black leading-none text-slate-800">{currentUserStats.winner_hits ?? 0}</p>
+                  </div>
+                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-2">
+                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.draw}</p>
+                    <p className="mt-1 text-sm font-black leading-none text-slate-800">{currentUserStats.draw_hits ?? 0}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Nejlepší série' : 'Best Streak'}</p>
+                    <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">{currentUserStats.bestStreak}</p>
+                 </div>
+                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Aktuální série' : 'Current Streak'}</p>
                     <div className="flex items-center gap-2">
-                      <p className="text-4xl font-black text-orange-500 transition-colors">{currentUserStats.currentStreak}</p>
-                      <Flame className={`w-6 h-6 ${currentUserStats.currentStreak >= 3 ? 'text-orange-500 fill-current' : 'text-slate-100'}`} />
+                      <p className="mt-1 text-2xl font-black leading-none text-orange-500 transition-colors">{currentUserStats.currentStreak}</p>
+                      <Flame className={`w-4 h-4 ${currentUserStats.currentStreak >= 3 ? 'text-orange-500 fill-current' : 'text-slate-100'}`} />
                     </div>
                  </div>
               </div>
