@@ -48,7 +48,9 @@ const translations = {
     finished: "Odehrané zápasy",
     pts: "body",
     exact: "přesné",
+    goalDiff: "rozdíl",
     winner: "vítěz",
+    draw: "remíza",
     saveTip: "Uložit tip",
     updateTip: "Aktualizovat tip",
     yourPrediction: "Tvůj tip",
@@ -114,7 +116,9 @@ const translations = {
     finished: "Finished Matches",
     pts: "pts",
     exact: "exact",
+    goalDiff: "diff",
     winner: "winner",
+    draw: "draw",
     saveTip: "Save Prediction",
     updateTip: "Update Prediction",
     yourPrediction: "Your Prediction",
@@ -1285,6 +1289,9 @@ export default function App() {
         let total = 0;
         let exact = 0;
         let outcomeHits = 0;
+        let goalDifferenceHits = 0;
+        let winnerHits = 0;
+        let drawHits = 0;
         let currentStreak = 0;
         let tempStreak = 0;
         const history: { points: number, res: 'W' | 'L' | 'E' }[] = [];
@@ -1299,7 +1306,23 @@ export default function App() {
 
           total += pts;
           if (pts === 5) exact++;
-          else if (pts > 0) outcomeHits++;
+          else if (pts > 0) {
+            outcomeHits++;
+
+            if (!isHockey) {
+              const isActualDraw = mh === ma;
+              const isPredictedDraw = ph === pa;
+              const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
+
+              if (isActualDraw && isPredictedDraw) {
+                drawHits++;
+              } else if (correctWinner && ph - pa === mh - ma) {
+                goalDifferenceHits++;
+              } else if (correctWinner) {
+                winnerHits++;
+              }
+            }
+          }
 
           if (pts > 0) tempStreak++;
           else tempStreak = 0;
@@ -1312,7 +1335,18 @@ export default function App() {
           total += 10;
         }
 
-        return { id: p.id, username: p.username, total, exact, outcomeHits, currentStreak, history };
+        return {
+          id: p.id,
+          username: p.username,
+          total,
+          exact,
+          outcomeHits,
+          goalDifferenceHits,
+          winnerHits,
+          drawHits,
+          currentStreak,
+          history
+        };
       });
 
       return pStats.sort((a, b) => b.total - a.total || b.exact - a.exact || b.outcomeHits - a.outcomeHits || a.username.localeCompare(b.username));
@@ -1353,6 +1387,9 @@ export default function App() {
         total_points: stats?.total ?? 0,
         exact_hits: stats?.exact ?? 0,
         outcome_hits: stats?.outcomeHits ?? 0,
+        goal_difference_hits: stats?.goalDifferenceHits ?? 0,
+        winner_hits: stats?.winnerHits ?? 0,
+        draw_hits: stats?.drawHits ?? 0,
         currentStreak: stats?.currentStreak ?? 0,
         bestStreak,
         history: stats?.history.slice(-5) ?? [],
@@ -1944,14 +1981,22 @@ export default function App() {
                           <p className="text-[9px] font-black uppercase text-slate-400 mt-1">{t.pts}</p>
                         </div>
                       </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <div className="rounded-xl bg-slate-50 px-3 py-2">
-                          <p className="text-[9px] font-black uppercase text-slate-400">{t.exact}</p>
-                          <p className="text-sm font-black text-slate-800">{p.exact_hits ?? 0}</p>
+                      <div className="mt-2.5 grid grid-cols-4 gap-1.5">
+                        <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
+                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.exact}</p>
+                          <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.exact_hits ?? 0}</p>
                         </div>
-                        <div className="rounded-xl bg-slate-50 px-3 py-2">
-                          <p className="text-[9px] font-black uppercase text-slate-400">{t.winner}</p>
-                          <p className="text-sm font-black text-slate-800">{p.outcome_hits ?? 0}</p>
+                        <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
+                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.goalDiff}</p>
+                          <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.goal_difference_hits ?? 0}</p>
+                        </div>
+                        <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
+                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.winner}</p>
+                          <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.winner_hits ?? 0}</p>
+                        </div>
+                        <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
+                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.draw}</p>
+                          <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.draw_hits ?? 0}</p>
                         </div>
                       </div>
                     </div>

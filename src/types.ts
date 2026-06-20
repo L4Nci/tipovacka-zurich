@@ -11,6 +11,9 @@ export type Player = {
   total_points?: number;
   exact_hits?: number;
   outcome_hits?: number;
+  goal_difference_hits?: number;
+  winner_hits?: number;
+  draw_hits?: number;
 };
 
 export type Team = {
