@@ -870,6 +870,7 @@ export default function App() {
   const [avatarMsg, setAvatarMsg] = useState('');
   const [avatarError, setAvatarError] = useState('');
   const [showAvatarEditor, setShowAvatarEditor] = useState(false);
+  const [showScoringInfo, setShowScoringInfo] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('lang', lang);
@@ -1825,21 +1826,10 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
             >
-              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                 <span className="flex items-center gap-2 min-w-0">
                   <Calendar className="w-4 h-4 shrink-0" /> {t.upcoming}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTab('profile');
-                    setIsLobbyRulesOpen(true);
-                  }}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white border border-slate-100 text-slate-400 hover:text-slate-600 hover:border-slate-200 transition-colors shadow-sm"
-                  aria-label={lang === 'cz' ? 'O lobby' : 'About lobby'}
-                >
-                  <span className="text-sm font-black normal-case tracking-normal" aria-hidden="true">ⓘ</span>
-                </button>
               </h2>
               {matches
                 .filter(m => {
@@ -1915,9 +1905,70 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
             >
-              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                 <Trophy className="w-4 h-4" /> {t.globalStandings}
+              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <Trophy className="w-4 h-4" /> {t.globalStandings}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowScoringInfo(true)}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white border border-slate-100 text-slate-400 hover:text-slate-600 hover:border-slate-200 transition-colors shadow-sm"
+                  aria-label={lang === 'cz' ? 'Informace o bodování' : 'Scoring information'}
+                >
+                  <span className="text-sm font-black normal-case tracking-normal" aria-hidden="true">ⓘ</span>
+                </button>
               </h2>
+
+              <AnimatePresence>
+                {showScoringInfo && (
+                  <motion.div
+                    key="scoring-info-modal"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[80] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+                    onClick={() => setShowScoringInfo(false)}
+                  >
+                    <motion.div
+                      initial={{ y: 16, scale: 0.98 }}
+                      animate={{ y: 0, scale: 1 }}
+                      exit={{ y: 16, scale: 0.98 }}
+                      className="w-full max-w-sm rounded-3xl border border-slate-100 bg-white p-5 shadow-2xl"
+                      onClick={event => event.stopPropagation()}
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">
+                          {lang === 'cz' ? 'Bodování' : 'Scoring'}
+                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => setShowScoringInfo(false)}
+                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100"
+                          aria-label={lang === 'cz' ? 'Zavřít informace o bodování' : 'Close scoring information'}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="space-y-1.5">
+                        {[
+                          ['Přesný výsledek', '5 b'],
+                          ['Vítěz + rozdíl', '3 b'],
+                          ['Správný vítěz', '2 b'],
+                          ['Správná remíza', '2 b'],
+                          ['Vítěz turnaje', '10 b']
+                        ].map(([label, points]) => (
+                          <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+                            <span className="text-xs font-bold text-slate-700">{label}</span>
+                            <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-black text-white">
+                              {points}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Official Winner Display - Only if decided */}
               {teams.find(tm => tm.is_final_winner === 1) && (
