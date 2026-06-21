@@ -2046,19 +2046,31 @@ export default function App() {
                       </div>
                       <div className="mt-2.5 grid grid-cols-4 gap-1.5">
                         <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.exact}</p>
+                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">
+                            <span className="block">{lang === 'cz' ? 'Přesné' : 'Exact'}</span>
+                            <span className="block">{lang === 'cz' ? 'skóre' : 'score'}</span>
+                          </p>
                           <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.exact_hits ?? 0}</p>
                         </div>
                         <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.goalDiff}</p>
+                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">
+                            <span className="block">{lang === 'cz' ? 'Rozdíl' : 'Goal'}</span>
+                            <span className="block">{lang === 'cz' ? 'gólů' : 'difference'}</span>
+                          </p>
                           <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.goal_difference_hits ?? 0}</p>
                         </div>
                         <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.winner}</p>
+                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">
+                            <span className="block">{lang === 'cz' ? 'Správný' : 'Correct'}</span>
+                            <span className="block">{lang === 'cz' ? 'vítěz' : 'winner'}</span>
+                          </p>
                           <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.winner_hits ?? 0}</p>
                         </div>
                         <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.draw}</p>
+                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">
+                            <span className="block">{lang === 'cz' ? 'Tip na' : 'Inexact'}</span>
+                            <span className="block">{lang === 'cz' ? 'remízu' : 'draw'}</span>
+                          </p>
                           <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.draw_hits ?? 0}</p>
                         </div>
                       </div>
