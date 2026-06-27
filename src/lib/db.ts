@@ -1,5 +1,6 @@
 import { supabase } from "./supabase.ts";
 import { calculatePoints } from "./scoring.ts";
+import { isDrawPrediction, isFootballKnockoutStage } from "./matchRules.ts";
 import { Player, Team, Match, Prediction, Lobby, TournamentParticipant } from "../types.ts";
 
 /**
@@ -676,10 +677,10 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
 export const savePrediction = async (userId: string, lobbyId: string, matchId: string, home: number, away: number) => {
   if (!userId || !lobbyId || !matchId) throw new Error("Chybný dotaz - scházející parametry.");
 
-  // Get lock_time_utc of the match
+  // Get match metadata needed for lock and prediction safety checks.
   const { data: match, error: mErr } = await supabase
     .from("matches")
-    .select("lock_time_utc, tournament_id")
+    .select("lock_time_utc, tournament_id, stage")
     .eq("id", matchId)
     .single();
 
@@ -695,6 +696,10 @@ export const savePrediction = async (userId: string, lobbyId: string, matchId: s
 
   if (home === away && match.tournament_id === "ms-hockey-2026") {
     throw new Error("V hokeji není remíza povolena. Vyberte vítěze zápasu v základní době / po prodloužení!");
+  }
+
+  if (isDrawPrediction(home, away) && isFootballKnockoutStage(match.stage, match.tournament_id)) {
+    throw new Error("V play-off nelze tipovat remízu.");
   }
 
   const { error: upsertErr } = await supabase

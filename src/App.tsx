@@ -19,6 +19,7 @@ import {
 import { Player, Team, Match, Prediction, Lobby } from './types.ts';
 import { LobbyView } from './components/LobbyView.tsx';
 import { supabase } from './lib/supabase.ts';
+import { isDrawPrediction, isFootballKnockoutStage } from './lib/matchRules.ts';
 import { 
   fetchAllData, 
   loginUser, 
@@ -96,6 +97,9 @@ const translations = {
     userCreated: "Hráč byl úspěšně vytvořen!",
     officialWinner: "Skutečný šampion turnaje",
     noDraws: "Remíza není povolena. Jeden tým musí vyhrát!",
+    playoffNoDraws: "V play-off nelze tipovat remízu.",
+    playoffWinnerRequired: "V play-off musíš vybrat vítěze.",
+    pickMatchWinner: "Vyber vítěze zápasu",
     tipSaved: "Tip uložen! ✅",
     notTipped: "Nenatipoval jsi :(",
     locksIn: "Zamyká se za",
@@ -164,6 +168,9 @@ const translations = {
     userCreated: "Player created successfully!",
     officialWinner: "Official Tournament Winner",
     noDraws: "Draws are not allowed. One team must win!",
+    playoffNoDraws: "Draw predictions are not allowed in playoffs.",
+    playoffWinnerRequired: "Pick a winner in playoffs.",
+    pickMatchWinner: "Pick match winner",
     tipSaved: "Tip saved! ✅",
     notTipped: "You didn't predict :(",
     locksIn: "Locks in",
@@ -309,6 +316,9 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const startTime = new Date(match.start_time_utc).getTime();
   const lockTime = startTime - (5 * 60 * 1000);
   const isLocked = Date.now() > lockTime || match.status === 'finished';
+  const isFootballKnockout = !isHockey && isFootballKnockoutStage(match.stage, match.tournament_id);
+  const drawPredictionSelected = isDrawPrediction(home, away);
+  const drawPredictionBlocked = drawPredictionSelected && (isHockey || isFootballKnockout);
 
   useEffect(() => {
     if (isLocked || isFinished) {
@@ -359,6 +369,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
 
   const handlePredict = async () => {
     if (!onPredict) return;
+    if (drawPredictionBlocked) return;
     setIsSaving(true);
     try {
       await onPredict(home, away);
@@ -389,12 +400,15 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const points = getPoints();
 
   const predictionStats = useMemo(() => {
-    const total = matchPredictions.length;
+    const predictionsForDistribution = isFootballKnockout
+      ? matchPredictions.filter(p => p.predicted_home_score !== p.predicted_away_score)
+      : matchPredictions;
+    const total = predictionsForDistribution.length;
     if (total === 0) return { home: 0, away: 0, draw: 0, isEmpty: true };
     
-    const homeWins = matchPredictions.filter(p => p.predicted_home_score > p.predicted_away_score).length;
-    const draws = matchPredictions.filter(p => p.predicted_home_score === p.predicted_away_score).length;
-    const awayWins = matchPredictions.filter(p => p.predicted_away_score > p.predicted_home_score).length;
+    const homeWins = predictionsForDistribution.filter(p => p.predicted_home_score > p.predicted_away_score).length;
+    const draws = isFootballKnockout ? 0 : predictionsForDistribution.filter(p => p.predicted_home_score === p.predicted_away_score).length;
+    const awayWins = predictionsForDistribution.filter(p => p.predicted_away_score > p.predicted_home_score).length;
     
     return {
       home: Math.round((homeWins / total) * 100),
@@ -402,7 +416,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
       away: Math.round((awayWins / total) * 100),
       isEmpty: false
     };
-  }, [matchPredictions]);
+  }, [isFootballKnockout, matchPredictions]);
 
   const calcPoints = (ph: number, pa: number) => {
     if (match.home_score === null || match.away_score === null) return 0;
@@ -458,15 +472,17 @@ const MatchCard: React.FC<MatchCardProps> = ({
         {!isFinished && (
           <div className="flex flex-col gap-3">
             <div className="px-1 mb-1">
-              <div className="grid grid-cols-3 items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase">
+              <div className={`grid ${isFootballKnockout ? 'grid-cols-2' : 'grid-cols-3'} items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase`}>
                 <span className="text-left text-[#ce1126]">
                   <span className="block text-[8px] text-slate-400 truncate">{homeOutcomeLabel}</span>
                   {predictionStats.home}%
                 </span>
-                <span className="text-center text-[#1f2937]">
-                  <span className="block text-[8px] text-slate-400">Remíza</span>
-                  {predictionStats.draw}%
-                </span>
+                {!isFootballKnockout && (
+                  <span className="text-center text-[#1f2937]">
+                    <span className="block text-[8px] text-slate-400">Remíza</span>
+                    {predictionStats.draw}%
+                  </span>
+                )}
                 <span className="text-right text-[#006847]">
                   <span className="block text-[8px] text-slate-400 truncate">{awayOutcomeLabel}</span>
                   {predictionStats.away}%
@@ -477,10 +493,12 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   style={{ width: `${predictionStats.home}%` }} 
                   className="h-full bg-[#ce1126] transition-[width] duration-700 ease-out" 
                 />
-                <div 
-                  style={{ width: `${predictionStats.draw}%` }} 
-                  className="h-full bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.12)] transition-[width] duration-700 ease-out" 
-                />
+                {!isFootballKnockout && (
+                  <div
+                    style={{ width: `${predictionStats.draw}%` }}
+                    className="h-full bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.12)] transition-[width] duration-700 ease-out"
+                  />
+                )}
                 <div 
                   style={{ width: `${predictionStats.away}%` }} 
                   className="h-full bg-[#006847] transition-[width] duration-700 ease-out" 
@@ -532,12 +550,17 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   </button>
                 </div>
               </div>
+              {!isLocked && isFootballKnockout && !drawPredictionSelected && (
+                <p className="mt-2 text-[10px] text-center text-slate-400 italic">
+                  {t.playoffWinnerRequired}
+                </p>
+              )}
             </div>
             
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={handlePredict}
-              disabled={isLocked || (isHockey && home === away) || isSaving}
+              disabled={isLocked || drawPredictionBlocked || isSaving}
               className={`w-full py-4 rounded-2xl font-black shadow-lg transition-all disabled:shadow-none flex items-center justify-center gap-2 ${
                 isLocked ? 'bg-slate-100 text-slate-400' :
                 showSuccess ? 'bg-green-500 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-200'
@@ -549,11 +572,13 @@ const MatchCard: React.FC<MatchCardProps> = ({
                 t.locked
               ) : showSuccess ? (
                 t.tipSaved
+              ) : isFootballKnockout && drawPredictionSelected ? (
+                t.pickMatchWinner
               ) : (
                 match.predicted_home_score !== null ? t.updateTip : t.saveTip
               )}
             </motion.button>
-            {!isLocked && isHockey && home === away && <p className="text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
+            {!isLocked && isHockey && drawPredictionSelected && <p className="text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
             {isLocked && <p className="text-[10px] text-center text-slate-400 italic">{t.locked}</p>}
           </div>
         )}
