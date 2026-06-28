@@ -133,6 +133,42 @@ const describeLocalTeam = (participantId: string, participants: Map<string, Part
 const isGroupStageMatch = (match?: LocalMatch | null) =>
   Boolean(match?.stage && /^Group\b/i.test(match.stage));
 
+const isKnownKnockoutStage = (stage: string) =>
+  /^(Round of 32|Round of 16|Quarterfinal|Semifinal|Third place|Final)$/i.test(stage.trim());
+
+const isTbaValue = (value?: string | null) =>
+  normalizeName(value) === "tba" || String(value || "").trim().toLowerCase() === "football-tba";
+
+export const getResultSyncWriteEligibility = (
+  match: LocalMatch | null | undefined,
+  participants: Map<string, Participant>
+): { eligible: boolean; reason: string } => {
+  if (!match) {
+    return { eligible: false, reason: "Write guard: no local match mapped." };
+  }
+
+  const stage = String(match.stage || "").trim();
+  if (!stage) {
+    return { eligible: false, reason: "Write guard: local match stage is unknown." };
+  }
+
+  if (!isGroupStageMatch(match) && !isKnownKnockoutStage(stage)) {
+    return { eligible: false, reason: `Write guard: unsupported local match stage ${stage}.` };
+  }
+
+  if (isTbaValue(match.home_participant_id) || isTbaValue(match.away_participant_id)) {
+    return { eligible: false, reason: "Write guard: local match still has TBA participant id." };
+  }
+
+  const localHome = describeLocalTeam(match.home_participant_id, participants);
+  const localAway = describeLocalTeam(match.away_participant_id, participants);
+  if (isTbaValue(localHome) || isTbaValue(localAway)) {
+    return { eligible: false, reason: "Write guard: local match still has TBA team name." };
+  }
+
+  return { eligible: true, reason: "Write guard: local match stage and teams are eligible." };
+};
+
 const findMappingCandidate = (
   apiFixture: ApiFixtureSummary,
   localMatches: LocalMatch[],
@@ -719,8 +755,9 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
       items.push({ ...baseItem, action: "skipped", reason: "Write guard: mapping is not exact match." });
       continue;
     }
-    if (!isGroupStageMatch(localMatch)) {
-      items.push({ ...baseItem, action: "skipped", reason: "Write guard: local match is not group-stage." });
+    const localEligibility = getResultSyncWriteEligibility(localMatch, participants);
+    if (!localEligibility.eligible) {
+      items.push({ ...baseItem, action: "skipped", reason: localEligibility.reason });
       continue;
     }
     if (!isFinished) {
