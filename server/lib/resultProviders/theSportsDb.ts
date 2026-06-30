@@ -68,6 +68,8 @@ type TheSportsDbEvent = {
   strTimestamp?: string | null;
   intHomeScore?: string | number | null;
   intAwayScore?: string | number | null;
+  intHomeScoreExtra?: string | number | null;
+  intAwayScoreExtra?: string | number | null;
   strStatus?: string | null;
   strProgress?: string | null;
   strPostponed?: string | null;
@@ -162,6 +164,22 @@ const buildProviderError = (requests: TheSportsDbRequestLog[]) => {
   };
 };
 
+const normalizedScoreFromEvent = (event: TheSportsDbEvent) => {
+  if (event.strStatus === "AP") {
+    return {
+      home: parseScore(event.intHomeScoreExtra),
+      away: parseScore(event.intAwayScoreExtra),
+      source: "intHomeScoreExtra/intAwayScoreExtra"
+    };
+  }
+
+  return {
+    home: parseScore(event.intHomeScore),
+    away: parseScore(event.intAwayScore),
+    source: "intHomeScore/intAwayScore"
+  };
+};
+
 const normalizeEvent = (event: TheSportsDbEvent, localMatch: TheSportsDbLocalMatch, source: string): TheSportsDbFixtureSummary => ({
   id: event.idEvent || null,
   provider: "thesportsdb",
@@ -173,11 +191,7 @@ const normalizeEvent = (event: TheSportsDbEvent, localMatch: TheSportsDbLocalMat
   rawStatus: event.strStatus || null,
   source,
   matchedLocalMatchId: localMatch.id,
-  score: {
-    home: parseScore(event.intHomeScore),
-    away: parseScore(event.intAwayScore),
-    source: "intHomeScore/intAwayScore"
-  }
+  score: normalizedScoreFromEvent(event)
 });
 
 const eventMatchesLocal = (

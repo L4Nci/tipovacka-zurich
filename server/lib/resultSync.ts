@@ -498,11 +498,51 @@ export async function applyMatchResult({
   };
 }
 
+const hasProviderScore = (apiFixture: TheSportsDbFixtureSummary) =>
+  Number.isInteger(apiFixture.score.home) && Number.isInteger(apiFixture.score.away);
+
+export const getProviderResultStatus = (apiFixture: TheSportsDbFixtureSummary) => {
+  const status = apiFixture.statusShort || "unknown";
+  const hasScore = hasProviderScore(apiFixture);
+
+  if (status === "FT") {
+    return { isFinished: true, hasScore, conflictReason: null as string | null, skipReason: null as string | null };
+  }
+
+  if (status === "AP") {
+    if (!hasScore) {
+      return {
+        isFinished: false,
+        hasScore,
+        conflictReason: "TheSportsDB AP fixture is missing valid intHomeScoreExtra/intAwayScoreExtra final score.",
+        skipReason: null as string | null
+      };
+    }
+
+    if (apiFixture.score.home === apiFixture.score.away) {
+      return {
+        isFinished: false,
+        hasScore,
+        conflictReason: "TheSportsDB AP fixture final score is still a draw; refusing playoff draw write.",
+        skipReason: null as string | null
+      };
+    }
+
+    return { isFinished: true, hasScore, conflictReason: null as string | null, skipReason: null as string | null };
+  }
+
+  return {
+    isFinished: false,
+    hasScore,
+    conflictReason: null as string | null,
+    skipReason: `TheSportsDB status ${status} is not FT or valid AP.`
+  };
+};
+
 function buildTheSportsDbItem(apiFixture: TheSportsDbFixtureSummary, localMatches: LocalMatch[], participants: Map<string, Participant>) {
   const mapping = findMappingCandidate(apiFixture, localMatches, participants);
   const localMatch = mapping.match;
-  const isFinished = apiFixture.statusShort === "FT";
-  const hasScore = Number.isInteger(apiFixture.score.home) && Number.isInteger(apiFixture.score.away);
+  const providerResultStatus = getProviderResultStatus(apiFixture);
 
   let action: "mapping_candidate" | "would_update" | "skip_not_finished" | "skip_already_finished" | "conflict" | "unmapped" = "mapping_candidate";
   let reason = mapping.reason;
@@ -511,13 +551,16 @@ function buildTheSportsDbItem(apiFixture: TheSportsDbFixtureSummary, localMatche
     action = "conflict";
   } else if (!localMatch) {
     action = "unmapped";
-  } else if (!isFinished) {
+  } else if (providerResultStatus.conflictReason) {
+    action = "conflict";
+    reason = providerResultStatus.conflictReason;
+  } else if (!providerResultStatus.isFinished) {
     action = "skip_not_finished";
-    reason = `TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT.`;
+    reason = providerResultStatus.skipReason || `TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT.`;
   } else if (localMatch.status === "finished" || (localMatch.home_score !== null && localMatch.away_score !== null)) {
     action = "skip_already_finished";
     reason = "Local match already has a finished status or stored score; dry-run will not overwrite it.";
-  } else if (!hasScore) {
+  } else if (!providerResultStatus.hasScore) {
     action = "conflict";
     reason = "TheSportsDB fixture is FT but final score is missing.";
   } else if (mapping.quality === "exact match" || mapping.quality === "likely match") {
@@ -536,7 +579,7 @@ function buildTheSportsDbItem(apiFixture: TheSportsDbFixtureSummary, localMatche
       short: apiFixture.statusShort,
       long: apiFixture.statusLong,
       raw: apiFixture.rawStatus,
-      is_finished: isFinished
+      is_finished: providerResultStatus.isFinished
     },
     api_score: apiFixture.score,
     mapping_quality: mapping.quality,
@@ -739,8 +782,7 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
   for (const apiFixture of providerResult.fixtures) {
     const mapping = findMappingCandidate(apiFixture, matches, participants);
     const localMatch = mapping.match;
-    const isFinished = apiFixture.statusShort === "FT";
-    const hasScore = Number.isInteger(apiFixture.score.home) && Number.isInteger(apiFixture.score.away);
+    const providerResultStatus = getProviderResultStatus(apiFixture);
     const baseItem = buildTheSportsDbItem(apiFixture, matches, participants);
 
     if (mapping.quality === "conflict") {
@@ -760,11 +802,15 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
       items.push({ ...baseItem, action: "skipped", reason: localEligibility.reason });
       continue;
     }
-    if (!isFinished) {
-      items.push({ ...baseItem, action: "skipped", reason: `Write guard: TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT.` });
+    if (providerResultStatus.conflictReason) {
+      items.push({ ...baseItem, action: "conflict", reason: `Write guard: ${providerResultStatus.conflictReason}` });
       continue;
     }
-    if (!hasScore) {
+    if (!providerResultStatus.isFinished) {
+      items.push({ ...baseItem, action: "skipped", reason: `Write guard: ${providerResultStatus.skipReason || `TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT or valid AP.`}` });
+      continue;
+    }
+    if (!providerResultStatus.hasScore) {
       items.push({ ...baseItem, action: "conflict", reason: "Write guard: provider score is missing or invalid." });
       continue;
     }
