@@ -680,7 +680,7 @@ export const savePrediction = async (userId: string, lobbyId: string, matchId: s
   // Get match metadata needed for lock and prediction safety checks.
   const { data: match, error: mErr } = await supabase
     .from("matches")
-    .select("lock_time_utc, tournament_id, stage")
+    .select("lock_time_utc, tournament_id, stage, status, home_score, away_score")
     .eq("id", matchId)
     .single();
 
@@ -692,6 +692,10 @@ export const savePrediction = async (userId: string, lobbyId: string, matchId: s
 
   if (now >= lockTime) {
     throw new Error("Uzamčeno! Tipování pro tento zápas již vypršelo (5 min před startem).");
+  }
+
+  if (match.status === "finished" || match.home_score !== null || match.away_score !== null) {
+    throw new Error("Zápas už má uložený výsledek, tip nelze změnit.");
   }
 
   if (home === away && match.tournament_id === "ms-hockey-2026") {
@@ -709,8 +713,7 @@ export const savePrediction = async (userId: string, lobbyId: string, matchId: s
       lobby_id: lobbyId,
       match_id: matchId,
       predicted_home_score: home,
-      predicted_away_score: away,
-      points_earned: 0
+      predicted_away_score: away
     });
 
   if (upsertErr) throw upsertErr;
