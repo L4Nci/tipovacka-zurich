@@ -164,11 +164,16 @@ const buildProviderError = (requests: TheSportsDbRequestLog[]) => {
   };
 };
 
-const normalizedScoreFromEvent = (event: TheSportsDbEvent) => {
-  if (event.strStatus === "AP") {
+const isGroupStageMatch = (match: TheSportsDbLocalMatch) =>
+  Boolean(match.stage && /^Group\b/i.test(match.stage));
+
+const normalizedScoreFromEvent = (event: TheSportsDbEvent, localMatch: TheSportsDbLocalMatch) => {
+  const extraHome = parseScore(event.intHomeScoreExtra);
+  const extraAway = parseScore(event.intAwayScoreExtra);
+  if (!isGroupStageMatch(localMatch) && extraHome !== null && extraAway !== null && extraHome !== extraAway) {
     return {
-      home: parseScore(event.intHomeScoreExtra),
-      away: parseScore(event.intAwayScoreExtra),
+      home: extraHome,
+      away: extraAway,
       source: "intHomeScoreExtra/intAwayScoreExtra"
     };
   }
@@ -191,7 +196,7 @@ const normalizeEvent = (event: TheSportsDbEvent, localMatch: TheSportsDbLocalMat
   rawStatus: event.strStatus || null,
   source,
   matchedLocalMatchId: localMatch.id,
-  score: normalizedScoreFromEvent(event)
+  score: normalizedScoreFromEvent(event, localMatch)
 });
 
 const eventMatchesLocal = (

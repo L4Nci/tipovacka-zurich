@@ -136,6 +136,9 @@ const isGroupStageMatch = (match?: LocalMatch | null) =>
 const isKnownKnockoutStage = (stage: string) =>
   /^(Round of 32|Round of 16|Quarterfinal|Semifinal|Third place|Final)$/i.test(stage.trim());
 
+const isPlayoffMatch = (match?: LocalMatch | null) =>
+  Boolean(match?.stage && !isGroupStageMatch(match) && isKnownKnockoutStage(String(match.stage)));
+
 const isTbaValue = (value?: string | null) =>
   normalizeName(value) === "tba" || String(value || "").trim().toLowerCase() === "football-tba";
 
@@ -501,33 +504,15 @@ export async function applyMatchResult({
 const hasProviderScore = (apiFixture: TheSportsDbFixtureSummary) =>
   Number.isInteger(apiFixture.score.home) && Number.isInteger(apiFixture.score.away);
 
+const hasDrawProviderScore = (apiFixture: TheSportsDbFixtureSummary) =>
+  hasProviderScore(apiFixture) && apiFixture.score.home === apiFixture.score.away;
+
 export const getProviderResultStatus = (apiFixture: TheSportsDbFixtureSummary) => {
-  const status = apiFixture.statusShort || "unknown";
+  const status = (apiFixture.statusShort || "unknown").toUpperCase();
   const hasScore = hasProviderScore(apiFixture);
+  const finishedStatuses = new Set(["FT", "AP", "AET", "PEN"]);
 
-  if (status === "FT") {
-    return { isFinished: true, hasScore, conflictReason: null as string | null, skipReason: null as string | null };
-  }
-
-  if (status === "AP") {
-    if (!hasScore) {
-      return {
-        isFinished: false,
-        hasScore,
-        conflictReason: "TheSportsDB AP fixture is missing valid intHomeScoreExtra/intAwayScoreExtra final score.",
-        skipReason: null as string | null
-      };
-    }
-
-    if (apiFixture.score.home === apiFixture.score.away) {
-      return {
-        isFinished: false,
-        hasScore,
-        conflictReason: "TheSportsDB AP fixture final score is still a draw; refusing playoff draw write.",
-        skipReason: null as string | null
-      };
-    }
-
+  if (finishedStatuses.has(status)) {
     return { isFinished: true, hasScore, conflictReason: null as string | null, skipReason: null as string | null };
   }
 
@@ -535,7 +520,7 @@ export const getProviderResultStatus = (apiFixture: TheSportsDbFixtureSummary) =
     isFinished: false,
     hasScore,
     conflictReason: null as string | null,
-    skipReason: `TheSportsDB status ${status} is not FT or valid AP.`
+    skipReason: `TheSportsDB status ${status} is not FT, AP, AET, or PEN.`
   };
 };
 
@@ -557,6 +542,9 @@ function buildTheSportsDbItem(apiFixture: TheSportsDbFixtureSummary, localMatche
   } else if (!providerResultStatus.isFinished) {
     action = "skip_not_finished";
     reason = providerResultStatus.skipReason || `TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT.`;
+  } else if (isPlayoffMatch(localMatch) && hasDrawProviderScore(apiFixture)) {
+    action = "conflict";
+    reason = "TheSportsDB playoff fixture final score is a draw; refusing playoff draw write.";
   } else if (localMatch.status === "finished" || (localMatch.home_score !== null && localMatch.away_score !== null)) {
     action = "skip_already_finished";
     reason = "Local match already has a finished status or stored score; dry-run will not overwrite it.";
@@ -807,7 +795,11 @@ export async function executeTheSportsDbWriteSync(supabaseAdmin: SupabaseClient,
       continue;
     }
     if (!providerResultStatus.isFinished) {
-      items.push({ ...baseItem, action: "skipped", reason: `Write guard: ${providerResultStatus.skipReason || `TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT or valid AP.`}` });
+      items.push({ ...baseItem, action: "skipped", reason: `Write guard: ${providerResultStatus.skipReason || `TheSportsDB status ${apiFixture.statusShort || "unknown"} is not FT, AP, AET, or PEN.`}` });
+      continue;
+    }
+    if (isPlayoffMatch(localMatch) && hasDrawProviderScore(apiFixture)) {
+      items.push({ ...baseItem, action: "conflict", reason: "Write guard: TheSportsDB playoff fixture final score is a draw; refusing playoff draw write." });
       continue;
     }
     if (!providerResultStatus.hasScore) {
