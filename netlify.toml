@@ -19,6 +19,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin/sync-fixtures"
+  to = "/.netlify/functions/sync-fixtures"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

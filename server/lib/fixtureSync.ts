@@ -36,6 +36,32 @@ type Participant = {
   short_name?: string | null;
 };
 
+type FixtureDryRunItem = {
+  action: "would_update" | "skip_missing_provider" | "conflict" | "skipped";
+  reason: string;
+  provider: "thesportsdb";
+  local_match_id: string;
+  local_stage: TheSportsDbFixtureStage;
+  old_home_participant_id: string;
+  old_away_participant_id: string;
+  old_start_time_utc: string;
+  old_lock_time_utc: string;
+  local_status: string | null;
+  local_score: { home: number | null; away: number | null };
+  predictions_count: number;
+  provider_match_id: string | null;
+  provider_stage: TheSportsDbFixtureStage | null;
+  provider_round: string | null;
+  provider_status: string | null;
+  provider_home_name: string | null;
+  provider_away_name: string | null;
+  new_home_participant_id: string | null;
+  new_away_participant_id: string | null;
+  new_start_time_utc: string | null;
+  new_lock_time_utc: string | null;
+  mapping_confidence: number;
+};
+
 const normalizeName = (value?: string | null) =>
   String(value || "")
     .normalize("NFD")
@@ -161,7 +187,7 @@ function buildItem({
   action: "would_update" | "skip_missing_provider" | "conflict" | "skipped";
   reason: string;
   mappingConfidence: number;
-}) {
+}): FixtureDryRunItem {
   return {
     action,
     reason,
@@ -241,7 +267,7 @@ export async function buildTheSportsDbFixtureDryRunResponse(supabaseAdmin: Supab
   const localByStage = groupByStage(localCandidates);
   const providerByStage = groupByStage(providerCandidates);
   const findParticipant = participantLookup(participants);
-  const items = [];
+  const items: FixtureDryRunItem[] = [];
 
   for (const stage of SUPPORTED_STAGES) {
     const stageLocalMatches = (localByStage.get(stage) || []).sort((a, b) =>
@@ -372,6 +398,164 @@ export async function buildTheSportsDbFixtureDryRunResponse(supabaseAdmin: Supab
       },
       provider_error: providerResult.provider_error,
       provider_requests: providerResult.requests,
+      items
+    }
+  };
+}
+
+const disabledFixtureWriteResponse = (request: SyncRequest) => ({
+  statusCode: 403,
+  body: {
+    success: false,
+    mode: "write",
+    provider: "thesportsdb",
+    write_enabled: false,
+    wrote_to_db: false,
+    error: "Fixture sync write mode is disabled. Set FIXTURE_SYNC_WRITE_ENABLED=true to allow guarded fixture writes.",
+    api_request: {
+      provider: request.provider || "missing",
+      tournament_id: request.tournamentId || WORLD_CUP_TOURNAMENT_ID
+    },
+    summary: {
+      local_tba_matches_checked: 0,
+      provider_fixtures_received: 0,
+      updated: 0,
+      skipped: 0,
+      conflicts: 0,
+      failed: 0
+    },
+    safety: {
+      db_writes_performed: false,
+      matches_updated: 0,
+      predictions_updated: 0,
+      points_updated: 0,
+      scores_updated: 0,
+      statuses_updated: 0
+    },
+    items: []
+  }
+});
+
+const isSafeWriteItem = (item: FixtureDryRunItem) =>
+  item.action === "would_update" &&
+  item.mapping_confidence === 100 &&
+  item.provider_match_id &&
+  item.new_home_participant_id &&
+  item.new_away_participant_id &&
+  item.new_start_time_utc &&
+  item.new_lock_time_utc &&
+  item.local_status === "scheduled" &&
+  item.local_score.home === null &&
+  item.local_score.away === null &&
+  (isTba(item.old_home_participant_id) || isTba(item.old_away_participant_id)) &&
+  SUPPORTED_STAGES.includes(item.local_stage);
+
+export async function executeTheSportsDbFixtureWriteSync(supabaseAdmin: SupabaseClient, request: SyncRequest) {
+  if (request.provider !== "thesportsdb") {
+    return { statusCode: 400, body: { error: `Unsupported fixture write provider: ${request.provider || "missing"}` } };
+  }
+
+  const tournamentId = String(request.tournamentId || WORLD_CUP_TOURNAMENT_ID);
+  if (tournamentId !== WORLD_CUP_TOURNAMENT_ID) {
+    return { statusCode: 400, body: { error: `Unsupported tournamentId for fixture write: ${tournamentId}` } };
+  }
+
+  if (process.env.FIXTURE_SYNC_WRITE_ENABLED !== "true") {
+    return disabledFixtureWriteResponse(request);
+  }
+
+  const dryRun = await buildTheSportsDbFixtureDryRunResponse(supabaseAdmin, request);
+  if (dryRun.statusCode !== 200) return dryRun;
+
+  const dryRunBody = dryRun.body as Record<string, any>;
+  const dryRunItems = (dryRunBody.items || []) as FixtureDryRunItem[];
+  const items: Array<Record<string, unknown> & { action: "updated" | "skipped" | "conflict" | "failed" }> = [];
+  let matchesUpdated = 0;
+  let failed = 0;
+
+  for (const item of dryRunItems) {
+    if (!isSafeWriteItem(item)) {
+      items.push({
+        ...item,
+        action: item.action === "would_update" ? "conflict" : "skipped",
+        reason: item.action === "would_update"
+          ? "Write guard: dry-run item is missing one or more required safe-write fields."
+          : item.reason
+      });
+      continue;
+    }
+
+    const { data: updatedRows, error: updateError } = await supabaseAdmin
+      .from("matches")
+      .update({
+        home_participant_id: item.new_home_participant_id,
+        away_participant_id: item.new_away_participant_id,
+        start_time_utc: item.new_start_time_utc,
+        lock_time_utc: item.new_lock_time_utc,
+        provider_name: "thesportsdb",
+        provider_match_id: item.provider_match_id,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", item.local_match_id)
+      .eq("tournament_id", tournamentId)
+      .eq("stage", item.local_stage)
+      .eq("status", "scheduled")
+      .is("home_score", null)
+      .is("away_score", null)
+      .or("home_participant_id.eq.football-tba,away_participant_id.eq.football-tba")
+      .select("id");
+
+    if (updateError || !updatedRows || updatedRows.length !== 1) {
+      failed += 1;
+      items.push({
+        ...item,
+        action: "failed",
+        reason: updateError?.message || `Write guard: expected 1 updated row, got ${updatedRows?.length ?? 0}.`
+      });
+      continue;
+    }
+
+    matchesUpdated += 1;
+    items.push({
+      ...item,
+      action: "updated",
+      reason: "Fixture sync wrote guarded TBA fixture metadata."
+    });
+  }
+
+  const counts = countByAction(items);
+
+  return {
+    statusCode: 200,
+    body: {
+      success: failed === 0,
+      mode: "write",
+      provider: "thesportsdb",
+      write_enabled: true,
+      wrote_to_db: matchesUpdated > 0,
+      requested_at: new Date().toISOString(),
+      tournament_id: tournamentId,
+      api_request: dryRunBody.api_request,
+      summary: {
+        local_tba_matches_checked: dryRunBody.summary?.local_tba_matches_checked || 0,
+        provider_fixtures_received: dryRunBody.summary?.provider_fixtures_received || 0,
+        updated: counts.updated || 0,
+        skipped: counts.skipped || 0,
+        conflicts: counts.conflict || 0,
+        failed: counts.failed || 0,
+        provider_requests_count: dryRunBody.summary?.provider_requests_count || 0,
+        provider_requests_failed: dryRunBody.summary?.provider_requests_failed || 0,
+        rate_limited_count: dryRunBody.summary?.rate_limited_count || 0
+      },
+      safety: {
+        db_writes_performed: matchesUpdated > 0,
+        matches_updated: matchesUpdated,
+        predictions_updated: 0,
+        points_updated: 0,
+        scores_updated: 0,
+        statuses_updated: 0
+      },
+      provider_error: dryRunBody.provider_error,
       items
     }
   };
