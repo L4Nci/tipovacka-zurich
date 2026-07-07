@@ -49,6 +49,8 @@ const STAGE_ROUNDS: Array<{ stage: TheSportsDbFixtureStage; round: string }> = [
   { stage: "Final", round: "1" }
 ];
 
+const QUARTERFINAL_FALLBACK_ROUND = "125";
+
 type TheSportsDbPayload = {
   event?: TheSportsDbFixtureEvent[] | null;
   events?: TheSportsDbFixtureEvent[] | string | null;
@@ -171,6 +173,12 @@ export async function fetchTheSportsDbPlayoffFixtures() {
     const result = await fetchRound(stage, round);
     fixtures.push(...result.fixtures);
     requests.push(result.request);
+
+    if (stage === "Quarterfinal" && result.fixtures.length === 0) {
+      const fallbackResult = await fetchRound(stage, QUARTERFINAL_FALLBACK_ROUND);
+      fixtures.push(...fallbackResult.fixtures);
+      requests.push(fallbackResult.request);
+    }
   }
 
   const providerRequestsFailed = requests.filter(request =>
