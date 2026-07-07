@@ -241,11 +241,21 @@ const TeamFlag = ({ code, className = "w-6 h-4" }: { code: string | null | undef
     'aut': 'at', 'fra': 'fr', 'slo': 'si', 'hun': 'hu',
     'gbr': 'gb', 'pol': 'pl', 'ita': 'it', 'slv': 'si',
     'kor': 'kr', 'jpn': 'jp', 'aus': 'au', 'bel': 'be', 
-    'ukr': 'ua'
+    'ukr': 'ua',
+    'eng': 'gb-eng', 'england': 'gb-eng', 'football-eng': 'gb-eng',
+    'sco': 'gb-sct', 'scotland': 'gb-sct', 'football-sco': 'gb-sct',
+    'wal': 'gb-wls', 'wales': 'gb-wls', 'football-wal': 'gb-wls'
+  };
+
+  const subdivisionEmojiMap: Record<string, string> = {
+    "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}": "gb-eng",
+    "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}": "gb-sct",
+    "\u{1F3F4}\u{E0067}\u{E0062}\u{E0077}\u{E006C}\u{E0073}\u{E007F}": "gb-wls"
   };
 
   const clean = code.trim().toLowerCase();
-  const iso = isoFromEmoji || map[clean] || (clean.length === 2 ? clean : null);
+  const subdivisionIso = map[clean] || subdivisionEmojiMap[code];
+  const iso = subdivisionIso || isoFromEmoji || (clean.length === 2 ? clean : null);
 
   // If we can't determine ISO, or both image attempts failed
   if (!iso || (error && retry)) {
