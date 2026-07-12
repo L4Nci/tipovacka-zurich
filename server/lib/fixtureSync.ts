@@ -6,7 +6,7 @@ import {
 } from "./fixtureProviders/theSportsDbFixtures.ts";
 
 const WORLD_CUP_TOURNAMENT_ID = "fifa-world-cup-2026";
-const SUPPORTED_STAGES: TheSportsDbFixtureStage[] = ["Round of 16", "Quarterfinal", "Semifinal", "Final"];
+const SUPPORTED_STAGES: TheSportsDbFixtureStage[] = ["Round of 16", "Quarterfinal", "Semifinal", "Third Place", "Final"];
 const FINISHED_PROVIDER_STATUSES = new Set(["FT", "AP", "AET", "PEN"]);
 
 type SyncRequest = {
@@ -369,6 +369,7 @@ export async function buildTheSportsDbFixtureDryRunResponse(supabaseAdmin: Supab
           { stage: "Round of 16", round: "16" },
           { stage: "Quarterfinal", round: "8" },
           { stage: "Semifinal", round: "4" },
+          { stage: "Third Place", round: "3" },
           { stage: "Final", round: "1" }
         ],
         provider_requests_count: providerResult.requests.length,
