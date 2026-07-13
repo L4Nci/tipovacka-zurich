@@ -427,6 +427,9 @@ const MatchCard: React.FC<MatchCardProps> = ({
       isEmpty: false
     };
   }, [isFootballKnockout, matchPredictions]);
+  const otherPredictionsCount = (showOthers ? others : matchPredictions)
+    .filter(p => p.player_id !== userId)
+    .length;
 
   const calcPoints = (ph: number, pa: number) => {
     if (match.home_score === null || match.away_score === null) return 0;
@@ -622,7 +625,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
         >
           {showOthers ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           {showOthers ? t.hide : t.show} {t.othersTip}
-          <span className="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-md font-bold text-[10px] transition-colors">{match.total_predictions ?? 0} {t.tipsCount}</span>
+          <span className="ml-1 bg-slate-100 px-1.5 py-0.5 rounded-md font-bold text-[10px] transition-colors">{otherPredictionsCount} {t.tipsCount}</span>
         </button>
       </div>
 
