@@ -3,6 +3,30 @@ import { calculatePoints } from "./scoring.ts";
 import { isDrawPrediction, isFootballKnockoutStage } from "./matchRules.ts";
 import { Player, Team, Match, Prediction, Lobby, TournamentParticipant } from "../types.ts";
 
+const SUPABASE_PAGE_SIZE = 1000;
+const SUPABASE_MAX_PAGES = 20;
+
+const fetchAllSupabaseRows = async <T>(query: any, label: string): Promise<T[]> => {
+  const rows: T[] = [];
+
+  for (let page = 0; page < SUPABASE_MAX_PAGES; page++) {
+    const from = page * SUPABASE_PAGE_SIZE;
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await query.range(from, to);
+
+    if (error) throw error;
+
+    const pageRows = (data || []) as T[];
+    rows.push(...pageRows);
+
+    if (pageRows.length < SUPABASE_PAGE_SIZE) {
+      return rows;
+    }
+  }
+
+  throw new Error(`${label} exceeded safe pagination limit (${SUPABASE_MAX_PAGES * SUPABASE_PAGE_SIZE} rows).`);
+};
+
 /**
  * Direct check of active session.
  * Used on app mount to restore user profile.
@@ -815,7 +839,10 @@ export const fetchLobbyLeaderboard = async (lobbyId: string, tournamentId?: stri
         tournament_id
       )
     `)
-    .eq("lobby_id", lobbyId);
+    .eq("lobby_id", lobbyId)
+    .order("user_id", { ascending: true })
+    .order("lobby_id", { ascending: true })
+    .order("match_id", { ascending: true });
 
   if (tournamentId) {
     const { data: tMatches } = await supabase
@@ -831,8 +858,7 @@ export const fetchLobbyLeaderboard = async (lobbyId: string, tournamentId?: stri
     }
   }
 
-  const { data: preds, error: predsErr } = await predsQuery;
-  if (predsErr) throw predsErr;
+  const preds = await fetchAllSupabaseRows<any>(predsQuery, "fetchLobbyLeaderboard predictions");
 
   // 2b. Get longterm predictions of this lobby to aggregate points and determine chosen winners
   let ltQuery = supabase
@@ -1038,7 +1064,10 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
   let predsQuery = supabase
     .from("predictions")
     .select("*")
-    .eq("lobby_id", activeLobbyId);
+    .eq("lobby_id", activeLobbyId)
+    .order("user_id", { ascending: true })
+    .order("lobby_id", { ascending: true })
+    .order("match_id", { ascending: true });
 
   if (targetTournamentId) {
     const { data: tMatches } = await supabase
@@ -1054,7 +1083,7 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
     }
   }
 
-  const { data: allPreds } = await predsQuery;
+  const allPreds = await fetchAllSupabaseRows<any>(predsQuery, "fetchAllData predictions");
 
   const matchById = new Map(matches.map(match => [match.id, match]));
   const formattedPreds: Prediction[] = (allPreds || []).map(p => {
