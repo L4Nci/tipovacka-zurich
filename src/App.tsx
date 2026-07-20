@@ -892,6 +892,8 @@ export default function App() {
   const [lobbySuccess, setLobbySuccess] = useState("");
 
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
+  const [championMsg, setChampionMsg] = useState('');
+  const [championError, setChampionError] = useState('');
   const [adminMatchFilter, setAdminMatchFilter] = useState<'scheduled' | 'finished'>('scheduled');
   const [adminGroupFilter, setAdminGroupFilter] = useState('all');
   const [showCreatePlayer, setShowCreatePlayer] = useState(false);
@@ -1198,10 +1200,33 @@ export default function App() {
   };
 
   const setTournamentWinner = async (teamId: string) => {
+    setChampionMsg('');
+    setChampionError('');
+
     try {
-      await setWinnerDB(user?.id || '', teamId, activeLobby?.tournament_id || 'fifa-world-cup-2026');
+      const tournamentId = activeTournamentId || activeLobby?.tournament_id || 'fifa-world-cup-2026';
+      const champion = winnerPickerTeams.find(tm => tm.id === teamId) || teams.find(tm => tm.id === teamId);
+      const preview = await setWinnerDB(user?.id || '', teamId, tournamentId, { previewOnly: true });
+      const summary = preview.summary || {};
+      const confirmed = window.confirm(
+        `Potvrdit šampiona: ${champion?.name || preview.selected_champion?.name || teamId}?\n\n` +
+        `Tipů celkem: ${summary.longterm_predictions ?? 0}\n` +
+        `+10 bodů: ${summary.users_receiving_10 ?? 0}\n` +
+        `0 bodů: ${summary.users_receiving_0 ?? 0}\n` +
+        `Změněné řádky: ${summary.rows_that_would_change ?? 0}`
+      );
+
+      if (!confirmed) return;
+
+      const result = await setWinnerDB(user?.id || '', teamId, tournamentId, { confirm: true });
       await fetchAll();
+      setChampionMsg(
+        `Šampion potvrzen: ${result.selected_champion?.name || champion?.name || teamId}. ` +
+        `+10 bodů získá ${result.summary?.users_receiving_10 ?? 0} hráčů.`
+      );
+      setSelectedWinner(null);
     } catch (err: any) {
+      setChampionError(err.message);
       alert(err.message);
     }
   };
@@ -1455,6 +1480,20 @@ export default function App() {
     const leaderPoints = leaderboardWithStreaks[0].total_points ?? 0;
     return Math.min(0, (currentUserStats.total_points ?? 0) - leaderPoints);
   }, [currentUserStats, leaderboardWithStreaks]);
+
+  const officialWinnerTeam = useMemo(() => {
+    return teams.find(tm => tm.is_final_winner === 1) || null;
+  }, [teams]);
+
+  const adminChampionOptions = useMemo(() => {
+    return winnerPickerTeams.filter((tm: any) => {
+      const id = String(tm.id || '').toLowerCase();
+      return id.startsWith('football-') &&
+        id !== 'football-tba' &&
+        !id.startsWith('football-tba-') &&
+        String(tm.sport_id || '') === 'football';
+    });
+  }, [winnerPickerTeams]);
 
   if (!user) {
     const loginT = translations.cz; 
@@ -2009,20 +2048,15 @@ export default function App() {
               </AnimatePresence>
 
               {/* Official Winner Display - Only if decided */}
-              {teams.find(tm => tm.is_final_winner === 1) && (
+              {officialWinnerTeam && (
                 <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden mb-6">
                     <TrophyIcon className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 rotate-12" />
                     <div className="relative z-10 flex flex-col items-center text-center">
                       <p className="text-xs font-bold uppercase opacity-80 mb-2">{t.officialWinner}</p>
-                      {(() => {
-                        const officialWinner = teams.find(tm => tm.is_final_winner === 1);
-                        return (
-                          <div className="flex flex-col items-center">
-                            <TeamFlag code={officialWinner?.flag_code || officialWinner?.id} className="w-20 h-12 mb-2" />
-                            <span className="text-2xl font-black">{officialWinner?.name}</span>
-                          </div>
-                        );
-                      })()}
+                      <div className="flex flex-col items-center">
+                        <TeamFlag code={officialWinnerTeam.flag_code || officialWinnerTeam.id} className="w-20 h-12 mb-2" />
+                        <span className="text-2xl font-black">{officialWinnerTeam.name}</span>
+                      </div>
                     </div>
                 </div>
               )}
@@ -2030,6 +2064,7 @@ export default function App() {
               <div className="space-y-3">
                 {leaderboardWithStreaks.map((p, i) => {
                   const pTeamInfo = teams.find(tm => tm.id === p.tournament_winner_id) || winnerPickerTeams.find(tm => tm.id === p.tournament_winner_id);
+                  const hasCorrectChampionPick = Boolean(officialWinnerTeam && p.tournament_winner_id === officialWinnerTeam.id);
                   const rankTone = i === 0 ? 'bg-yellow-400 text-yellow-900' :
                     i === 1 ? 'bg-slate-300 text-slate-700' :
                     i === 2 ? 'bg-amber-600 text-amber-50' :
@@ -2072,6 +2107,12 @@ export default function App() {
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200/60">
                                   <TeamFlag code={pTeamInfo.flag_code || pTeamInfo.id} className="w-4 h-2.5 shadow-sm" />
                                   {pTeamInfo.short_name || pTeamInfo.name.substring(0, 3).toUpperCase()}
+                                </span>
+                              )}
+                              {hasCorrectChampionPick && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
+                                  <CheckCircle2 className="w-3 h-3 stroke-[3]" />
+                                  Správný tip · +10 bodů
                                 </span>
                               )}
                             </div>
@@ -2622,25 +2663,32 @@ export default function App() {
               <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 mt-8">
                  <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">{t.setFinalWinner}</h3>
                  <div className="grid grid-cols-4 gap-2 mb-4">
-                   {teams.map(t => (
+                   {adminChampionOptions.map(tm => (
                      <button
-                       key={t.id}
-                       onClick={() => setSelectedWinner(t.id)}
+                       key={tm.id}
+                       onClick={() => setSelectedWinner(tm.id)}
                        className={`p-2 rounded-xl flex flex-col items-center border transition-all ${
-                         selectedWinner === t.id ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-transparent'
+                         selectedWinner === tm.id ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-transparent'
                        }`}
                      >
-                       <TeamFlag code={t.flag_code || t.id} className="w-10 h-6 mb-1" />
-                       <span className="text-[10px] font-bold">{t.id.toUpperCase()}</span>
+                       <TeamFlag code={tm.flag_code || tm.id} className="w-10 h-6 mb-1" />
+                       <span className="text-[10px] font-bold">{(tm.short_name || tm.id).toUpperCase()}</span>
                      </button>
                    ))}
                  </div>
                  <button 
+                   disabled={!selectedWinner}
                    onClick={() => selectedWinner && setTournamentWinner(selectedWinner)}
-                   className="w-full py-3 bg-orange-600 text-white rounded-xl font-bold shadow-md shadow-orange-100"
+                   className={`w-full py-3 rounded-xl font-bold shadow-md transition-colors ${
+                     selectedWinner
+                       ? 'bg-orange-600 text-white shadow-orange-100'
+                       : 'bg-slate-100 text-slate-400 shadow-none cursor-not-allowed'
+                   }`}
                  >
                    {t.setFinalChampion}
                  </button>
+                 {championMsg && <p className="mt-2 text-[10px] text-green-600 font-bold text-center">{championMsg}</p>}
+                 {championError && <p className="mt-2 text-[10px] text-red-600 font-bold text-center">{championError}</p>}
               </div>
             </motion.div>
           )}

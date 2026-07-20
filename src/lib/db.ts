@@ -1150,20 +1150,36 @@ export const updateMatchResult = async (adminUserId: string, matchId: string, ho
 /**
  * Admin: Declare absolute final winner of tournament
  */
-export const setTournamentWinner = async (adminUserId: string, participantId: string, tournamentId: string = "fifa-world-cup-2026") => {
+export const setTournamentWinner = async (
+  adminUserId: string,
+  participantId: string,
+  tournamentId: string = "fifa-world-cup-2026",
+  options: { confirm?: boolean; previewOnly?: boolean } = {}
+) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
+
   const response = await fetch("/api/admin/set-tournament-winner", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers,
     body: JSON.stringify({
       userId: adminUserId,
       teamId: participantId,
-      tournamentId
+      tournamentId,
+      confirm: options.confirm === true,
+      previewOnly: options.previewOnly === true
     })
   });
 
-  const data = await response.json();
+  const data = await response.json().catch(() => ({
+    error: "Server nevrátil platnou JSON odpověď."
+  }));
   if (!response.ok) {
     throw new Error(data.error || "Nepodařilo se uložit vítěze turnaje.");
   }

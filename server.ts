@@ -7,6 +7,10 @@ import "dotenv/config";
 import { getSupabaseAdmin } from "./server/lib/supabaseAdmin.ts";
 import { fetchTheSportsDbFixturesForLocalMatches } from "./server/lib/resultProviders/theSportsDb.ts";
 import { calculatePoints } from "./src/lib/scoring.ts";
+import {
+  executeTournamentWinnerConfirmation,
+  tournamentWinnerErrorResponse
+} from "./server/lib/tournamentWinner.ts";
 
 
 const API_FOOTBALL_BASE_URL = "https://v3.football.api-sports.io";
@@ -1118,56 +1122,21 @@ async function startServer() {
   });
 
   app.post("/api/admin/set-tournament-winner", async (req, res) => {
-    const { userId, teamId, tournamentId = "fifa-world-cup-2026" } = req.body;
-
-    if (!userId || !teamId) {
-      return res.status(400).json({ error: "Chybějící parametry." });
-    }
-
     try {
-      const supabaseAdmin = getSupabaseAdmin();
+      const result = await executeTournamentWinnerConfirmation(getSupabaseAdmin(), {
+        userId: req.body.userId,
+        teamId: req.body.teamId,
+        tournamentId: req.body.tournamentId,
+        confirm: req.body.confirm === true,
+        previewOnly: req.body.previewOnly === true,
+        authorizationHeader: req.headers.authorization
+      });
 
-      const { data: profile, error: pErr } = await supabaseAdmin
-        .from("profiles")
-        .select("role")
-        .eq("id", userId)
-        .single();
-
-      if (pErr || profile?.role !== 'admin') {
-        return res.status(403).json({ error: "Pouze administrátor může vyhlásit celkového vítěze." });
-      }
-
-      const { error: tErr } = await supabaseAdmin
-        .from("tournaments")
-        .update({ actual_tournament_winner_id: teamId })
-        .eq("id", tournamentId);
-
-      if (tErr) throw tErr;
-
-      const { data: predictions, error: predsErr } = await supabaseAdmin
-        .from("longterm_predictions")
-        .select("*")
-        .eq("tournament_id", tournamentId)
-        .eq("prediction_type", "tournament_winner");
-
-      if (predsErr) throw predsErr;
-
-      for (const pred of predictions || []) {
-        const points = pred.predicted_participant_id === teamId ? 10 : 0;
-        const { error: scoreErr } = await supabaseAdmin
-          .from("longterm_predictions")
-          .update({ points_earned: points })
-          .eq("id", pred.id);
-
-        if (scoreErr) {
-          console.error(`Error scoring longterm prediction ${pred.id}:`, scoreErr);
-        }
-      }
-
-      res.json({ success: true });
+      res.status(result.statusCode).json(result.body);
     } catch (err: any) {
       console.error("Set tournament winner admin error:", err);
-      res.status(500).json({ error: "Chyba při nastavení vítěze turnaje: " + err.message });
+      const result = tournamentWinnerErrorResponse(err);
+      res.status(result.statusCode).json(result.body);
     }
   });
 
