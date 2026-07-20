@@ -94,6 +94,10 @@ During implementation:
 4. Preserve existing architecture unless the Issue explicitly asks for a design change.
 5. Do not silently fix side findings; propose a separate Issue.
 
+Documentation maintenance:
+
+If a change affects product behavior, architecture, workflow, application rules, sync, security, or another long-term decision, verify that the related documentation still matches the implementation. If docs no longer match, update them in the same PR/change or explicitly report that a follow-up documentation update is required. Do not knowingly leave the repository in a state where implementation and documentation describe different behavior.
+
 After implementation:
 
 1. Run relevant tests.
