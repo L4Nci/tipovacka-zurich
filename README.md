@@ -62,3 +62,12 @@ Veškeré případné finanční vyrovnání mezi hráči probíhá mimo aplikac
 Projekt vznikl z jednoduché myšlenky – zpříjemnit sledování sportovních akcí a odstranit chaos excelových tabulek a ručního počítání bodů.
 
 Stačí vytvořit lobby, pozvat přátele, natipovat zápasy a nechat aplikaci počítat vše za vás.
+
+## Contributor / Development workflow
+
+Konkrétní práce se eviduje v GitHub Issues. Pro netriviální změny vytvoř nebo najdi Issue, drž se jeho scope a propoj Pull Request s daným Issue.
+
+* Pravidla pro AI agenty a produkční bezpečnost: [AGENTS.md](AGENTS.md)
+* Lightweight GitHub Issue workflow: [docs/ISSUE_WORKFLOW.md](docs/ISSUE_WORKFLOW.md)
+* Agent-readable roadmap rámec: [docs/ROADMAP.md](docs/ROADMAP.md)
+* Detailní bugy, úkoly, research a rozhodnutí: GitHub Issues

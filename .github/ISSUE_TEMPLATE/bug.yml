@@ -1,0 +1,112 @@
+name: Bug
+description: Report a reproducible problem in an existing feature.
+title: "[Bug]: "
+labels:
+  - "type: bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when existing behavior differs from expected behavior.
+        For security issues, do not include secrets, API keys, passwords, or private user data.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Short description
+      description: What is broken?
+      placeholder: "Example: The leaderboard shows a lower total than the visible match points."
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Where does it happen?
+      description: Page, component, endpoint, admin flow, cron, or data area.
+      placeholder: "Example: Leaderboard screen / production / lobby-vlrsrxuh"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the smallest reliable path to reproduce the issue.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happens instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Frequency
+      options:
+        - Always
+        - Often
+        - Sometimes
+        - Once
+        - Unknown
+    validations:
+      required: true
+  - type: checkboxes
+    id: environment
+    attributes:
+      label: Environment
+      description: Select every environment where this was observed.
+      options:
+        - label: Production
+        - label: Preview
+        - label: Local development
+  - type: input
+    id: device
+    attributes:
+      label: Device or resolution
+      description: Include device/browser/resolution if relevant.
+      placeholder: "Example: iPhone 15 / Safari / 390px wide"
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshot, log, or evidence
+      description: Attach screenshots or paste relevant logs. Do not paste secrets.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Suggested severity
+      options:
+        - Critical — security, data loss, or the app is fundamentally unusable
+        - High — a core feature is unusable without a reasonable workaround
+        - Medium — a feature is limited, but a workaround exists
+        - Low — cosmetic or edge-case issue
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Possible impact
+      description: Who is affected and what can go wrong?
+      placeholder: "Example: Real leaderboard points may appear wrong for all users in one lobby."
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist before submitting
+      options:
+        - label: I searched existing Issues for a duplicate.
+          required: true
+        - label: I included reproduction steps or explained why they are unavailable.
+          required: true
+        - label: I did not include secrets, passwords, service-role keys, or private production data.
+          required: true
