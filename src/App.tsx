@@ -754,6 +754,68 @@ const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) 
   );
 };
 
+const AuthenticatedAppSkeleton = ({ t, error, onRetry }: { t: any, error: string, onRetry: () => void }) => (
+  <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300">
+    <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100 transition-colors">
+      <div className="flex items-center justify-between">
+        <div className="h-7 w-44 rounded-xl bg-slate-100 motion-safe:animate-pulse" />
+        <div className="h-8 w-8 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+      </div>
+    </header>
+
+    <main className="p-4">
+      <div className="flex gap-2 overflow-hidden pb-4 -mx-4 px-4 bg-slate-50 py-1">
+        {[0, 1, 2, 3].map(item => (
+          <div key={item} className="h-7 w-20 flex-none rounded-full bg-white border border-slate-100 motion-safe:animate-pulse" />
+        ))}
+      </div>
+
+      <div className="mb-4 flex items-center gap-2">
+        <div className="h-4 w-4 rounded bg-slate-200 motion-safe:animate-pulse" />
+        <div className="h-3 w-48 rounded bg-slate-200 motion-safe:animate-pulse" />
+      </div>
+
+      <div className="space-y-4">
+        {[0, 1, 2].map(item => (
+          <div key={item} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div className="mb-5 flex items-center justify-between">
+              <div className="h-3 w-20 rounded bg-slate-100 motion-safe:animate-pulse" />
+              <div className="h-6 w-20 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+            </div>
+            <div className="mb-6 flex items-center justify-around">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-12 w-20 rounded-lg bg-slate-100 motion-safe:animate-pulse" />
+                <div className="h-5 w-12 rounded bg-slate-100 motion-safe:animate-pulse" />
+              </div>
+              <div className="h-8 w-10 rounded bg-slate-100 motion-safe:animate-pulse" />
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-12 w-20 rounded-lg bg-slate-100 motion-safe:animate-pulse" />
+                <div className="h-5 w-12 rounded bg-slate-100 motion-safe:animate-pulse" />
+              </div>
+            </div>
+            <div className="h-28 rounded-2xl bg-slate-50 motion-safe:animate-pulse" />
+          </div>
+        ))}
+      </div>
+
+      {error ? (
+        <div className="mt-6 p-4 bg-white rounded-2xl border border-red-100 shadow-sm text-center">
+          <p className="text-red-600 text-xs font-bold uppercase mb-2">Error</p>
+          <p className="text-slate-600 text-sm mb-4">{error}</p>
+          <button
+            onClick={onRetry}
+            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-transform"
+          >
+            Try Again
+          </button>
+        </div>
+      ) : (
+        <p className="mt-6 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">{t.loading}</p>
+      )}
+    </main>
+  </div>
+);
+
 // --- Main App ---
 
 export default function App() {
@@ -1000,6 +1062,52 @@ export default function App() {
     return filter === 'all' || match.stage === filter;
   };
 
+  const predictionsByMatchId = useMemo(() => {
+    const byMatch = new Map<string, Prediction[]>();
+    allPredictions.forEach(prediction => {
+      const existing = byMatch.get(prediction.match_id);
+      if (existing) {
+        existing.push(prediction);
+      } else {
+        byMatch.set(prediction.match_id, [prediction]);
+      }
+    });
+    return byMatch;
+  }, [allPredictions]);
+
+  const scheduledMatchesForView = useMemo(() => {
+    return matches.filter(match => {
+      if (match.status !== 'scheduled') return false;
+      if (matchFilter === 'all') return true;
+      return matchPassesStageFilter(match, matchFilter);
+    });
+  }, [matches, matchFilter]);
+
+  const finishedMatchesForView = useMemo(() => {
+    return [...matches]
+      .filter(match => {
+        if (match.status !== 'finished') return false;
+        if (matchFilter === 'all') return true;
+        return matchPassesStageFilter(match, matchFilter);
+      })
+      .reverse();
+  }, [matches, matchFilter]);
+
+  const adminMatchesForView = useMemo(() => {
+    return matches
+      .filter(match => {
+        if (match.status !== adminMatchFilter) return false;
+        if (adminGroupFilter === 'all') return true;
+        return matchPassesStageFilter(match, adminGroupFilter);
+      })
+      .slice()
+      .sort((a, b) => {
+        const timeA = new Date(a.start_time_utc).getTime();
+        const timeB = new Date(b.start_time_utc).getTime();
+        return adminMatchFilter === 'finished' ? timeB - timeA : timeA - timeB;
+      });
+  }, [matches, adminMatchFilter, adminGroupFilter]);
+
   const tournamentStats = useMemo(() => {
     const defaultTournamentId = activeTournamentId
       || activeLobby?.tournaments?.find(tournament => tournament.status === 'active')?.tournament_id
@@ -1068,7 +1176,6 @@ export default function App() {
     try {
       setError('');
       const targetLobbyId = lobbyIdParam || activeLobbyId;
-      console.log("Fetching all data for user:", user.username, "Target Lobby:", targetLobbyId);
       
       const res = await fetchAllData(user.id, targetLobbyId || undefined, activeTournamentId || undefined);
       
@@ -1577,22 +1684,11 @@ export default function App() {
   }
 
   if (loading) return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-      <div className="w-8 h-8 border-4 border-red-600/20 border-t-red-600 rounded-full animate-spin mb-4" />
-      <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">{t.loading}</p>
-      {error && (
-        <div className="mt-6 p-4 bg-white rounded-2xl border border-red-100 shadow-sm max-w-xs text-center">
-          <p className="text-red-600 text-xs font-bold uppercase mb-2">Error</p>
-          <p className="text-slate-600 text-sm mb-4">{error}</p>
-          <button 
-            onClick={() => { setError(''); setLoading(true); fetchAll(); }}
-            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-transform"
-          >
-            Try Again
-          </button>
-        </div>
-      )}
-    </div>
+    <AuthenticatedAppSkeleton
+      t={t}
+      error={error}
+      onRetry={() => { setError(''); setLoading(true); fetchAll(); }}
+    />
   );
 
   if (!activeLobbyId) {
@@ -1908,13 +2004,7 @@ export default function App() {
                   <Calendar className="w-4 h-4 shrink-0" /> {t.upcoming}
                 </span>
               </h2>
-              {matches
-                .filter(m => {
-                  if (m.status !== 'scheduled') return false;
-                  if (matchFilter === 'all') return true;
-                  return matchPassesStageFilter(m, matchFilter);
-                })
-                .map(m => (
+              {scheduledMatchesForView.map(m => (
                  <MatchCard 
                    key={m.id} 
                    match={m} 
@@ -1922,15 +2012,11 @@ export default function App() {
                    userId={user.id}
                    t={t}
                    onPredict={(h, a) => savePrediction(m.id, h, a)}
-                   matchPredictions={allPredictions.filter(p => p.match_id === m.id)}
+                   matchPredictions={predictionsByMatchId.get(m.id) || []}
                    isHockey={isHockey}
                  />
                ))}
-              {matches.filter(m => {
-                  if (m.status !== 'scheduled') return false;
-                  if (matchFilter === 'all') return true;
-                  return matchPassesStageFilter(m, matchFilter);
-               }).length === 0 && (
+              {scheduledMatchesForView.length === 0 && (
                 <div className="text-center py-12 text-slate-400">{t.noUpcoming}</div>
               )}
             </motion.div>
@@ -1946,14 +2032,7 @@ export default function App() {
               <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                  <CheckCircle2 className="w-4 h-4" /> {t.finished}
               </h2>
-              {[...matches]
-                .filter(m => {
-                  if (m.status !== 'finished') return false;
-                  if (matchFilter === 'all') return true;
-                  return matchPassesStageFilter(m, matchFilter);
-                })
-                .reverse()
-                .map(m => (
+              {finishedMatchesForView.map(m => (
                  <MatchCard 
                    key={m.id} 
                    match={m} 
@@ -1961,15 +2040,11 @@ export default function App() {
                    isFinished 
                    userId={user.id} 
                    t={t} 
-                   matchPredictions={allPredictions.filter(p => p.match_id === m.id)}
+                   matchPredictions={predictionsByMatchId.get(m.id) || []}
                    isHockey={isHockey}
                  />
                ))}
-               {matches.filter(m => {
-                  if (m.status !== 'finished') return false;
-                  if (matchFilter === 'all') return true;
-                  return matchPassesStageFilter(m, matchFilter);
-               }).length === 0 && (
+               {finishedMatchesForView.length === 0 && (
                 <div className="text-center py-12 text-slate-400">{t.noResults}</div>
               )}
             </motion.div>
@@ -2639,18 +2714,7 @@ export default function App() {
                 ))}
               </div>
 
-              {matches
-                 .filter(m => {
-                    if (m.status !== adminMatchFilter) return false;
-                    if (adminGroupFilter === 'all') return true;
-                    return matchPassesStageFilter(m, adminGroupFilter);
-                 })
-                 .sort((a, b) => {
-                    const timeA = new Date(a.start_time_utc).getTime();
-                    const timeB = new Date(b.start_time_utc).getTime();
-                    return adminMatchFilter === 'finished' ? timeB - timeA : timeA - timeB;
-                 })
-                 .map(m => (
+              {adminMatchesForView.map(m => (
                     <AdminMatchCard 
                       key={m.id} 
                       match={m} 

@@ -620,15 +620,6 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
     console.warn("Could not fetch tournament_participants. Error/Missing table:", tpErr);
   }
   
-  const tpSet = new Set(tpData?.map((tp: any) => tp.participant_id) || []);
-  
-  console.log("DEBUG fetchLobbyDashboard:", {
-    tournamentId,
-    participants_raw_length: participants?.length,
-    tournament_participants_length: tpData?.length,
-    tpSet_size: tpSet.size
-  });
-
   const participantsMap = new Map();
   participants?.forEach(p => participantsMap.set(p.id, p));
 
