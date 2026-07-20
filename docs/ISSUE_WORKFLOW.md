@@ -1,98 +1,96 @@
-# GitHub Issue Workflow
+# Solo Owner Issue Workflow
 
-GitHub Issues are the source of truth for concrete work in Tipovačka: bugs, technical tasks, feature requests, research, and decisions. Keep the workflow lightweight; there are no sprints, capacity planning, or complex status boards.
+GitHub Issues are lightweight project memory for Tipovačka. They capture bugs, desired changes, research questions, decisions, and context that should not disappear in chat history.
 
-## When to Create a Bug
+This is a solo-owner workflow with Codex as the main collaborator. There are no sprints, capacity planning, assignee rituals, formal acceptance ceremonies, or GitHub Projects requirements.
 
-A bug is a difference between expected and actual behavior in an existing feature.
+## Normal Flow
 
-Examples:
+1. The owner describes a bug, feature, improvement, or research question in normal language.
+2. If the owner explicitly asks to create an Issue and GitHub write access is available, Codex searches open Issues for duplicates.
+3. If no duplicate exists, Codex creates a concise Issue with an appropriate type and priority.
+4. Codex audits the Issue against the real repository state and proposes a solution.
+5. For risky work, the owner approves before implementation.
+6. Codex implements only after approval when approval is needed.
+7. The owner reviews, commits, and pushes.
+8. Codex may comment on or close the Issue only after the owner explicitly confirms acceptance, unless a reviewed merged PR closes it with `Closes #123`.
 
-- leaderboard total does not match stored/recalculated points,
-- a page renders wrong data,
-- a guarded endpoint returns the wrong status,
-- a production-only route is missing.
+If GitHub write access is unavailable, Codex should return the exact proposed Issue title, body, and labels for the owner to create manually.
 
-## When to Create a Feature or Improvement
+## What an Issue Needs
 
-- A feature adds a new capability.
-- An improvement makes an existing capability clearer, faster, safer, or easier to use without necessarily fixing broken behavior.
-- A technical task is implementation work that has a clear target but may not be user-facing.
+An Issue should be concise but sufficient to reproduce or understand the work.
 
-The Issue should describe the problem and desired outcome. It does not need to prescribe the technical solution unless that solution is already known.
+Good Issue content usually includes:
 
-## When to Create Research
+- root problem or desired outcome,
+- relevant evidence or context,
+- expected result,
+- important constraints such as no DB writes, no scoring changes, no deployment changes,
+- links to related docs, screenshots, logs, or prior decisions when useful.
 
-Create a research Issue when the correct solution or decision is not clear yet.
+Do not turn Issues into bureaucracy. If a short Issue is enough, keep it short.
 
-The output can be:
+## Types
 
-- recommendation,
-- comparison table,
-- proof of concept,
-- Architecture Decision Record,
-- new technical Issues.
+- `type: bug` — existing behavior is wrong.
+- `type: feature` — adds a new capability.
+- `type: improvement` — improves existing behavior or implementation.
+- `type: research` — explores a question before implementation.
 
-## Recommended Issue Lifecycle
+## Normal Labels
 
-1. Issue is created.
-2. Context is added.
-3. Priority is assigned.
-4. If ready for implementation, it gets `agent: ready`.
-5. Agent analyzes the Issue and current code.
-6. Agent implements on a separate branch.
-7. Agent creates a Pull Request linked to the Issue.
-8. Tests and review run.
-9. After merge, the Issue closes if it is truly complete.
-10. If manual verification is needed, the Issue remains open or gets `needs: verification`.
+Use the smallest useful label set in daily work:
 
-## Ready for Codex
+- `type: bug`
+- `type: feature`
+- `type: improvement`
+- `type: research`
+- `priority: P1` — core flow broken, release blocker, data trust, or serious production issue
+- `priority: P2` — important but not blocking
+- `priority: P3` — small, cosmetic, or backlog
+- `needs: decision` — owner/product/technical decision needed before implementation
 
-An Issue may get `agent: ready` only when it includes:
+Other prepared labels may remain available for exceptional cases, but they are not required for normal work.
 
-- clear problem or goal,
-- acceptance criteria,
-- needed context,
-- known constraints,
-- whether Codex should only analyze or may also implement.
+## Codex Issue Behavior
 
-## How Codex Should Respond
+When the owner says “create an Issue for this”:
 
-If the request is underspecified, Codex should not guess critical product behavior. It should:
+- search existing open Issues first when GitHub tools are available,
+- do not create duplicates,
+- choose a concise title,
+- choose type and priority labels,
+- include the root problem, relevant evidence, expected outcome, and implementation constraints,
+- keep the body short and useful,
+- if GitHub write access is unavailable, return the exact proposed title/body/labels.
 
-- describe the ambiguity,
-- ask a concrete question,
-- suggest `needs: decision` when appropriate.
+Codex must not close an Issue until the owner confirms the fix is accepted, unless a reviewed merged PR explicitly closes it.
 
-If Codex finds a separate problem while working:
+## Implementation and Review
 
-- do not fix it silently,
-- describe it in the PR or final report,
-- propose a separate Issue.
+Not every trivial fix needs a separate branch or PR. For non-trivial changes, prefer a Pull Request linked to the Issue. Use `Closes #123` only when the PR fully resolves the Issue.
 
-## Labels
+Owner approval is required before risky work, especially changes touching:
 
-Use the minimal label set prepared in [scripts/setup-github-labels.sh](../scripts/setup-github-labels.sh):
+- production data,
+- database schema or RLS,
+- scoring or leaderboard logic,
+- locking rules,
+- auth or roles,
+- result sync or fixture sync,
+- deployment.
 
-- type labels describe the kind of Issue,
-- priority labels describe urgency,
-- workflow labels describe current state,
-- area labels describe the broad system area.
-
-Avoid creating labels for every screen, component, or one-off topic.
-
-## Pull Requests
-
-Every non-trivial PR should reference a concrete Issue. Use `Closes #123` only when the PR fully completes the Issue. For UI/UX, product behavior, scoring, auth, sync, database, and hard-to-automate changes, prefer owner review before merge.
+For UI/product changes, the owner confirms acceptance after reviewing the result. Until then, the Issue can remain open.
 
 ## Automation
 
-No GitHub Projects or roadmap automation is required for the current workflow.
+Do not introduce complex GitHub Projects or roadmap automation for this workflow.
 
-A future GitHub Actions workflow can be useful if it stays small and only:
+A future small GitHub Actions workflow may be useful if it only:
 
-- checks that a non-trivial PR references an Issue,
-- reminds authors to complete the PR template,
+- checks PR structure,
+- reminds about a missing Issue link,
 - runs existing checks such as `npm run lint`, `npm run build`, and `git diff --check`.
 
-It must not merge, deploy, mutate production data, close Issues without a linked merge, or mark unverified work as done.
+It must not merge, deploy, mutate production data, close Issues without owner acceptance or a reviewed merge, or mark unverified work as done.

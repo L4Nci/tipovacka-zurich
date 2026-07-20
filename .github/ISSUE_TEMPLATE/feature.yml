@@ -1,5 +1,5 @@
-name: Feature / Improvement / Technical Task
-description: Request a new capability, improve an existing feature, or define a technical task.
+name: Feature / Improvement
+description: Capture a desired change or improvement.
 title: "[Feature]: "
 labels:
   - "type: feature"
@@ -7,32 +7,27 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this for product features, improvements, and technical tasks.
-        If the correct solution is not clear yet, use the Research form instead.
+        Use this for a new capability, UI improvement, technical cleanup, or small product improvement.
+        A full technical design is optional.
   - type: textarea
-    id: problem
+    id: change
     attributes:
-      label: Problem or need
-      description: What user or project need should this address?
+      label: Problem or desired change
+      description: What should change, and what is the current pain?
     validations:
       required: true
   - type: textarea
-    id: solution
+    id: why
     attributes:
-      label: Proposed solution
-      description: Describe the desired outcome. A technical implementation is optional.
-  - type: textarea
-    id: value
-    attributes:
-      label: Value
-      description: Why is this useful for users or the project?
+      label: Why it matters
+      description: What user or project value does this create?
     validations:
       required: true
   - type: textarea
-    id: acceptance
+    id: outcome
     attributes:
-      label: Acceptance criteria
-      description: What must be true for this Issue to be considered done?
+      label: Expected outcome
+      description: What should be true when this is done?
       placeholder: |
         - ...
         - ...
@@ -41,29 +36,5 @@ body:
   - type: textarea
     id: out_of_scope
     attributes:
-      label: Out of scope
-      description: What should not be changed as part of this Issue?
-  - type: textarea
-    id: alternatives
-    attributes:
-      label: Alternatives considered
-      description: Optional notes about other approaches.
-  - type: textarea
-    id: dependencies
-    attributes:
-      label: Dependencies
-      description: Related Issues, docs, decisions, data, env vars, providers, or blockers.
-  - type: textarea
-    id: notes
-    attributes:
-      label: Notes and context
-      description: Links, screenshots, examples, design notes, or implementation hints.
-  - type: checkboxes
-    id: agent_scope
-    attributes:
-      label: Agent scope
-      description: Clarify whether Codex or another agent may implement this directly.
-      options:
-        - label: Codex may analyze this Issue.
-        - label: Codex may implement this Issue after confirming scope.
-        - label: This Issue needs owner/product decision before implementation.
+      label: Out of scope, optional
+      description: What should not be changed as part of this?

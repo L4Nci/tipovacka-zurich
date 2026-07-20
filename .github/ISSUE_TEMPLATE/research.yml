@@ -1,5 +1,5 @@
-name: Research / Decision
-description: Explore options before choosing an implementation.
+name: Research
+description: Capture a question or decision before implementation.
 title: "[Research]: "
 labels:
   - "type: research"
@@ -7,60 +7,22 @@ body:
   - type: textarea
     id: question
     attributes:
-      label: Question to answer
-      description: What decision or unknown should this research resolve?
+      label: Question
+      description: What should be investigated or decided?
     validations:
       required: true
   - type: textarea
     id: why
     attributes:
-      label: Why this matters
-      description: What product, technical, operational, or safety risk depends on this?
+      label: Why it matters
+      description: What product, technical, safety, or maintenance concern depends on this?
     validations:
       required: true
   - type: textarea
-    id: options
-    attributes:
-      label: Known options
-      description: List known variants, providers, designs, or approaches.
-  - type: textarea
-    id: criteria
-    attributes:
-      label: Decision criteria
-      description: How should the options be judged?
-      placeholder: |
-        - Reliability
-        - Cost
-        - Safety
-        - Maintenance effort
-    validations:
-      required: true
-  - type: dropdown
     id: output
     attributes:
-      label: Requested output
-      options:
-        - Recommendation
-        - Comparison table
-        - Proof of concept
-        - Architecture Decision Record
-        - New technical Issues
-        - Other
+      label: Desired output
+      description: Recommendation, comparison table, proof of concept, ADR, or follow-up Issues.
+      placeholder: "Example: Recommendation with risks and next safe implementation step."
     validations:
       required: true
-  - type: textarea
-    id: constraints
-    attributes:
-      label: Constraints
-      description: Include limits such as no DB writes, no paid provider, no schema change, no production changes.
-  - type: input
-    id: deadline
-    attributes:
-      label: Deadline, if any
-      description: Leave blank if there is no real deadline.
-      placeholder: "Example: Before the next playoff match"
-  - type: textarea
-    id: notes
-    attributes:
-      label: Notes and source material
-      description: Links, docs, examples, screenshots, logs, or prior decisions.

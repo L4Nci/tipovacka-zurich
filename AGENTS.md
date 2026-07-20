@@ -80,7 +80,7 @@ Additional production safety rules and release checklists are in [PROJECT_RULES.
 
 Before changing code or docs:
 
-1. Read the relevant GitHub Issue.
+1. Read the relevant GitHub Issue when one exists.
 2. Read this file and relevant linked docs.
 3. Find the real implementation in code.
 4. Verify that the Issue matches the current repository state.
@@ -102,7 +102,7 @@ After implementation:
 4. List changed files.
 5. Report validation results.
 6. Report risks and what was not verified.
-7. Link the Pull Request to its Issue.
+7. Link the Pull Request to its Issue for non-trivial work.
 
 ## Definition of Done
 
@@ -116,9 +116,11 @@ For UI/UX changes, product behavior, scoring, auth, data sync, and hard-to-autom
 
 ## GitHub Issues and Roadmap
 
-- GitHub Issues are the source of truth for concrete work: bugs, technical tasks, features, research, and decisions.
+- GitHub Issues are lightweight project memory for concrete work: bugs, technical tasks, features, research, and decisions.
 - Repository docs are the source of truth for long-term product and technical context.
-- Pull Requests should reference a concrete Issue unless the change is truly trivial.
+- Pull Requests should reference a concrete Issue for non-trivial work.
 - Use [docs/ISSUE_WORKFLOW.md](docs/ISSUE_WORKFLOW.md) for the lightweight Issue lifecycle.
 - Use [docs/ROADMAP.md](docs/ROADMAP.md) for product direction.
 - Do not copy detailed implementation task lists into the roadmap.
+
+When the owner asks to create an Issue and GitHub write access is available, search open Issues first, avoid duplicates, choose a concise title/type/priority, and include the root problem, evidence, expected outcome, and constraints. If GitHub write access is unavailable, return the proposed title, body, and labels instead. Do not close Issues until the owner confirms acceptance, unless a reviewed merged PR explicitly closes them.
