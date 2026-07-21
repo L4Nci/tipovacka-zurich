@@ -1,5 +1,9 @@
 # F10.1C – Read Layer Migration to lobby_tournaments
 
+> Historical migration report. This documents an intermediate read-layer step.
+> Verify current multi-lobby/tournament behavior against `src/lib/db.ts`,
+> `src/App.tsx`, and current product docs before using it operationally.
+
 ## 1. Současný stav (Read Layer)
 
 Zavedli jsme zpětně kompatibilní read layer, který umožňuje, aby jeden lobby obsahoval více turnajů, s fallbackem na data z původního legacy `tournament_id` z tabulky `lobbies`. Cílem bylo zajistit, aby frontend už datově rozuměl multi-tournament struktuře (přes pole `tournaments` resp. vrácené `active_tournaments` a `archived_tournaments`). 

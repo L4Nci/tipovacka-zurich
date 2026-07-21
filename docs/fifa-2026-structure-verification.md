@@ -1,5 +1,9 @@
 # FIFA World Cup 2026 Tournament Structure Verification
 
+> Historical verification document. It remains useful context for the original
+> FIFA World Cup 2026 setup, but current behavior and data shape must be
+> verified against Supabase migrations, seed files, and current code.
+
 Tento dokument přináší kompletní validaci a strukturální audit datového modelu pro **FIFA World Cup 2026** (MS ve fotbale 2026) v rámci herního ekosystému Tipovačka 2.0.
 
 Pravidla turnaje jsou porovnávána se současnou fyzickou architekturou uloženou v Supabase (`001_initial_schema.sql`, `001_seed_base_data.sql`, `002_seed_world_cup_2026_participants.sql` a aplikační logikou v `db.ts` / `App.tsx`).

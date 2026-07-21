@@ -1,5 +1,9 @@
 # FÁZE F9.2.1 – Critical CSV Time Audit & Correction
 
+> Historical data-import audit. This documents a specific CSV time correction
+> during FIFA World Cup 2026 preparation and is not current operational sync
+> guidance.
+
 Tento dokument audituje přepracování časových údajů ve vygenerovaném CSV pro import Mistrovství světa 2026. Problém s nesprávnou aplikací datumů byl napraven a startovní čas je plně vázán na dopředně konvertované pravidlo UTC = CEST - 2h.
 
 ## 1. Pravidla

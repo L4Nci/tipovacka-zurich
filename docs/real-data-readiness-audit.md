@@ -1,5 +1,9 @@
 # Real Data Readiness Audit – Tipovačka 2.0 (FIFA World Cup 2026 Readiness)
 
+> Historical readiness audit. This was written before the first completed live
+> production tournament. It remains useful context, but current production
+> behavior must be verified against current code and current operational docs.
+
 Tato zpráva shrnuje finální hloubkový audit datové a aplikační architektury na platformě Supabase. Účelem auditu je plně garantovat stabilitu, bezpečnost (RLS) a konzistenci celého systému před migrací a importem 104 ostrých zápasů MS ve fotbale v hokeji 2026.
 
 ---

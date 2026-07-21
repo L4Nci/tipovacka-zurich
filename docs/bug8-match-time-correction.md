@@ -1,5 +1,9 @@
 # BUG 8 Match Time Correction
 
+> Historical correction note. This documents a specific past match-time repair.
+> Current match times and sync behavior must be verified against Supabase and
+> current provider/sync code.
+
 ## Root Cause
 
 The FIFA World Cup 2026 group-stage seed data had shuffled and partially stale match schedule rows. Some entries had correct teams but wrong UTC kickoff times, while later rows also had incorrect stage/team ordering relative to the verified fixture order.

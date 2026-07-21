@@ -1,5 +1,9 @@
 # Real-World Longterm Predictions Implementation Report – FIFA World Cup 2026
 
+> Historical implementation report. This records completion of an earlier
+> long-term prediction phase. Current behavior must be verified against the
+> implementation and production docs.
+
 Tento dokument představuje dokončení **FÁZE F7.1 – Zjednodušení dlouhodobých předpovědí na vítěze turnaje** (Simplify Longterm Predictions to Tournament Winner Only). Všechny dřívější nedostatky (označené ve FÁZI F7 jako **FAIL**) byly úspěšně vyřešeny a implementovány do plnohodnotného, produkčně připraveného stavu.
 
 ---

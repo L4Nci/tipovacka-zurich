@@ -1,5 +1,9 @@
 # F10.1B – Dual Write pro Lobby → Tournaments Architecture
 
+> Historical migration report. This documents an intermediate dual-write
+> strategy. Verify current lobby/tournament behavior against current code and
+> current product documentation before using it operationally.
+
 ## 1. Proč Dual Write existuje?
 
 Aplikace byla původně navržena na datový model `1 lobby = 1 turnaj`, kdy každá lobby měla hardcodovaný vizuální a funkční záměr pro jeden turnaj (`lobbies.tournament_id`).

@@ -1,5 +1,10 @@
 # API-Football dry-run result sync
 
+> Historical document. API-Football is not the current production result-sync
+> provider. The current provider is TheSportsDB; see
+> [thesportsdb-dry-run.md](thesportsdb-dry-run.md). This file is kept only as
+> provider research and historical mapping context.
+
 This endpoint is intentionally read-only. It is for fixture mapping and result-sync readiness checks only.
 
 ## Safety rules

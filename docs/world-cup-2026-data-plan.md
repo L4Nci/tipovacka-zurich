@@ -1,5 +1,9 @@
 # FIFA World Cup 2026 – Real Data Import Plan
 
+> Historical import plan. This describes the original FIFA World Cup 2026 data
+> preparation and import plan. Current live fixture/result updates are handled
+> by the current sync modules and operational docs.
+
 Tento dokument slouží jako komplexní datový plán, architektura a před-importní checklist pro spuštění produkčního nasazení a plného importu 104 zápasů pro **FIFA World Cup 2026** (MS ve fotbale 2026) do Supabase.
 
 ---

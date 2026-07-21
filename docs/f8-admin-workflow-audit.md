@@ -1,5 +1,10 @@
 # FÁZE F8 – End-to-End Admin Results Workflow Audit & Completion
 
+> Historical audit. This records the admin workflow stabilization at that time.
+> Current manual result and sync behavior now uses shared server modules;
+> verify current behavior in `server/lib/resultSync.ts`, Netlify Functions, and
+> `server.ts`.
+
 Tento dokument detailně mapuje audit a kompletní zprovoznění administrativního workflow pro zadávání výsledků zápasů a dlouhodobých predikcí v aplikaci **Tipovačka 2.0 (Universal Lobby Manager)**.
 
 ---

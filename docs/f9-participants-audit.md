@@ -1,5 +1,9 @@
 # FÁZE F9.1 – Audit účastníků MS ve fotbale 2026 (Participants Audit)
 
+> Historical participant audit. This records the original FIFA World Cup 2026
+> participant seed verification. Current participant data must be verified
+> against Supabase and the active seed/migration files.
+
 Tento dokument detailně mapuje srovnání stávajícího seznamu fotbalových účastníků (týmů) v databázi s dodaným oficiálním rozpisem skupinové fáze Mistrovství světa ve fotbale v roce 2026 (obsahujícím 48 reprezentací).
 
 ---

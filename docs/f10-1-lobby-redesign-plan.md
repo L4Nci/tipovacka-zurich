@@ -1,5 +1,9 @@
 # FÁZE F10.1 – Lobby-first UX Redesign a Datový Model
 
+> Historical design plan. This documents an earlier lobby/tournament redesign
+> proposal. Current product direction is in `docs/ROADMAP.md`; concrete work
+> should be tracked in GitHub Issues.
+
 ## Cíl
 Přehodnotit stávající architekturu a uživatelské rozhraní tak, aby odráželo nový produktový mentální model:
 **Lidé -> Lobby -> Turnaje -> Sport**

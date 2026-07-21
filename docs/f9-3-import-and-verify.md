@@ -1,5 +1,8 @@
 # FÁZE F9.3 – Ostrý import do Supabase a ověření
 
+> Historical import verification document. It records the original production
+> import procedure and should not be used as current live-data sync guidance.
+
 Tento dokument obsahuje SQL příkazy pro před-importní ověření účastníků a post-importní smoke test zápasů podle checklistu F9.
 
 ## 1. Před-importní ověření účastníků (Pre-flight check)

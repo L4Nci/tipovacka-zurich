@@ -1,5 +1,9 @@
 # FÁZE 2: Nový datový model — Tipovačka 2.0 (Korekce Architektury)
 
+> Historical design document. This is useful background for the data model, but
+> the current schema source of truth is the Supabase migration set in
+> `supabase/migrations` and the current application types/code.
+
 Tento dokument představuje upravený celkový návrh relační databáze pro novou verzi **Tipovačka 2.0 (Universal Lobby Manager)**. Datový model je navržen tak, aby podporoval více sportů, více turnajů, oddělené komunitní skupiny (lobby) a dynamické vyhodnocování bodovacích pravidel s prioritním přepisováním.
 
 ---

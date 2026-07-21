@@ -1,5 +1,10 @@
 # FÁZE 1: Audit současného projektu
 
+> Historical document. This audit describes an early SQLite/Turso-era state and
+> is not current operational documentation. Current product direction is in
+> [docs/ROADMAP.md](docs/ROADMAP.md); current safety rules are in
+> [AGENTS.md](AGENTS.md) and [PROJECT_RULES.md](PROJECT_RULES.md).
+
 Tento audit podrobně analyzuje aktuální stav codebase hokejové tipovací aplikace „MS 2026 Fan Tipovačka“. Zkoumá strukturu databáze, aplikační logiku, dostupná API rozhraní, uživatelské rozhraní a odhaluje stávající nedostatky.
 
 ---

@@ -1,5 +1,8 @@
 # Real World Cup Data Audit – FIFA World Cup 2026 Readiness
 
+> Historical readiness audit. This captures pre-import real-data preparation and
+> is not current operational documentation for production sync or scoring.
+
 Tento dokument představuje strukturní a datový audit připravenosti platformy na ostrý import reálných dat **FIFA World Cup 2026** (MS ve fotbale 2026). Hodnocení se opírá o současnou strukturu tabulek v Supabase a seed soubory.
 
 ---

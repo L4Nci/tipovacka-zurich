@@ -1,5 +1,11 @@
 # TheSportsDB write-mode design, group stage only
 
+> Historical document. This describes the earlier group-stage-only write-mode
+> design. It is not the current production source of truth. Current result sync
+> behavior, including playoff support and AP/AET/PEN handling, is documented in
+> [thesportsdb-dry-run.md](thesportsdb-dry-run.md) and implemented in
+> `server/lib/resultSync.ts`.
+
 The write endpoint exists, but it is disabled by default. It must not write unless `RESULT_SYNC_WRITE_ENABLED=true`.
 
 ## Scope

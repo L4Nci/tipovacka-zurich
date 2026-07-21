@@ -1,5 +1,10 @@
 # Football Rules Audit: FIFA World Cup 2026 (Fáze QA-2)
 
+> Historical audit. This captures an earlier rules review and may describe
+> behavior that has since changed, especially group-stage draw and playoff
+> no-draw handling. Current scoring behavior must be verified against
+> `src/lib/scoring.ts`, `src/lib/matchRules.ts`, and current UI code.
+
 Tento audit podrobně rozebírá chování stávajícího bodovacího systému (scoring engine) aplikace **Tipovačka 2.0** v kontextu fotbalových pravidel pro Mistrovství světa ve fotbale 2026 (FIFA World Cup 2026) a navrhuje optimální model tipování pro herní komunitu.
 
 ---

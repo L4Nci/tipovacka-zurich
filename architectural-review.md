@@ -1,5 +1,9 @@
 # Architektonické Posouzení & Návrh (Architectural Review) — Tipovačka 2.0
 
+> Historical design document. This captures earlier architecture planning and is
+> not the current production source of truth. Verify current behavior against
+> the implementation and the current docs linked from [README.md](README.md).
+
 Tento dokument detailně rozebírá architekturu systému **Tipovačka 2.0 (Universal Lobby Manager)**. Poskytuje technická řešení pro škálovatelný sportovní engine, rozšiřitelnost typů předpovědí, nezávislost datových zdrojů, zobecnění herních entit, bezvýpadkovou migraci z legacy systému a vyhodnocování bodování na základě priority.
 
 ---

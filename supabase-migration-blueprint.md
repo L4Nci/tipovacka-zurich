@@ -1,5 +1,9 @@
 # Supabase Migration Blueprint (Plán migrace na Supabase)
 
+> Historical migration blueprint. The app now runs on Supabase. Use
+> `supabase/migrations`, current code, [AGENTS.md](AGENTS.md), and
+> [PROJECT_RULES.md](PROJECT_RULES.md) for current operational truth.
+
 Tento dokument představuje ucelený architektonický a technický manuál pro přesun aplikace **Tipovačka 2.0 (Universal Lobby Manager)** z lokální SQLite (Turso) databáze na cloudové řešení **Supabase (PostgreSQL)**. 
 
 Blueprint detailně mapuje transformaci datových struktur, migraci uživatelských identit včetně hesel, nahrazení aplikačních middleware pomocí Row Level Security (RLS) politik a vyhodnocuje možná rizika a rozdíly v SQL dialektech.

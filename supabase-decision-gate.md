@@ -1,5 +1,9 @@
 # Supabase Decision Gate (Rozhodovací analýza migrace)
 
+> Historical decision document. The Supabase migration decision has already been
+> made and implemented. This file remains useful as decision history, not as
+> current architecture guidance.
+
 Tento dokument přináší detailní srovnání dvou možných scénářů vývoje a migrace projektu **Tipovačka 2.0 (Universal Lobby Manager)** ze současné databáze Turso (SQLite/libsql) na cloudové řešení **Supabase (PostgreSQL)**.
 
 ---

@@ -1,5 +1,8 @@
 # FÁZE F9.2.2 – Full CSV Integrity Audit Before Import
 
+> Historical import audit. This records a pre-import CSV integrity check and is
+> not current operational documentation for live sync or fixture updates.
+
 ## Celkový stav
 - **Status:** WARNING (Ready with notes)
 - **Počet chyb (FAIL):** 0

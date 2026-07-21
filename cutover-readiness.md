@@ -1,5 +1,9 @@
 # Cutover Readiness Audit (Analýza připravenosti na přepnutí)
 
+> Historical cutover document. This describes migration readiness during the
+> legacy-to-Supabase transition and is not current operational guidance. Current
+> safety rules are in [AGENTS.md](AGENTS.md) and [PROJECT_RULES.md](PROJECT_RULES.md).
+
 Tento dokument slouží jako audit a strategická analýza připravenosti na přechod z legacy datového modelu na nový modulární multi-lobby systém (**datový model v2**). 
 
 ---

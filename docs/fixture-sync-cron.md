@@ -81,6 +81,33 @@ Required guards:
 - dry-run item action must be `would_update`.
 - mapping confidence must be `100`.
 
+## Provider lookup
+
+Fixture sync uses TheSportsDB free endpoints for published playoff fixtures.
+Supported stages:
+
+- `Round of 16`
+- `Quarterfinal`
+- `Semifinal`
+- `Third Place`
+- `Final`
+
+For each stage, the provider first tries the expected `eventsround.php` value:
+
+```txt
+Round of 16  r=16
+Quarterfinal r=8
+Semifinal    r=4
+Third Place  r=3
+Final        r=1
+```
+
+If the expected round returns no usable fixtures, the provider falls back to
+`eventsday.php` over the known playoff date windows for that stage. This handles
+TheSportsDB cases where the visible `intRound` differs from the expected bracket
+round while still keeping updates constrained by stage, date, exact participant
+mapping, and 100% confidence.
+
 ## Dry-run check
 
 Before enabling cron, run:

@@ -1,5 +1,9 @@
 # QA End-to-End Audit Report: Tipovačka 2.0 (Fáze S6 - S12)
 
+> Historical QA report. This document records an earlier end-to-end validation
+> pass and is not a live production checklist. Re-run current lint/build and
+> smoke tests for present-day verification.
+
 Tento dokument shrnuje výsledky komplexního, nezávislého auditorství a e2e testovania systému pro predikce "Tipovačka 2.0". Testování a analýza kódu pokrývají celou vertikálu od synchronizace identity přes správu komunitních lobby až po scoring a databázovou bezpečnost (RLS).
 
 ---

@@ -1,5 +1,9 @@
 # Real-World Longterm Predictions Reality Check – FIFA World Cup 2026
 
+> Historical audit. This records the pre-implementation long-term prediction
+> reality check. Current long-term prediction behavior must be verified against
+> the implementation and current product docs.
+
 Tento dokument představuje hloubkový audit a reality check připravenosti platformy na dlouhodobé sázky (longterm predictions) pro MS ve fotbale 2026 (FÁZE F7).
 
 ---
