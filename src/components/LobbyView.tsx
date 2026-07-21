@@ -21,7 +21,7 @@ interface LobbyViewProps {
   }>;
 }
 
-export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, onLobbyDeleted, membersCount = 1, tournamentStats = {} }: LobbyViewProps) {
+export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, onLobbyDeleted, membersCount, tournamentStats = {} }: LobbyViewProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
@@ -207,7 +207,7 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
               </div>
               <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg border border-blue-100">
                 <Users className="w-3.5 h-3.5" />
-                <span className="text-xs font-bold font-mono">{membersCount}</span>
+	                <span className="text-xs font-bold font-mono">{membersCount ?? '…'}</span>
               </div>
           </div>
         </div>

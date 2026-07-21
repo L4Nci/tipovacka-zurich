@@ -319,6 +319,26 @@ export const fetchUserLobbies = async (userId: string) => {
     }
   });
 
+  const lobbyIds = formatted.map(lobby => lobby.id);
+  if (lobbyIds.length > 0) {
+    const { data: memberRows, error: memberCountErr } = await supabase
+      .from("lobby_members")
+      .select("lobby_id")
+      .in("lobby_id", lobbyIds);
+
+    if (memberCountErr) {
+      console.warn("Could not fetch lobby member counts.", memberCountErr);
+    } else {
+      const countsByLobby = new Map<string, number>();
+      memberRows?.forEach(row => {
+        countsByLobby.set(row.lobby_id, (countsByLobby.get(row.lobby_id) || 0) + 1);
+      });
+      formatted.forEach(lobby => {
+        lobby.member_count = countsByLobby.get(lobby.id) ?? 0;
+      });
+    }
+  }
+
   return formatted;
 };
 
@@ -611,7 +631,7 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
   if (pErr) throw pErr;
   
   // Fetch tournament_participants for this tournament
-  const { data: tpData, error: tpErr } = await supabase
+  const { error: tpErr } = await supabase
     .from("tournament_participants")
     .select("participant_id")
     .eq("tournament_id", tournamentId);
@@ -1051,46 +1071,12 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
       : lobby
   ));
 
-  // Fetch all predictions in this lobby for streak mathematical evaluations
-  let predsQuery = supabase
-    .from("predictions")
-    .select("*")
-    .eq("lobby_id", activeLobbyId)
-    .order("user_id", { ascending: true })
-    .order("lobby_id", { ascending: true })
-    .order("match_id", { ascending: true });
-
-  if (targetTournamentId) {
-    const { data: tMatches } = await supabase
-      .from("matches")
-      .select("id")
-      .eq("tournament_id", targetTournamentId);
-
-    if (tMatches && tMatches.length > 0) {
-      const matchIds = tMatches.map(m => m.id);
-      predsQuery = predsQuery.in("match_id", matchIds);
-    } else if (tMatches) {
-      predsQuery = predsQuery.in("match_id", ["none"]); // force empty if no matches
-    }
-  }
-
-  const allPreds = await fetchAllSupabaseRows<any>(predsQuery, "fetchAllData predictions");
-
-  const matchById = new Map(matches.map(match => [match.id, match]));
-  const formattedPreds: Prediction[] = (allPreds || []).map(p => {
-    const match = matchById.get(p.match_id);
-    return {
-      player_id: p.user_id,
-      match_id: p.match_id,
-      predicted_home_score: p.predicted_home_score,
-      predicted_away_score: p.predicted_away_score,
-      points_earned: p.points_earned,
-      home_score: match?.home_score,
-      away_score: match?.away_score,
-      start_time_utc: match?.start_time_utc,
-      tournament_id: match?.tournament_id
-    } as Prediction;
-  });
+  const formattedPreds = await fetchFormattedLobbyPredictions(
+    activeLobbyId!,
+    targetTournamentId,
+    matches,
+    "fetchAllData predictions"
+  );
 
   // Map participants to Teams interface for compatibility in profile selection
   const teams: Team[] = participants.map(p => ({
@@ -1111,6 +1097,126 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
     teams,
     leaderboard,
     allPredictions: formattedPreds
+  };
+};
+
+const fetchFormattedLobbyPredictions = async (
+  lobbyId: string,
+  tournamentId: string | undefined,
+  matches: Match[],
+  label: string
+): Promise<Prediction[]> => {
+  let predsQuery = supabase
+    .from("predictions")
+    .select("*")
+    .eq("lobby_id", lobbyId)
+    .order("user_id", { ascending: true })
+    .order("lobby_id", { ascending: true })
+    .order("match_id", { ascending: true });
+
+  if (tournamentId) {
+    const { data: tMatches } = await supabase
+      .from("matches")
+      .select("id")
+      .eq("tournament_id", tournamentId);
+
+    if (tMatches && tMatches.length > 0) {
+      const matchIds = tMatches.map(m => m.id);
+      predsQuery = predsQuery.in("match_id", matchIds);
+    } else if (tMatches) {
+      predsQuery = predsQuery.in("match_id", ["none"]); // force empty if no matches
+    }
+  }
+
+  const allPreds = await fetchAllSupabaseRows<any>(predsQuery, label);
+
+  const matchById = new Map(matches.map(match => [match.id, match]));
+  return (allPreds || []).map(p => {
+    const match = matchById.get(p.match_id);
+    return {
+      player_id: p.user_id,
+      match_id: p.match_id,
+      predicted_home_score: p.predicted_home_score,
+      predicted_away_score: p.predicted_away_score,
+      points_earned: p.points_earned,
+      home_score: match?.home_score,
+      away_score: match?.away_score,
+      start_time_utc: match?.start_time_utc,
+      tournament_id: match?.tournament_id
+    } as Prediction;
+  });
+};
+
+export const fetchCriticalAppData = async (userId: string, lobbyId?: string, tournamentId?: string) => {
+  const lobbiesList = await fetchUserLobbies(userId);
+  let activeLobbyId = lobbyId;
+
+  if (!activeLobbyId) {
+    return {
+      lobbyId: null,
+      lobbyName: "",
+      tournamentId: null,
+      lobbies: lobbiesList,
+      matches: [],
+      teams: []
+    };
+  }
+
+  let targetTournamentId = tournamentId;
+  const activeLOB = lobbiesList.find(l => l.id === activeLobbyId);
+
+  if (!targetTournamentId && activeLOB) {
+    const activeTournamentsInLobby = activeLOB.tournaments || [];
+    const activeTournObj = activeTournamentsInLobby.find(t => t.status === 'active');
+    targetTournamentId = activeTournObj?.tournament_id || activeLOB.tournament_id;
+  }
+
+  const {
+    lobbyName,
+    lobbyShortDescription,
+    lobbyLongDescription,
+    tournamentId: finalTournamentId,
+    matches,
+    participants
+  } = await fetchLobbyDashboard(activeLobbyId, userId, targetTournamentId);
+
+  const hydratedLobbiesList = lobbiesList.map(lobby => (
+    lobby.id === activeLobbyId
+      ? {
+          ...lobby,
+          short_description: lobbyShortDescription ?? lobby.short_description ?? null,
+          long_description: lobbyLongDescription ?? lobby.long_description ?? null
+        }
+      : lobby
+  ));
+
+  const teams: Team[] = participants.map(p => ({
+    id: p.id,
+    name: p.name,
+    flag_code: p.flag_code || "🏳️",
+    group_name: p.short_name || "A",
+    sport_id: p.sport_id || String(p.id).split("-")[0],
+    short_name: p.short_name,
+    is_final_winner: p.is_final_winner
+  }));
+
+  return {
+    lobbyId: activeLobbyId,
+    lobbyName,
+    tournamentId: finalTournamentId,
+    lobbies: hydratedLobbiesList,
+    matches,
+    teams
+  };
+};
+
+export const fetchDeferredAppData = async (lobbyId: string, tournamentId: string | undefined, matches: Match[]) => {
+  const leaderboard = await fetchLobbyLeaderboard(lobbyId, tournamentId);
+  const allPredictions = await fetchFormattedLobbyPredictions(lobbyId, tournamentId, matches, "fetchDeferredAppData predictions");
+
+  return {
+    leaderboard,
+    allPredictions
   };
 };
 

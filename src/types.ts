@@ -92,6 +92,7 @@ export type Lobby = {
   visibility: 'private' | 'public';
   created_at?: string;
   is_owner?: boolean;
+  member_count?: number | null;
   tournaments?: LobbyTournament[];
   tournament_name?: string;
 };

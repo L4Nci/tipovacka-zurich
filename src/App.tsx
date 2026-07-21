@@ -22,6 +22,8 @@ import { supabase } from './lib/supabase.ts';
 import { isDrawPrediction, isFootballKnockoutStage } from './lib/matchRules.ts';
 import { 
   fetchAllData, 
+  fetchCriticalAppData,
+  fetchDeferredAppData,
   loginUser, 
   registerUser, 
   savePrediction as savePredDB, 
@@ -302,6 +304,7 @@ interface MatchCardProps {
   userId?: string;
   t: any;
   matchPredictions?: Prediction[];
+  matchPredictionsLoading?: boolean;
   isHockey?: boolean;
 }
 
@@ -313,6 +316,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
   userId,
   t,
   matchPredictions = [],
+  matchPredictionsLoading = false,
   isHockey = false
 }) => {
   const [home, setHome] = useState(match.predicted_home_score ?? 0);
@@ -410,11 +414,15 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const points = getPoints();
 
   const predictionStats = useMemo(() => {
+    if (matchPredictionsLoading && matchPredictions.length === 0 && (match.total_predictions || 0) > 0) {
+      return { home: 0, away: 0, draw: 0, isEmpty: true, isLoading: true };
+    }
+
     const predictionsForDistribution = isFootballKnockout
       ? matchPredictions.filter(p => p.predicted_home_score !== p.predicted_away_score)
       : matchPredictions;
     const total = predictionsForDistribution.length;
-    if (total === 0) return { home: 0, away: 0, draw: 0, isEmpty: true };
+    if (total === 0) return { home: 0, away: 0, draw: 0, isEmpty: true, isLoading: false };
     
     const homeWins = predictionsForDistribution.filter(p => p.predicted_home_score > p.predicted_away_score).length;
     const draws = isFootballKnockout ? 0 : predictionsForDistribution.filter(p => p.predicted_home_score === p.predicted_away_score).length;
@@ -424,12 +432,17 @@ const MatchCard: React.FC<MatchCardProps> = ({
       home: Math.round((homeWins / total) * 100),
       draw: Math.round((draws / total) * 100),
       away: Math.round((awayWins / total) * 100),
-      isEmpty: false
+      isEmpty: false,
+      isLoading: false
     };
-  }, [isFootballKnockout, matchPredictions]);
-  const otherPredictionsCount = (showOthers ? others : matchPredictions)
-    .filter(p => p.player_id !== userId)
-    .length;
+  }, [isFootballKnockout, match.total_predictions, matchPredictions, matchPredictionsLoading]);
+  const hasOwnPrediction = match.predicted_home_score !== null && match.predicted_away_score !== null;
+  const fallbackOtherPredictionsCount = Math.max((match.total_predictions || 0) - (hasOwnPrediction ? 1 : 0), 0);
+  const otherPredictionsCount = showOthers
+    ? others.filter(p => p.player_id !== userId).length
+    : matchPredictionsLoading
+      ? fallbackOtherPredictionsCount
+      : matchPredictions.filter(p => p.player_id !== userId).length;
 
   const calcPoints = (ph: number, pa: number) => {
     if (match.home_score === null || match.away_score === null) return 0;
@@ -488,17 +501,17 @@ const MatchCard: React.FC<MatchCardProps> = ({
               <div className={`grid ${isFootballKnockout ? 'grid-cols-2' : 'grid-cols-3'} items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase`}>
                 <span className="text-left text-[#ce1126]">
                   <span className="block text-[8px] text-slate-400 truncate">{homeOutcomeLabel}</span>
-                  {predictionStats.home}%
+                  {predictionStats.isLoading ? '…' : `${predictionStats.home}%`}
                 </span>
                 {!isFootballKnockout && (
                   <span className="text-center text-[#1f2937]">
                     <span className="block text-[8px] text-slate-400">Remíza</span>
-                    {predictionStats.draw}%
+                    {predictionStats.isLoading ? '…' : `${predictionStats.draw}%`}
                   </span>
                 )}
                 <span className="text-right text-[#006847]">
                   <span className="block text-[8px] text-slate-400 truncate">{awayOutcomeLabel}</span>
-                  {predictionStats.away}%
+                  {predictionStats.isLoading ? '…' : `${predictionStats.away}%`}
                 </span>
               </div>
               <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner ring-1 ring-slate-100">
@@ -816,6 +829,54 @@ const AuthenticatedAppSkeleton = ({ t, error, onRetry }: { t: any, error: string
   </div>
 );
 
+const DeferredLeaderboardSkeleton = () => (
+  <div className="space-y-3">
+    {[0, 1, 2].map(item => (
+      <div key={item} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+            <div className="w-10 h-10 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+            <div className="space-y-2">
+              <div className="h-3 w-24 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+              <div className="h-2 w-16 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="h-5 w-10 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+            <div className="h-2 w-8 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+          </div>
+        </div>
+        <div className="mt-2.5 grid grid-cols-4 gap-1.5">
+          {[0, 1, 2, 3].map(stat => (
+            <div key={stat} className="rounded-xl bg-slate-50 px-1.5 py-1.5">
+              <div className="h-2 w-full rounded-full bg-slate-100 motion-safe:animate-pulse" />
+              <div className="mt-1 h-3 w-5 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const DeferredProfileSkeleton = () => (
+  <div className="space-y-4">
+    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center">
+      <div className="w-20 h-20 rounded-full bg-slate-100 motion-safe:animate-pulse mb-4" />
+      <div className="h-5 w-28 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+    </div>
+    <div className="grid grid-cols-3 gap-2">
+      {[0, 1, 2].map(item => (
+        <div key={item} className="bg-white rounded-2xl border border-slate-100 p-3">
+          <div className="h-3 w-10 rounded-full bg-slate-100 motion-safe:animate-pulse mx-auto mb-2" />
+          <div className="h-5 w-8 rounded-full bg-slate-100 motion-safe:animate-pulse mx-auto" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 // --- Main App ---
 
 export default function App() {
@@ -836,9 +897,17 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState<Player[]>([]);
   const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deferredLoading, setDeferredLoading] = useState(false);
+  const [deferredError, setDeferredError] = useState('');
+  const [loadedDataContext, setLoadedDataContext] = useState<{ lobbyId: string | null; tournamentId: string | null }>({
+    lobbyId: null,
+    tournamentId: null
+  });
   const [isRegistering, setIsRegistering] = useState(false);
   const [loginData, setLoginData] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
+  const criticalLoadRequestRef = useRef(0);
+  const deferredLoadRequestRef = useRef(0);
   
   // Lobbies State (FÁZE S7 & S8)
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
@@ -1161,20 +1230,45 @@ export default function App() {
           // If no database session, prompt to sign in
           setUser(null);
           localStorage.removeItem('user');
+          setLoading(false);
         }
       } catch (err) {
         console.error("Error checking passive session:", err);
-      } finally {
         setLoading(false);
       }
     };
     checkSupSession();
   }, []);
 
+  const syncUserFromLeaderboard = (nextLeaderboard: Player[]) => {
+    const myPlayer = nextLeaderboard.find(p => p.id === user?.id);
+    if (myPlayer) {
+      setUser(prev => {
+        if (!prev) return prev;
+        const updated = {
+          ...prev,
+          avatar_emoji: myPlayer.avatar_emoji || prev.avatar_emoji || '😀',
+          avatar_bg: myPlayer.avatar_bg || prev.avatar_bg || '#fee2e2',
+          tournament_winner_id: myPlayer.tournament_winner_id || undefined
+        };
+        localStorage.setItem('user', JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setUser(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev, tournament_winner_id: undefined };
+        localStorage.setItem('user', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
   const fetchAll = async (lobbyIdParam?: string) => {
     if (!user) return;
     try {
       setError('');
+      setDeferredError('');
       const targetLobbyId = lobbyIdParam || activeLobbyId;
       
       const res = await fetchAllData(user.id, targetLobbyId || undefined, activeTournamentId || undefined);
@@ -1184,6 +1278,10 @@ export default function App() {
       setLeaderboard(res.leaderboard);
       setAllPredictions(res.allPredictions);
       setLobbies(res.lobbies);
+      setLoadedDataContext({
+        lobbyId: res.lobbyId || null,
+        tournamentId: activeTournamentId || null
+      });
       
       if (res.lobbyId) {
         setActiveLobbyId(res.lobbyId);
@@ -1194,34 +1292,90 @@ export default function App() {
 
       // Sync active user's tournament winner selection from the target lobby leaderboard selection
       if (res.leaderboard) {
-        const myPlayer = res.leaderboard.find(p => p.id === user.id);
-        if (myPlayer) {
-          setUser(prev => {
-            if (!prev) return prev;
-            const updated = {
-              ...prev,
-              avatar_emoji: myPlayer.avatar_emoji || prev.avatar_emoji || '😀',
-              avatar_bg: myPlayer.avatar_bg || prev.avatar_bg || '#fee2e2',
-              tournament_winner_id: myPlayer.tournament_winner_id || undefined
-            };
-            localStorage.setItem('user', JSON.stringify(updated));
-            return updated;
-          });
-        } else {
-          // If not in the leaderboard yet, clear it
-          setUser(prev => {
-            if (!prev) return prev;
-            const updated = { ...prev, tournament_winner_id: undefined };
-            localStorage.setItem('user', JSON.stringify(updated));
-            return updated;
-          });
-        }
+        syncUserFromLeaderboard(res.leaderboard);
       }
     } catch (e: any) {
       console.error("fetchAll error:", e);
       setError(e?.message || "Nepodařilo se synchronizovat data se Supabase.");
     } finally {
+      setDeferredLoading(false);
       setLoading(false);
+    }
+  };
+
+  const loadInitialData = async () => {
+    if (!user) return;
+
+    const criticalRequestId = criticalLoadRequestRef.current + 1;
+    criticalLoadRequestRef.current = criticalRequestId;
+    deferredLoadRequestRef.current += 1;
+
+    setLoading(true);
+    setDeferredLoading(false);
+    setError('');
+    setDeferredError('');
+
+    try {
+      const targetLobbyId = activeLobbyId || undefined;
+      const critical = await fetchCriticalAppData(user.id, targetLobbyId, activeTournamentId || undefined);
+      if (criticalLoadRequestRef.current !== criticalRequestId) return;
+
+      setMatches(critical.matches);
+      setTeams(critical.teams);
+      setLobbies(critical.lobbies);
+      setLeaderboard([]);
+      setAllPredictions([]);
+      setLoadedDataContext({
+        lobbyId: critical.lobbyId || null,
+        tournamentId: activeTournamentId || null
+      });
+
+      if (critical.lobbyId) {
+        setActiveLobbyId(critical.lobbyId);
+      }
+      if (critical.lobbyName) {
+        setActiveNameOnly(critical.lobbyName);
+      }
+
+      setLoading(false);
+
+      if (!critical.lobbyId) return;
+
+      const deferredRequestId = deferredLoadRequestRef.current + 1;
+      deferredLoadRequestRef.current = deferredRequestId;
+      setDeferredLoading(true);
+
+      try {
+        const deferred = await fetchDeferredAppData(
+          critical.lobbyId,
+          critical.tournamentId || activeTournamentId || undefined,
+          critical.matches
+        );
+        if (
+          criticalLoadRequestRef.current !== criticalRequestId ||
+          deferredLoadRequestRef.current !== deferredRequestId
+        ) {
+          return;
+        }
+
+        setLeaderboard(deferred.leaderboard);
+        setAllPredictions(deferred.allPredictions);
+        syncUserFromLeaderboard(deferred.leaderboard);
+      } catch (e: any) {
+        if (deferredLoadRequestRef.current !== deferredRequestId) return;
+        console.error("deferred data load error:", e);
+        setDeferredError(e?.message || "Nepodařilo se načíst žebříček a statistiky.");
+      } finally {
+        if (deferredLoadRequestRef.current === deferredRequestId) {
+          setDeferredLoading(false);
+        }
+      }
+    } catch (e: any) {
+      if (criticalLoadRequestRef.current !== criticalRequestId) return;
+      console.error("critical data load error:", e);
+      setError(e?.message || "Nepodařilo se synchronizovat data se Supabase.");
+      setLoading(false);
+      setDeferredLoading(false);
     }
   };
 
@@ -1231,7 +1385,7 @@ export default function App() {
 
   useEffect(() => {
     if (user?.id) {
-      fetchAll();
+      loadInitialData();
     }
   }, [user?.id, activeLobbyId, activeTournamentId]);
 
@@ -1268,6 +1422,7 @@ export default function App() {
     setLeaderboard([]);
     setAllPredictions([]);
     setLobbies([]);
+    setLoadedDataContext({ lobbyId: null, tournamentId: null });
     setActiveLobbyId(null);
     setActiveLobbyName("");
     setActiveTournamentId(null);
@@ -1683,11 +1838,20 @@ export default function App() {
     );
   }
 
-  if (loading) return (
+  const isLoadedDataContextStale = Boolean(
+    user &&
+    activeLobbyId &&
+    (
+      loadedDataContext.lobbyId !== activeLobbyId ||
+      loadedDataContext.tournamentId !== (activeTournamentId || null)
+    )
+  );
+
+  if (loading || isLoadedDataContextStale) return (
     <AuthenticatedAppSkeleton
       t={t}
       error={error}
-      onRetry={() => { setError(''); setLoading(true); fetchAll(); }}
+      onRetry={() => { setError(''); setLoading(true); loadInitialData(); }}
     />
   );
 
@@ -1961,14 +2125,14 @@ export default function App() {
               setTab('matches');
             }}
             onRefresh={() => fetchAll()}
-            onLobbyDeleted={() => {
-              setActiveLobbyId(null);
-              setActiveTournamentId(null);
-              fetchAll();
-            }}
-            membersCount={leaderboard.length}
-            tournamentStats={tournamentStats}
-          />
+	            onLobbyDeleted={() => {
+	              setActiveLobbyId(null);
+	              setActiveTournamentId(null);
+	              fetchAll();
+	            }}
+	            membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
+	            tournamentStats={tournamentStats}
+	          />
         </main>
       ) : activeLobby && activeTournamentId ? (
         <main className="p-4">
@@ -2013,6 +2177,7 @@ export default function App() {
                    t={t}
                    onPredict={(h, a) => savePrediction(m.id, h, a)}
                    matchPredictions={predictionsByMatchId.get(m.id) || []}
+                   matchPredictionsLoading={deferredLoading && !predictionsByMatchId.has(m.id)}
                    isHockey={isHockey}
                  />
                ))}
@@ -2038,9 +2203,10 @@ export default function App() {
                    match={m} 
                    lobbyId={activeLobbyId || ''}
                    isFinished 
-                   userId={user.id} 
-                   t={t} 
+                   userId={user.id}
+                   t={t}
                    matchPredictions={predictionsByMatchId.get(m.id) || []}
+                   matchPredictionsLoading={deferredLoading && !predictionsByMatchId.has(m.id)}
                    isHockey={isHockey}
                  />
                ))}
@@ -2136,6 +2302,15 @@ export default function App() {
                 </div>
               )}
 
+              {deferredError && leaderboardWithStreaks.length === 0 && (
+                <div className="mb-3 rounded-2xl border border-red-100 bg-red-50 p-3 text-center text-xs font-bold text-red-600">
+                  {deferredError}
+                </div>
+              )}
+
+              {deferredLoading && leaderboardWithStreaks.length === 0 ? (
+                <DeferredLeaderboardSkeleton />
+              ) : (
               <div className="space-y-3">
                 {leaderboardWithStreaks.map((p, i) => {
                   const pTeamInfo = teams.find(tm => tm.id === p.tournament_winner_id) || winnerPickerTeams.find(tm => tm.id === p.tournament_winner_id);
@@ -2232,6 +2407,30 @@ export default function App() {
                   );
                 })}
               </div>
+              )}
+            </motion.div>
+          )}
+
+          {tab === 'profile' && deferredLoading && !currentUserStats && (
+            <motion.div
+              key="profile-loading"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <DeferredProfileSkeleton />
+            </motion.div>
+          )}
+
+          {tab === 'profile' && !deferredLoading && deferredError && !currentUserStats && (
+            <motion.div
+              key="profile-error"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="rounded-2xl border border-red-100 bg-red-50 p-4 text-center text-xs font-bold text-red-600"
+            >
+              {deferredError}
             </motion.div>
           )}
 
