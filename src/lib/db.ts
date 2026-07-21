@@ -1,7 +1,7 @@
 import { supabase } from "./supabase.ts";
 import { calculatePoints } from "./scoring.ts";
 import { isDrawPrediction, isFootballKnockoutStage } from "./matchRules.ts";
-import { Player, Team, Match, Prediction, Lobby, TournamentParticipant } from "../types.ts";
+import { Player, Team, Match, Prediction, Lobby } from "../types.ts";
 
 const SUPABASE_PAGE_SIZE = 1000;
 const SUPABASE_MAX_PAGES = 20;
@@ -205,18 +205,6 @@ export const fetchParticipants = async (sportId: string = "football") => {
     .order("name", { ascending: true });
   if (error) throw error;
   return data;
-};
-
-/**
- * Fetch tournament participants for a given tournament (FÁZE F6.1)
- */
-export const fetchTournamentParticipants = async (tournamentId: string): Promise<TournamentParticipant[]> => {
-  const { data, error } = await supabase
-    .from("tournament_participants")
-    .select("*")
-    .eq("tournament_id", tournamentId);
-  if (error) throw error;
-  return data || [];
 };
 
 /**
@@ -629,16 +617,6 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
     .select("*");
 
   if (pErr) throw pErr;
-  
-  // Fetch tournament_participants for this tournament
-  const { error: tpErr } = await supabase
-    .from("tournament_participants")
-    .select("participant_id")
-    .eq("tournament_id", tournamentId);
-    
-  if (tpErr) {
-    console.warn("Could not fetch tournament_participants. Error/Missing table:", tpErr);
-  }
   
   const participantsMap = new Map();
   participants?.forEach(p => participantsMap.set(p.id, p));

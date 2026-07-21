@@ -107,13 +107,3 @@ export type LobbyMember = {
   joined_at: string;
   tournament_winner_id?: string | null;
 };
-
-export type TournamentParticipant = {
-  id: string;
-  tournament_id: string;
-  participant_id: string;
-  group_code: string | null;
-  seed_position?: number | null;
-  status: 'active' | 'qualified' | 'eliminated';
-  created_at?: string;
-};
