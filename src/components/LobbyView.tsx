@@ -4,6 +4,38 @@ import { Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2,
 import { Lobby, Player as AppUser } from '../types';
 import { addTournamentToLobby, updateLobbyDetails, deleteLobby } from '../lib/db';
 
+const rulesStartMarkers = [
+  'Pravidla',
+  'Pravidlá',
+  'Bodování',
+  'Bodovani',
+  'Scoring',
+  'Rules',
+  'Tip na celkového vítěze',
+  'Tip na celkoveho viteze',
+  'Tip na celkového víťaza',
+];
+
+const getLobbyRulesText = (longDescription?: string | null) => {
+  const longText = longDescription?.trim() || '';
+
+  if (!longText) {
+    return '';
+  }
+
+  const lowerLongText = longText.toLocaleLowerCase('cs-CZ');
+  const markerIndex = rulesStartMarkers
+    .map(marker => lowerLongText.indexOf(marker.toLocaleLowerCase('cs-CZ')))
+    .filter(index => index >= 0)
+    .sort((a, b) => a - b)[0];
+
+  if (markerIndex === undefined) {
+    return '';
+  }
+
+  return longText.slice(markerIndex).trim();
+};
+
 interface LobbyViewProps {
   lobby: Lobby;
   user: AppUser;
@@ -35,8 +67,10 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRulesExpanded, setIsRulesExpanded] = useState(false);
 
   const canEditLobby = Boolean(lobby.is_owner || user.role === 'admin');
+  const rulesText = getLobbyRulesText(lobby.long_description);
 
   const handleUpdateName = async () => {
     if (!editNameValue.trim()) {
@@ -134,13 +168,6 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
       setIsAdding(false);
     }
   };
-
-  // Placeholder Hall of Fame (mock for F10.1 presentation)
-  const hallOfFame = [
-    { username: user.username || "Kuba", points: 128, rank: 1 },
-    { username: "Honza", points: 120, rank: 2 },
-    { username: "Viktor", points: 98, rank: 3 },
-  ];
 
   return (
     <motion.div
@@ -258,7 +285,7 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* LEFT COLUMN */}
         <div className="space-y-6">
           {/* 2. AKTIVNÍ SOUTĚŽE */}
@@ -350,6 +377,34 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
               </div>
             )}
           </div>
+
+          {rulesText && (
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsRulesExpanded(expanded => !expanded)}
+                className="flex w-full items-center justify-between gap-3 text-left"
+                aria-expanded={isRulesExpanded}
+              >
+                <span>
+                  <h2 className="block text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    {lang === 'cz' ? 'Pravidla a bodování' : 'Rules and scoring'}
+                  </h2>
+                  <span className="mt-1 block text-[10px] font-semibold text-slate-400">
+                    {lang === 'cz' ? 'Instrukce k turnaji a uložené bodování' : 'Tournament instructions and saved scoring notes'}
+                  </span>
+                </span>
+                <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform md:hidden ${isRulesExpanded ? 'rotate-90' : ''}`} />
+              </button>
+              <div className={`${isRulesExpanded ? 'mt-4 block' : 'hidden'} md:mt-4 md:block`}>
+                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+                  <p className="text-xs font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
+                    {rulesText}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 3. HISTORIE */}
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 opacity-80">

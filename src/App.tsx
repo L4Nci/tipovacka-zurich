@@ -27,7 +27,6 @@ import {
   pickTournamentWinner as pickWinnerDB,
   changePassword as changePassDB,
   updateProfileAvatar,
-  updateLobbyDetails,
   checkSession,
   createLobby,
   joinLobbyByCode,
@@ -45,7 +44,8 @@ const translations = {
     results: "Výsledky",
     rank: "Pořadí",
     admin: "Admin",
-    profile: "Já",
+    profile: "Profil",
+    winnerTab: "Vítěz",
     upcoming: "Nadcházející zápasy",
     finished: "Odehrané zápasy",
     pts: "body",
@@ -116,7 +116,8 @@ const translations = {
     results: "Results",
     rank: "Rank",
     admin: "Admin",
-    profile: "Me",
+    profile: "Profile",
+    winnerTab: "Winner",
     upcoming: "Upcoming Matches",
     finished: "Finished Matches",
     pts: "pts",
@@ -836,6 +837,80 @@ const DeferredScreenSkeleton = () => (
   </div>
 );
 
+type TournamentWinnerScreenProps = {
+  t: any;
+  lang: 'cz' | 'en';
+  winnerPickerTeams: Team[];
+  currentUserPickId?: string;
+  isWinnerPickerLocked: boolean;
+  onPickTournamentWinner: (teamId: string) => Promise<void>;
+  TeamFlag: React.ComponentType<{ code: string | null | undefined; className?: string }>;
+};
+
+const TournamentWinnerScreen = ({
+  t,
+  lang,
+  winnerPickerTeams,
+  currentUserPickId,
+  isWinnerPickerLocked,
+  onPickTournamentWinner,
+  TeamFlag
+}: TournamentWinnerScreenProps) => (
+  <motion.div
+    key="winner"
+    initial={{ opacity: 0, x: -20 }}
+    animate={{ opacity: 1, x: 0 }}
+    exit={{ opacity: 0, x: 20 }}
+  >
+    <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+      <TrophyIcon className="w-4 h-4" /> {t.tournamentWinner}
+    </h2>
+    <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
+      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
+        {t.pickWinner} ({winnerPickerTeams.length} TEAMS AVAILABLE)
+        {isWinnerPickerLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null}
+      </h3>
+      <div className="grid grid-cols-4 gap-2">
+        {winnerPickerTeams.map(tm => {
+          const isSelected = tm.id === currentUserPickId;
+          let buttonStateClass = 'bg-slate-50 border-transparent hover:border-slate-200';
+          if (isWinnerPickerLocked) {
+            buttonStateClass = 'bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed';
+          }
+          if (isSelected) {
+            buttonStateClass = 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]';
+          }
+
+          return (
+            <motion.button
+              key={tm.id}
+              whileTap={!isWinnerPickerLocked ? { scale: 0.9 } : {}}
+              onClick={() => !isWinnerPickerLocked && onPickTournamentWinner(tm.id)}
+              disabled={isWinnerPickerLocked}
+              className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${buttonStateClass}`}
+            >
+              {isSelected && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-1 -right-1 bg-white rounded-full p-0.5 shadow-sm"
+                >
+                  <CheckCircle2 className="w-3 h-3 text-red-600" />
+                </motion.div>
+              )}
+              <TeamFlag code={tm.flag_code || tm.id} className="w-10 h-6 mb-1" />
+              <span className={`text-[10px] font-black ${isSelected ? 'text-white' : 'text-slate-400'}`}>
+                {tm.short_name ? tm.short_name : tm.id.replace('football-', '').toUpperCase()}
+              </span>
+            </motion.button>
+          );
+        })}
+      </div>
+      <p className="mt-4 text-[10px] text-center text-slate-400 italic font-medium">{t.lockedWinner}</p>
+    </div>
+  </motion.div>
+);
+
 // --- Main App ---
 
 export default function App() {
@@ -844,7 +919,7 @@ export default function App() {
     return saved ? JSON.parse(saved) : null;
   });
   
-  const [tab, setTab] = useState<'matches' | 'results' | 'leaderboard' | 'admin' | 'profile'>('matches');
+  const [tab, setTab] = useState<'matches' | 'results' | 'leaderboard' | 'winner' | 'admin' | 'profile'>('matches');
   const [matchFilter, setMatchFilter] = useState('all');
   const [lang, setLang] = useState<'cz' | 'en'>(() => {
     const saved = localStorage.getItem('lang');
@@ -876,7 +951,6 @@ export default function App() {
   const [suppressAutoEnter, setSuppressAutoEnter] = useState(() => sessionStorage.getItem('suppressAutoEnter') === 'true');
   const previousActiveLobbyIdRef = useRef<string | null>(activeLobbyId);
   const [lobbyExpanded, setLobbyExpanded] = useState(false);
-  const [isLobbyRulesOpen, setIsLobbyRulesOpen] = useState(false);
   const [newLobbyName, setNewLobbyName] = useState("");
   const [newLobbyShortDescription, setNewLobbyShortDescription] = useState("");
   const [newLobbyLongDescription, setNewLobbyLongDescription] = useState("");
@@ -887,23 +961,7 @@ export default function App() {
 
   const activeLobby = lobbies.find(l => l.id === activeLobbyId);
   const isHockey = activeTournamentId === "ms-hockey-2026";
-  const canEditActiveLobby = Boolean(activeLobby && (activeLobby.is_owner || user?.role === 'admin'));
-
   const [winnerPickerTeams, setWinnerPickerTeams] = useState<any[]>([]);
-  const [isEditingLobbyInfo, setIsEditingLobbyInfo] = useState(false);
-  const [editLobbyShortDescription, setEditLobbyShortDescription] = useState('');
-  const [editLobbyLongDescription, setEditLobbyLongDescription] = useState('');
-  const [lobbyInfoMsg, setLobbyInfoMsg] = useState('');
-  const [lobbyInfoError, setLobbyInfoError] = useState('');
-  const [isLobbyInfoSaving, setIsLobbyInfoSaving] = useState(false);
-
-  useEffect(() => {
-    setEditLobbyShortDescription(activeLobby?.short_description || '');
-    setEditLobbyLongDescription(activeLobby?.long_description || '');
-    setIsEditingLobbyInfo(false);
-    setLobbyInfoMsg('');
-    setLobbyInfoError('');
-  }, [activeLobby?.id, activeLobby?.short_description, activeLobby?.long_description]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1009,7 +1067,6 @@ export default function App() {
   useEffect(() => {
     if (activeLobbyId) {
       localStorage.setItem('activeLobbyId', activeLobbyId);
-      setIsLobbyRulesOpen(false);
       if (previousActiveLobbyIdRef.current && previousActiveLobbyIdRef.current !== activeLobbyId) {
         setActiveTournamentId(null);
         sessionStorage.removeItem('activeTournamentId');
@@ -1018,7 +1075,6 @@ export default function App() {
       localStorage.removeItem('activeLobbyId');
       setActiveTournamentId(null);
       sessionStorage.removeItem('activeTournamentId');
-      setIsLobbyRulesOpen(false);
     }
     previousActiveLobbyIdRef.current = activeLobbyId;
   }, [activeLobbyId]);
@@ -1029,7 +1085,6 @@ export default function App() {
     } else {
       sessionStorage.removeItem('activeTournamentId');
     }
-    setIsLobbyRulesOpen(false);
   }, [activeTournamentId]);
 
   useEffect(() => {
@@ -1589,36 +1644,6 @@ export default function App() {
     }
   };
 
-  const handleSaveLobbyInfo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !activeLobby) return;
-
-    setLobbyInfoMsg('');
-    setLobbyInfoError('');
-    setIsLobbyInfoSaving(true);
-
-    try {
-      await updateLobbyDetails(
-        user.id,
-        activeLobby.id,
-        activeLobby.name,
-        editLobbyShortDescription,
-        editLobbyLongDescription
-      );
-      updateLocalLobby(activeLobby.id, {
-        short_description: editLobbyShortDescription.trim() || null,
-        long_description: editLobbyLongDescription.trim() || null
-      });
-      setIsEditingLobbyInfo(false);
-      setIsLobbyRulesOpen(true);
-      setLobbyInfoMsg(lang === 'cz' ? 'Informace o lobby uloženy.' : 'Lobby information saved.');
-    } catch (err: any) {
-      setLobbyInfoError(err.message || (lang === 'cz' ? 'Informace se nepodařilo uložit.' : 'Could not save lobby information.'));
-    } finally {
-      setIsLobbyInfoSaving(false);
-    }
-  };
-
   const leaderboardWithStreaks = useMemo(() => {
     const activeLobby = lobbies.find(l => l.id === activeLobbyId);
     const isHockey = activeTournamentId === "ms-hockey-2026";
@@ -1757,7 +1782,18 @@ export default function App() {
   const currentUserStats = useMemo(() => {
     if (!user) return null;
     const stats = leaderboardWithStreaks.find(p => p.id === user.id);
-    return stats || { exact: 0, winner: 0, total: 0, currentStreak: 0, bestStreak: 0, history: [] };
+    return stats || {
+      ...user,
+      total_points: 0,
+      exact_hits: 0,
+      outcome_hits: 0,
+      goal_difference_hits: 0,
+      winner_hits: 0,
+      draw_hits: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      history: []
+    };
   }, [leaderboardWithStreaks, user]);
 
   const currentUserRank = useMemo(() => {
@@ -1884,6 +1920,63 @@ export default function App() {
     />
   );
 
+  if (tab === 'profile') {
+    return (
+      <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300 animate-fade-in">
+        <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100 transition-colors">
+          <div className="flex justify-between items-center mr-1">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setTab('matches')}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
+                title={lang === 'cz' ? 'Zpět' : 'Back'}
+              >
+                <ChevronRight className="w-4 h-4 rotate-180" />
+              </button>
+              <div>
+                <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tighter italic uppercase transition-colors">{t.profile}</h1>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                  {lang === 'cz' ? 'Globální účet' : 'Global account'}
+                </p>
+              </div>
+            </div>
+            <UserAvatar player={user} size="sm" />
+          </div>
+        </header>
+
+        <main className="p-4">
+          <LazyScreenErrorBoundary>
+            <Suspense fallback={<DeferredProfileSkeleton />}>
+              <LazyProfileScreen
+                t={t}
+                lang={lang}
+                user={user}
+                currentUserStats={currentUserStats}
+                currentUserRank={currentUserRank}
+                currentUserLeaderGap={currentUserLeaderGap}
+                passData={passData}
+                setPassData={setPassData}
+                passMsg={passMsg}
+                passError={passError}
+                isPassSaving={isPassSaving}
+                onUpdatePassword={handleUpdatePassword}
+                avatarData={avatarData}
+                showAvatarEditor={showAvatarEditor}
+                setShowAvatarEditor={setShowAvatarEditor}
+                avatarMsg={avatarMsg}
+                avatarError={avatarError}
+                onSaveAvatar={handleSaveAvatar}
+                onLogout={handleLogout}
+                setLang={setLang}
+                UserAvatar={UserAvatar}
+              />
+            </Suspense>
+          </LazyScreenErrorBoundary>
+        </main>
+      </div>
+    );
+  }
+
   if (!activeLobbyId) {
     return (
       <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300 animate-fade-in flex flex-col">
@@ -1896,10 +1989,11 @@ export default function App() {
                <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tighter italic uppercase transition-colors">FAN TIPOVAČKA</h1>
             </div>
             <button 
-              onClick={handleLogout}
-              className="text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest"
+              onClick={() => setTab('profile')}
+              className="flex items-center gap-2 rounded-full bg-slate-50 py-1 pl-1 pr-3 text-[10px] font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest transition-colors"
             >
-              Odhlásit
+              <UserAvatar player={user} size="sm" />
+              {t.profile}
             </button>
           </div>
         </header>
@@ -2107,9 +2201,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300 animate-fade-in">
       <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100 transition-colors">
-        <div className="flex justify-between items-center mr-1">
-          <div className="flex items-center gap-3">
-            {activeTournamentId ? (
+          <div className="flex justify-between items-center mr-1">
+            <div className="flex items-center gap-3">
+              {activeTournamentId ? (
               <button 
                 onClick={() => {
                   setSuppressAutoEnter(true);
@@ -2140,6 +2234,14 @@ export default function App() {
                <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tighter italic uppercase transition-colors">FAN TIPOVAČKA</h1>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setTab('profile')}
+            className="flex items-center gap-2 rounded-full bg-slate-50 py-1 pl-1 pr-3 text-[10px] font-bold text-slate-500 hover:text-slate-700 uppercase tracking-widest transition-colors"
+          >
+            <UserAvatar player={user} size="sm" />
+            {t.profile}
+          </button>
         </div>
       </header>
 
@@ -2278,76 +2380,16 @@ export default function App() {
             </LazyScreenErrorBoundary>
           )}
 
-          {tab === 'profile' && deferredLoading && !currentUserStats && (
-            <motion.div
-              key="profile-loading"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-            >
-              <DeferredProfileSkeleton />
-            </motion.div>
-          )}
-
-          {tab === 'profile' && !deferredLoading && deferredError && !currentUserStats && (
-            <motion.div
-              key="profile-error"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="rounded-2xl border border-red-100 bg-red-50 p-4 text-center text-xs font-bold text-red-600"
-            >
-              {deferredError}
-            </motion.div>
-          )}
-
-          {tab === 'profile' && currentUserStats && (
-            <LazyScreenErrorBoundary>
-              <Suspense fallback={<DeferredProfileSkeleton />}>
-                <LazyProfileScreen
-                  t={t}
-                  lang={lang}
-                  user={user}
-                  currentUserStats={currentUserStats}
-                  currentUserRank={currentUserRank}
-                  currentUserLeaderGap={currentUserLeaderGap}
-                  winnerPickerTeams={winnerPickerTeams}
-                  currentUserPickId={currentUserPickId}
-                  isWinnerPickerLocked={isWinnerPickerLocked}
-                  onPickTournamentWinner={pickTournamentWinner}
-                  passData={passData}
-                  setPassData={setPassData}
-                  passMsg={passMsg}
-                  passError={passError}
-                  isPassSaving={isPassSaving}
-                  onUpdatePassword={handleUpdatePassword}
-                  avatarData={avatarData}
-                  showAvatarEditor={showAvatarEditor}
-                  setShowAvatarEditor={setShowAvatarEditor}
-                  avatarMsg={avatarMsg}
-                  avatarError={avatarError}
-                  onSaveAvatar={handleSaveAvatar}
-                  activeLobby={activeLobby}
-                  isLobbyRulesOpen={isLobbyRulesOpen}
-                  setIsLobbyRulesOpen={setIsLobbyRulesOpen}
-                  canEditActiveLobby={canEditActiveLobby}
-                  isEditingLobbyInfo={isEditingLobbyInfo}
-                  setIsEditingLobbyInfo={setIsEditingLobbyInfo}
-                  editLobbyShortDescription={editLobbyShortDescription}
-                  setEditLobbyShortDescription={setEditLobbyShortDescription}
-                  editLobbyLongDescription={editLobbyLongDescription}
-                  setEditLobbyLongDescription={setEditLobbyLongDescription}
-                  isLobbyInfoSaving={isLobbyInfoSaving}
-                  lobbyInfoMsg={lobbyInfoMsg}
-                  lobbyInfoError={lobbyInfoError}
-                  onSaveLobbyInfo={handleSaveLobbyInfo}
-                  onLogout={handleLogout}
-                  setLang={setLang}
-                  TeamFlag={TeamFlag}
-                  UserAvatar={UserAvatar}
-                />
-              </Suspense>
-            </LazyScreenErrorBoundary>
+          {tab === 'winner' && (
+            <TournamentWinnerScreen
+              t={t}
+              lang={lang}
+              winnerPickerTeams={winnerPickerTeams}
+              currentUserPickId={currentUserPickId}
+              isWinnerPickerLocked={isWinnerPickerLocked}
+              onPickTournamentWinner={pickTournamentWinner}
+              TeamFlag={TeamFlag}
+            />
           )}
 
           {tab === 'admin' && user.role === 'admin' && (
@@ -2398,18 +2440,16 @@ export default function App() {
           <TrophyIcon className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.rank}</span>
         </button>
+        <button onClick={() => setTab('winner')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'winner' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
+          <Trophy className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase">{t.winnerTab}</span>
+        </button>
         {user.role === 'admin' && (
           <button onClick={() => setTab('admin')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'admin' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
             <ShieldCheck className="w-6 h-6" />
             <span className="text-[10px] font-bold uppercase">{t.admin}</span>
           </button>
         )}
-        <button onClick={() => setTab('profile')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'profile' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
-          <div className={`${tab === 'profile' ? 'ring-2 ring-red-600 rounded-full' : ''}`}>
-             <UserAvatar player={user} size="sm" />
-          </div>
-          <span className="text-[10px] font-bold uppercase">{t.profile}</span>
-        </button>
       </nav>
       )}
     </div>
