@@ -1383,6 +1383,18 @@ export default function App() {
     setActiveLobbyName(name);
   };
 
+  const updateLocalLobby = (lobbyId: string, updates: Partial<Lobby>) => {
+    setLobbies(prev => prev.map(lobby => (
+      lobby.id === lobbyId
+        ? { ...lobby, ...updates }
+        : lobby
+    )));
+
+    if (lobbyId === activeLobbyId && updates.name) {
+      setActiveLobbyName(updates.name);
+    }
+  };
+
   useEffect(() => {
     if (user?.id) {
       loadInitialData();
@@ -1431,8 +1443,55 @@ export default function App() {
 
   const savePrediction = async (matchId: string, h: number, a: number) => {
     try {
+      const existingMatch = matches.find(match => match.id === matchId);
+      const hadPrediction = existingMatch?.predicted_home_score !== null && existingMatch?.predicted_home_score !== undefined;
+
       await savePredDB(user?.id || '', activeLobbyId || '', matchId, h, a);
-      await fetchAll();
+
+      setMatches(prev => prev.map(match => (
+        match.id === matchId
+          ? {
+              ...match,
+              predicted_home_score: h,
+              predicted_away_score: a,
+              total_predictions: hadPrediction ? match.total_predictions : (match.total_predictions || 0) + 1
+            }
+          : match
+      )));
+
+      setAllPredictions(prev => {
+        if (prev.length === 0 || !user) return prev;
+
+        let found = false;
+        const updated = prev.map(prediction => {
+          if (prediction.player_id === user.id && prediction.match_id === matchId) {
+            found = true;
+            return {
+              ...prediction,
+              predicted_home_score: h,
+              predicted_away_score: a
+            };
+          }
+          return prediction;
+        });
+
+        if (found) return updated;
+
+        return [
+          ...updated,
+          {
+            player_id: user.id,
+            match_id: matchId,
+            predicted_home_score: h,
+            predicted_away_score: a,
+            points_earned: 0,
+            home_score: existingMatch?.home_score,
+            away_score: existingMatch?.away_score,
+            start_time_utc: existingMatch?.start_time_utc,
+            tournament_id: existingMatch?.tournament_id
+          } as Prediction
+        ];
+      });
     } catch (err: any) {
       alert(err.message);
     }
@@ -1509,8 +1568,12 @@ export default function App() {
         activeTournamentId || activeLobby?.tournament_id || 'fifa-world-cup-2026'
       );
       // Legacy cleanup: not saving to user local storage anymore
-      // just rely on longterm_predictions via fetchAll
-      await fetchAll();
+      // just rely on longterm_predictions through leaderboard state
+      setLeaderboard(prev => prev.map(player => (
+        player.id === user?.id
+          ? { ...player, tournament_winner_id: teamId }
+          : player
+      )));
     } catch (err: any) {
       alert(err.message);
     }
@@ -1557,7 +1620,11 @@ export default function App() {
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setAvatarData({ emoji: nextEmoji, bg: nextBg });
       setAvatarMsg(lang === 'cz' ? 'Avatar uložen.' : 'Avatar saved.');
-      await fetchAll();
+      setLeaderboard(prev => prev.map(player => (
+        player.id === user.id
+          ? { ...player, avatar_emoji: nextEmoji, avatar_bg: nextBg }
+          : player
+      )));
     } catch (err: any) {
       setAvatarError(err.message || (lang === 'cz' ? 'Avatar se nepodařilo uložit.' : 'Could not save avatar.'));
     }
@@ -1579,7 +1646,10 @@ export default function App() {
         editLobbyShortDescription,
         editLobbyLongDescription
       );
-      await fetchAll(activeLobby.id);
+      updateLocalLobby(activeLobby.id, {
+        short_description: editLobbyShortDescription.trim() || null,
+        long_description: editLobbyLongDescription.trim() || null
+      });
       setIsEditingLobbyInfo(false);
       setIsLobbyRulesOpen(true);
       setLobbyInfoMsg(lang === 'cz' ? 'Informace o lobby uloženy.' : 'Lobby information saved.');
@@ -2124,15 +2194,21 @@ export default function App() {
               setActiveTournamentId(id);
               setTab('matches');
             }}
-            onRefresh={() => fetchAll()}
-	            onLobbyDeleted={() => {
-	              setActiveLobbyId(null);
-	              setActiveTournamentId(null);
-	              fetchAll();
-	            }}
-	            membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
-	            tournamentStats={tournamentStats}
-	          />
+            onRefresh={(updatedLobby) => {
+              if (updatedLobby) {
+                updateLocalLobby(activeLobby.id, updatedLobby);
+              } else {
+                fetchAll();
+              }
+            }}
+            onLobbyDeleted={() => {
+              setActiveLobbyId(null);
+              setActiveTournamentId(null);
+              fetchAll();
+            }}
+            membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
+            tournamentStats={tournamentStats}
+          />
         </main>
       ) : activeLobby && activeTournamentId ? (
         <main className="p-4">

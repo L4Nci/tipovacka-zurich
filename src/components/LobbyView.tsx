@@ -9,7 +9,7 @@ interface LobbyViewProps {
   user: AppUser;
   onSelectTournament: (tournamentId: string) => void;
   lang: 'cz' | 'en';
-  onRefresh?: () => void;
+  onRefresh?: (updatedLobby?: Partial<Lobby>) => void;
   onLobbyDeleted?: () => void;
   membersCount?: number;
   tournamentStats?: Record<string, {
@@ -53,7 +53,14 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
         editLongDescription.trim()
       );
       setIsEditingName(false);
-      if (onRefresh) onRefresh();
+      if (onRefresh) {
+        onRefresh({
+          id: lobby.id,
+          name: editNameValue.trim(),
+          short_description: editShortDescription.trim() || null,
+          long_description: editLongDescription.trim() || null
+        });
+      }
     } catch (err: any) {
       alert(err.message || "Failed to update lobby name");
     } finally {
