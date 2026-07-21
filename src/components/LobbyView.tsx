@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check } from 'lucide-react';
 import { Lobby, Player as AppUser } from '../types';
 import { addTournamentToLobby, updateLobbyDetails, deleteLobby } from '../lib/db';

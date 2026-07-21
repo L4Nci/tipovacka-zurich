@@ -1,23 +1,17 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { Component, Suspense, lazy, useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
   Calendar, 
   CheckCircle2, 
-  UserPlus,
   ShieldCheck, 
   ChevronRight, 
   Trophy as TrophyIcon,
-  Flame,
   Clock,
-  LogOut,
   ChevronDown,
   ChevronUp,
-  X,
-  Pencil
 } from 'lucide-react';
 import { Player, Team, Match, Prediction, Lobby } from './types.ts';
-import { LobbyView } from './components/LobbyView.tsx';
 import { supabase } from './lib/supabase.ts';
 import { isDrawPrediction, isFootballKnockoutStage } from './lib/matchRules.ts';
 import { 
@@ -39,6 +33,11 @@ import {
   joinLobbyByCode,
   calculatePoints
 } from './lib/db.ts';
+
+const LazyAdminScreen = lazy(() => import('./components/AdminScreen.tsx'));
+const LazyLeaderboardScreen = lazy(() => import('./components/LeaderboardScreen.tsx'));
+const LazyLobbyView = lazy(() => import('./components/LobbyView.tsx').then(module => ({ default: module.LobbyView })));
+const LazyProfileScreen = lazy(() => import('./components/ProfileScreen.tsx'));
 
 const translations = {
   cz: {
@@ -186,14 +185,6 @@ const translations = {
 };
 
 // --- Components ---
-
-const avatarEmojis = [
-  '😀', '😎', '🤖', '👑', '🦊', '🐺', '🦁', '🚀', '⚽', '🏒',
-  '🐯', '🐼', '🐨', '🐵', '🦅', '🦉', '🦈', '🐙', '🦖', '🐉',
-  '🦄', '🐸', '🐧', '🦔', '🦥', '🐻', '🐗', '🦇', '🐬', '🐢',
-  '🦂', '🐍', '🦋', '🐞', '🐝', '🐿️', '🦝', '🐱', '🐶'
-];
-const avatarColors = ['#fee2e2', '#ffedd5', '#fef3c7', '#dcfce7', '#ccfbf1', '#dbeafe', '#e0e7ff', '#f3e8ff', '#fce7f3', '#e2e8f0'];
 
 const UserAvatar = ({ player, size = 'md' }: { player?: Pick<Player, 'username' | 'avatar_emoji' | 'avatar_bg'> | null, size?: 'sm' | 'md' | 'lg' }) => {
   const sizeClass = size === 'lg' ? 'w-20 h-20 text-4xl' : size === 'sm' ? 'w-7 h-7 text-sm' : 'w-10 h-10 text-xl';
@@ -690,83 +681,6 @@ const MatchCard: React.FC<MatchCardProps> = ({
   );
 };
 
-const AdminMatchCard: React.FC<{ match: Match, onUpdate: (h: number, a: number) => Promise<void>, t: any, isHockey?: boolean }> = ({ match, onUpdate, t, isHockey = false }) => {
-  const [adminH, setAdminH] = useState(match.home_score ?? 0);
-  const [adminA, setAdminA] = useState(match.away_score ?? 0);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const handleUpdate = async () => {
-    if (!showConfirm) {
-      setShowConfirm(true);
-      return;
-    }
-    setIsUpdating(true);
-    try {
-      await onUpdate(adminH, adminA);
-      setShowConfirm(false);
-    } catch (err) {
-      // handled elsewhere
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 overflow-hidden transition-colors">
-      <div className="flex justify-between items-center mb-4">
-        <span className="text-xs font-bold text-slate-400 uppercase">{match.stage}</span>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold transition-colors ${match.status === 'finished' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
-          {match.status.toUpperCase()}
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <div className="flex flex-col items-center flex-1">
-          <TeamFlag code={match.home_flag || match.home_team_id} className="w-12 h-8 mb-1" />
-          <div className="flex items-center gap-1">
-            <button onClick={() => setAdminH(Math.max(0, adminH - 1))} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">-</button>
-            <span className="text-xl font-black w-6 text-center text-slate-900 transition-colors">{adminH}</span>
-            <button onClick={() => setAdminH(adminH + 1)} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">+</button>
-          </div>
-        </div>
-
-        <span className="text-slate-300 font-bold text-xl">:</span>
-
-        <div className="flex flex-col items-center flex-1">
-          <TeamFlag code={match.away_flag || match.away_team_id} className="w-12 h-8 mb-1" />
-          <div className="flex items-center gap-1">
-            <button onClick={() => setAdminA(Math.max(0, adminA - 1))} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">-</button>
-            <span className="text-xl font-black w-6 text-center text-slate-900 transition-colors">{adminA}</span>
-            <button onClick={() => setAdminA(adminA + 1)} className="w-8 h-8 bg-slate-50 rounded-full border border-slate-200 flex items-center justify-center font-bold text-slate-600 active:scale-90 transition-colors">+</button>
-          </div>
-        </div>
-      </div>
-      <div className="flex flex-col gap-2">
-        <button 
-          onClick={handleUpdate}
-          disabled={(isHockey && adminH === adminA) || isUpdating}
-          className={`w-full py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-sm flex items-center justify-center gap-2 ${
-            (isHockey && adminH === adminA) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 
-            showConfirm ? 'bg-orange-600 text-white animate-pulse' : 'bg-slate-900 text-white active:scale-95'
-          }`}
-        >
-          {isUpdating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 
-           showConfirm ? (t.lang === 'cz' ? 'Určitě?' : 'Are you sure?') : t.updateResult}
-        </button>
-        {showConfirm && (
-          <button 
-            onClick={() => setShowConfirm(false)}
-            className="w-full py-2 text-[10px] font-bold text-slate-400 uppercase"
-          >
-            {t.lang === 'cz' ? 'Zrušit' : 'Cancel'}
-          </button>
-        )}
-      </div>
-      {isHockey && adminH === adminA && <p className="mt-2 text-[10px] text-center text-slate-400 italic">{t.noDraws}</p>}
-    </div>
-  );
-};
-
 const AuthenticatedAppSkeleton = ({ t, error, onRetry }: { t: any, error: string, onRetry: () => void }) => (
   <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300">
     <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100 transition-colors">
@@ -874,6 +788,51 @@ const DeferredProfileSkeleton = () => (
         </div>
       ))}
     </div>
+  </div>
+);
+
+class LazyScreenErrorBoundary extends (Component as any) {
+  declare props: { children: React.ReactNode; fallback?: React.ReactNode };
+  declare state: { hasError: boolean };
+
+  constructor(props: { children: React.ReactNode; fallback?: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Lazy screen load error:", error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback ?? (
+        <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-center text-xs font-bold text-red-600">
+          Obrazovku se nepodařilo načíst. Zkus aplikaci obnovit.
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const DeferredScreenSkeleton = () => (
+  <div className="space-y-3">
+    {[0, 1, 2].map(item => (
+      <div key={item} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+        <div className="mb-3 h-4 w-32 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+        <div className="space-y-2">
+          <div className="h-3 w-full rounded-full bg-slate-100 motion-safe:animate-pulse" />
+          <div className="h-3 w-3/4 rounded-full bg-slate-100 motion-safe:animate-pulse" />
+          <div className="h-10 w-full rounded-xl bg-slate-50 motion-safe:animate-pulse" />
+        </div>
+      </div>
+    ))}
   </div>
 );
 
@@ -2186,29 +2145,33 @@ export default function App() {
 
       {activeLobby && !activeTournamentId ? (
         <main className="p-4" style={{ backgroundColor: '#f8fafc' }}>
-          <LobbyView 
-            lobby={activeLobby}
-            user={{ ...user, username: user.username || '' }}
-            lang={lang as 'cz' | 'en'}
-            onSelectTournament={id => {
-              setActiveTournamentId(id);
-              setTab('matches');
-            }}
-            onRefresh={(updatedLobby) => {
-              if (updatedLobby) {
-                updateLocalLobby(activeLobby.id, updatedLobby);
-              } else {
-                fetchAll();
-              }
-            }}
-            onLobbyDeleted={() => {
-              setActiveLobbyId(null);
-              setActiveTournamentId(null);
-              fetchAll();
-            }}
-            membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
-            tournamentStats={tournamentStats}
-          />
+          <LazyScreenErrorBoundary>
+            <Suspense fallback={<DeferredScreenSkeleton />}>
+              <LazyLobbyView
+                lobby={activeLobby}
+                user={{ ...user, username: user.username || '' }}
+                lang={lang as 'cz' | 'en'}
+                onSelectTournament={id => {
+                  setActiveTournamentId(id);
+                  setTab('matches');
+                }}
+                onRefresh={(updatedLobby) => {
+                  if (updatedLobby) {
+                    updateLocalLobby(activeLobby.id, updatedLobby);
+                  } else {
+                    fetchAll();
+                  }
+                }}
+                onLobbyDeleted={() => {
+                  setActiveLobbyId(null);
+                  setActiveTournamentId(null);
+                  fetchAll();
+                }}
+                membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
+                tournamentStats={tournamentStats}
+              />
+            </Suspense>
+          </LazyScreenErrorBoundary>
         </main>
       ) : activeLobby && activeTournamentId ? (
         <main className="p-4">
@@ -2293,198 +2256,26 @@ export default function App() {
           )}
 
           {tab === 'leaderboard' && (
-            <motion.div 
-              key="leaderboard"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-            >
-              <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                  <Trophy className="w-4 h-4" /> {t.globalStandings}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowScoringInfo(true)}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white border border-slate-100 text-slate-400 hover:text-slate-600 hover:border-slate-200 transition-colors shadow-sm"
-                  aria-label={lang === 'cz' ? 'Informace o bodování' : 'Scoring information'}
-                >
-                  <span className="text-sm font-black normal-case tracking-normal" aria-hidden="true">ⓘ</span>
-                </button>
-              </h2>
-
-              <AnimatePresence>
-                {showScoringInfo && (
-                  <motion.div
-                    key="scoring-info-modal"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[80] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
-                    onClick={() => setShowScoringInfo(false)}
-                  >
-                    <motion.div
-                      initial={{ y: 16, scale: 0.98 }}
-                      animate={{ y: 0, scale: 1 }}
-                      exit={{ y: 16, scale: 0.98 }}
-                      className="w-full max-w-sm rounded-3xl border border-slate-100 bg-white p-5 shadow-2xl"
-                      onClick={event => event.stopPropagation()}
-                    >
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">
-                          {lang === 'cz' ? 'Bodování' : 'Scoring'}
-                        </h3>
-                        <button
-                          type="button"
-                          onClick={() => setShowScoringInfo(false)}
-                          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100"
-                          aria-label={lang === 'cz' ? 'Zavřít informace o bodování' : 'Close scoring information'}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                      <div className="space-y-1.5">
-                        {[
-                          ['Přesný výsledek', '5 b'],
-                          ['Vítěz + rozdíl', '3 b'],
-                          ['Správný vítěz', '2 b'],
-                          ['Správná remíza', '2 b'],
-                          ['Vítěz turnaje', '10 b']
-                        ].map(([label, points]) => (
-                          <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
-                            <span className="text-xs font-bold text-slate-700">{label}</span>
-                            <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-black text-white">
-                              {points}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Official Winner Display - Only if decided */}
-              {officialWinnerTeam && (
-                <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-3xl p-6 text-white shadow-lg relative overflow-hidden mb-6">
-                    <TrophyIcon className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 rotate-12" />
-                    <div className="relative z-10 flex flex-col items-center text-center">
-                      <p className="text-xs font-bold uppercase opacity-80 mb-2">{t.officialWinner}</p>
-                      <div className="flex flex-col items-center">
-                        <TeamFlag code={officialWinnerTeam.flag_code || officialWinnerTeam.id} className="w-20 h-12 mb-2" />
-                        <span className="text-2xl font-black">{officialWinnerTeam.name}</span>
-                      </div>
-                    </div>
-                </div>
-              )}
-
-              {deferredError && leaderboardWithStreaks.length === 0 && (
-                <div className="mb-3 rounded-2xl border border-red-100 bg-red-50 p-3 text-center text-xs font-bold text-red-600">
-                  {deferredError}
-                </div>
-              )}
-
-              {deferredLoading && leaderboardWithStreaks.length === 0 ? (
-                <DeferredLeaderboardSkeleton />
-              ) : (
-              <div className="space-y-3">
-                {leaderboardWithStreaks.map((p, i) => {
-                  const pTeamInfo = teams.find(tm => tm.id === p.tournament_winner_id) || winnerPickerTeams.find(tm => tm.id === p.tournament_winner_id);
-                  const hasCorrectChampionPick = Boolean(officialWinnerTeam && p.tournament_winner_id === officialWinnerTeam.id);
-                  const rankTone = i === 0 ? 'bg-yellow-400 text-yellow-900' :
-                    i === 1 ? 'bg-slate-300 text-slate-700' :
-                    i === 2 ? 'bg-amber-600 text-amber-50' :
-                    'bg-slate-100 text-slate-500';
-
-                  return (
-                    <div
-                      key={p.id}
-                      className={`bg-white rounded-2xl border shadow-sm p-4 transition-colors ${p.id === user.id ? 'border-red-200 bg-red-50/40' : 'border-slate-100'}`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black shadow-sm ${rankTone}`}>
-                            {i + 1}
-                          </div>
-                          <UserAvatar player={p} size="md" />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-black text-slate-800 truncate">{p.username}</span>
-                              {p.lobby_role === 'owner' && <span title="Správce lobby">👑</span>}
-                              {p.currentStreak >= 3 && (
-                                <span className="text-xs">
-                                  {p.currentStreak >= 7 ? '🐐' : p.currentStreak >= 5 ? '🔥🔥' : '🔥'}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              {p.rankChange > 0 ? (
-                                <span className="inline-flex items-center text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-                                  <ChevronUp className="w-3 h-3 stroke-[3]" /> {p.rankChange}
-                                </span>
-                              ) : p.rankChange < 0 ? (
-                                <span className="inline-flex items-center text-[10px] font-black text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded-md">
-                                  <ChevronDown className="w-3 h-3 stroke-[3]" /> {Math.abs(p.rankChange)}
-                                </span>
-                              ) : (
-                                <span className="text-[10px] font-black text-slate-300 bg-slate-50 px-1.5 py-0.5 rounded-md">=</span>
-                              )}
-                              {pTeamInfo && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200/60">
-                                  <TeamFlag code={pTeamInfo.flag_code || pTeamInfo.id} className="w-4 h-2.5 shadow-sm" />
-                                  {pTeamInfo.short_name || pTeamInfo.name.substring(0, 3).toUpperCase()}
-                                </span>
-                              )}
-                              {hasCorrectChampionPick && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
-                                  <CheckCircle2 className="w-3 h-3 stroke-[3]" />
-                                  Správný tip · +10 bodů
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-2xl font-black text-slate-900 leading-none">{p.total_points ?? 0}</p>
-                          <p className="text-[9px] font-black uppercase text-slate-400 mt-1">{t.pts}</p>
-                        </div>
-                      </div>
-                      <div className="mt-2.5 grid grid-cols-4 gap-1.5">
-                        <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                            <span className="block">{lang === 'cz' ? 'Přesné' : 'Exact'}</span>
-                            <span className="block">{lang === 'cz' ? 'skóre' : 'score'}</span>
-                          </p>
-                          <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.exact_hits ?? 0}</p>
-                        </div>
-                        <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                            <span className="block">{lang === 'cz' ? 'Rozdíl' : 'Goal'}</span>
-                            <span className="block">{lang === 'cz' ? 'gólů' : 'difference'}</span>
-                          </p>
-                          <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.goal_difference_hits ?? 0}</p>
-                        </div>
-                        <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                            <span className="block">{lang === 'cz' ? 'Správný' : 'Correct'}</span>
-                            <span className="block">{lang === 'cz' ? 'vítěz' : 'winner'}</span>
-                          </p>
-                          <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.winner_hits ?? 0}</p>
-                        </div>
-                        <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                          <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                            <span className="block">{lang === 'cz' ? 'Tip na' : 'Inexact'}</span>
-                            <span className="block">{lang === 'cz' ? 'remízu' : 'draw'}</span>
-                          </p>
-                          <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.draw_hits ?? 0}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              )}
-            </motion.div>
+            <LazyScreenErrorBoundary>
+              <Suspense fallback={<DeferredLeaderboardSkeleton />}>
+                <LazyLeaderboardScreen
+                  t={t}
+                  lang={lang}
+                  user={user}
+                  leaderboardWithStreaks={leaderboardWithStreaks}
+                  teams={teams}
+                  winnerPickerTeams={winnerPickerTeams}
+                  officialWinnerTeam={officialWinnerTeam}
+                  deferredLoading={deferredLoading}
+                  deferredError={deferredError}
+                  showScoringInfo={showScoringInfo}
+                  setShowScoringInfo={setShowScoringInfo}
+                  DeferredLeaderboardSkeleton={DeferredLeaderboardSkeleton}
+                  TeamFlag={TeamFlag}
+                  UserAvatar={UserAvatar}
+                />
+              </Suspense>
+            </LazyScreenErrorBoundary>
           )}
 
           {tab === 'profile' && deferredLoading && !currentUserStats && (
@@ -2511,525 +2302,82 @@ export default function App() {
           )}
 
           {tab === 'profile' && currentUserStats && (
-            <motion.div 
-              key="profile"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="space-y-4"
-            >
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                 <div className="mb-4 relative">
-                   <UserAvatar player={user} size="lg" />
-                   <button
-                     type="button"
-                     onClick={() => setShowAvatarEditor(true)}
-                     className="absolute -right-1 -bottom-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg ring-4 ring-white active:scale-95 transition-all"
-                     aria-label={lang === 'cz' ? 'Upravit avatar' : 'Edit avatar'}
-                   >
-                     <Pencil className="w-3.5 h-3.5" />
-                   </button>
-                 </div>
-                 <h2 className="text-xl font-black text-slate-900 uppercase transition-colors">{user.username}</h2>
-                 {currentUserStats.currentStreak >= 3 && (
-                   <div className="mt-2 flex items-center gap-1 text-orange-500 font-black italic text-sm">
-                      <Flame className="w-4 h-4 fill-current" />
-                      {currentUserStats.currentStreak >= 7 ? 'GOAT' : 
-                       currentUserStats.currentStreak >= 5 ? 'ON FIRE' : 'HOT'}
-                   </div>
-                 )}
-              </div>
-
-              <AnimatePresence>
-                {showAvatarEditor && (
-                  <motion.div
-                    key="avatar-modal"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-[80] bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center px-4 pb-4"
-                    onClick={() => setShowAvatarEditor(false)}
-                  >
-                    <motion.div
-                      initial={{ y: 24, scale: 0.98 }}
-                      animate={{ y: 0, scale: 1 }}
-                      exit={{ y: 24, scale: 0.98 }}
-                      className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-slate-100"
-                      onClick={event => event.stopPropagation()}
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                          {lang === 'cz' ? 'Avatar' : 'Avatar'}
-                        </h3>
-                        <button
-                          type="button"
-                          onClick={() => setShowAvatarEditor(false)}
-                          className="w-8 h-8 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100"
-                          aria-label={lang === 'cz' ? 'Zavřít avatar editor' : 'Close avatar editor'}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <div className="flex justify-center mb-4">
-                        <UserAvatar player={{ username: user.username, avatar_emoji: avatarData.emoji, avatar_bg: avatarData.bg }} size="lg" />
-                      </div>
-                      <div className="grid grid-cols-5 gap-2 mb-4">
-                        {avatarEmojis.map(emoji => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => handleSaveAvatar(emoji, avatarData.bg)}
-                            className={`h-10 rounded-xl text-xl border transition-all ${avatarData.emoji === emoji ? 'border-red-600 bg-red-50 shadow-sm scale-105' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
-                            aria-label={`Avatar ${emoji}`}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="grid grid-cols-5 gap-2">
-                        {avatarColors.map(color => (
-                          <button
-                            key={color}
-                            type="button"
-                            onClick={() => handleSaveAvatar(avatarData.emoji, color)}
-                            className={`h-9 rounded-xl border transition-all ${avatarData.bg === color ? 'border-slate-900 ring-2 ring-slate-900/10 scale-105' : 'border-white hover:border-slate-200'}`}
-                            style={{ backgroundColor: color }}
-                            aria-label={`Avatar color ${color}`}
-                          />
-                        ))}
-                      </div>
-                      {avatarMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-3">{avatarMsg}</p>}
-                      {avatarError && <p className="text-[10px] text-red-600 font-bold text-center mt-3">{avatarError}</p>}
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 transition-colors">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">{lang === 'cz' ? 'Historie (posledních 10)' : 'History (last 10)'}</h3>
-                 <div className="grid grid-cols-10 gap-1">
-                   {currentUserStats.history.map((h: any, idx: number) => (
-                      <div key={idx} className="min-w-0 flex flex-col items-center gap-0.5">
-                        <div className={`aspect-square w-full rounded-lg flex items-center justify-center text-[9px] font-black border transition-colors ${
-                          h.res === 'E' ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm shadow-emerald-100' :
-                          h.res === 'W' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                          'bg-slate-50 text-slate-400 border-slate-100'
-                        }`}>
-                          {h.res === 'L' ? '0' : `+${h.points}`}
-                        </div>
-                        <span className="text-[7px] font-bold leading-none text-slate-300">
-                          {h.res === 'E' ? '✔✔' : h.res === 'W' ? '✔' : '✖'}
-                        </span>
-                      </div>
-                   ))}
-                   {currentUserStats.history.length === 0 && <p className="col-span-10 text-center text-[10px] text-slate-400 italic">Zatím žádná historie</p>}
-                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{t.totalPoints}</p>
-                    <p className="mt-1 text-2xl font-black leading-none text-red-600 transition-colors">{currentUserStats.total_points}</p>
-                 </div>
-                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Pořadí' : 'Rank'}</p>
-                    <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">#{currentUserRank ?? '-'}</p>
-                 </div>
-                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Na lídra' : 'To Leader'}</p>
-                    <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">{currentUserLeaderGap}</p>
-                 </div>
-              </div>
-
-              <div className="bg-white rounded-3xl p-3 shadow-sm border border-slate-100 transition-colors">
-                <div className="grid grid-cols-4 gap-1.5">
-                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-2">
-                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.exact}</p>
-                    <p className="mt-1 text-sm font-black leading-none text-slate-800">{currentUserStats.exact_hits ?? 0}</p>
-                  </div>
-                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-2">
-                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.goalDiff}</p>
-                    <p className="mt-1 text-sm font-black leading-none text-slate-800">{currentUserStats.goal_difference_hits ?? 0}</p>
-                  </div>
-                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-2">
-                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.winner}</p>
-                    <p className="mt-1 text-sm font-black leading-none text-slate-800">{currentUserStats.winner_hits ?? 0}</p>
-                  </div>
-                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-2">
-                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">{t.draw}</p>
-                    <p className="mt-1 text-sm font-black leading-none text-slate-800">{currentUserStats.draw_hits ?? 0}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Nejlepší série' : 'Best Streak'}</p>
-                    <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">{currentUserStats.bestStreak}</p>
-                 </div>
-                 <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-                    <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Aktuální série' : 'Current Streak'}</p>
-                    <div className="flex items-center gap-2">
-                      <p className="mt-1 text-2xl font-black leading-none text-orange-500 transition-colors">{currentUserStats.currentStreak}</p>
-                      <Flame className={`w-4 h-4 ${currentUserStats.currentStreak >= 3 ? 'text-orange-500 fill-current' : 'text-slate-100'}`} />
-                    </div>
-                 </div>
-              </div>
-
-              {(() => {
-                const pickerOptions = winnerPickerTeams;
-
-                return (
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
-                   {t.pickWinner} ({pickerOptions.length} TEAMS AVAILABLE)
-                   {isWinnerPickerLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null}
-                 </h3>
-                 <div className="grid grid-cols-4 gap-2">
-                   {pickerOptions.map(tm => {
-                     const isSelected = tm.id === currentUserPickId;
-                     let buttonStateClass = 'bg-slate-50 border-transparent hover:border-slate-200';
-                     if (isWinnerPickerLocked) {
-                       buttonStateClass = 'bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed';
-                     }
-                     if (isSelected) {
-                       buttonStateClass = 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]';
-                     }
-                     
-                     return (
-                       <motion.button
-                         key={tm.id}
-                         whileTap={!isWinnerPickerLocked ? { scale: 0.9 } : {}}
-                         onClick={() => !isWinnerPickerLocked && pickTournamentWinner(tm.id)}
-                         disabled={isWinnerPickerLocked}
-                         className={`p-2 rounded-xl flex flex-col items-center border transition-all relative ${buttonStateClass}`}
-                       >
-                         {isSelected && (
-                           <motion.div 
-                             initial={{ scale: 0 }}
-                             animate={{ scale: 1 }}
-                             className="absolute -top-1 -right-1 bg-white rounded-full p-0.5 shadow-sm"
-                           >
-                             <CheckCircle2 className="w-3 h-3 text-red-600" />
-                           </motion.div>
-                         )}
-                         <TeamFlag code={tm.flag_code || tm.id} className="w-10 h-6 mb-1" />
-                         <span className={`text-[10px] font-black ${isSelected ? 'text-white' : 'text-slate-400'}`}>
-                           {tm.short_name ? tm.short_name : tm.id.replace('football-', '').toUpperCase()}
-                         </span>
-                       </motion.button>
-                     );
-                    })}
-                 </div>
-                 <p className="mt-4 text-[10px] text-center text-slate-400 italic font-medium">{t.lockedWinner}</p>
-              </div>
-                );
-              })()}
-
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 italic">{t.changePass}</h3>
-                 <form onSubmit={handleUpdatePassword} className="space-y-3">
-                   <input 
-                     type="password"
-                     placeholder={t.newPass}
-                     value={passData.newPass}
-                     onChange={e => setPassData(p => ({ ...p, newPass: e.target.value }))}
-                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm focus:ring-2 focus:ring-red-500 transition-all outline-none"
-                     required
-                   />
-                   <input 
-                     type="password"
-                     placeholder={t.confirmPass}
-                     value={passData.confirmPass}
-                     onChange={e => setPassData(p => ({ ...p, confirmPass: e.target.value }))}
-                     className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm focus:ring-2 focus:ring-red-500 transition-all outline-none"
-                     required
-                   />
-                   <button 
-                     type="submit"
-                     disabled={isPassSaving}
-                     className="w-full py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
-                   >
-                     {isPassSaving ? (lang === 'cz' ? 'Ukládám...' : 'Saving...') : t.changePass}
-                   </button>
-                   {passMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-2">{passMsg}</p>}
-                   {passError && <p className="text-[10px] text-red-600 font-bold text-center mt-2">{passError}</p>}
-                 </form>
-              </div>
-
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t.langSelect}</h3>
-                 <div className="grid grid-cols-2 gap-4">
-                    <button 
-                      onClick={() => setLang('cz')}
-                      className={`py-3 rounded-2xl font-black border-2 transition-all ${lang === 'cz' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}
-                    >
-                      Čeština
-                    </button>
-                    <button 
-                      onClick={() => setLang('en')}
-                      className={`py-3 rounded-2xl font-black border-2 transition-all ${lang === 'en' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}
-                    >
-                      English
-                    </button>
-                 </div>
-              </div>
-
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
-                <div className="flex items-start justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsLobbyRulesOpen(open => !open)}
-                    className="flex flex-1 items-center gap-3 min-w-0 text-left"
-                    aria-expanded={isLobbyRulesOpen}
-                  >
-                    <span className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-black shrink-0">
-                      ⓘ
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-xs font-black text-slate-800 uppercase tracking-wider">
-                        {lang === 'cz' ? 'O lobby' : 'About lobby'}
-                      </span>
-                      <span className="block text-[10px] font-semibold text-slate-400 mt-0.5">
-                        {lang === 'cz' ? 'Informace o skupině, komunikaci a domluvě' : 'Group information, communication and notes'}
-                      </span>
-                    </span>
-                  </button>
-                  <div className="flex items-center gap-1 shrink-0">
-                    {canEditActiveLobby && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsEditingLobbyInfo(true);
-                          setIsLobbyRulesOpen(true);
-                          setLobbyInfoMsg('');
-                          setLobbyInfoError('');
-                        }}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                        aria-label={lang === 'cz' ? 'Upravit O lobby' : 'Edit about lobby'}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setIsLobbyRulesOpen(open => !open)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 transition-colors"
-                      aria-label={isLobbyRulesOpen ? (lang === 'cz' ? 'Sbalit O lobby' : 'Collapse about lobby') : (lang === 'cz' ? 'Rozbalit O lobby' : 'Expand about lobby')}
-                    >
-                      <ChevronDown className={`w-4 h-4 transition-transform ${isLobbyRulesOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                  </div>
-                </div>
-                <AnimatePresence initial={false}>
-                  {isLobbyRulesOpen && (
-                    <motion.div
-                      key="profile-lobby-about"
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden"
-                    >
-                      {isEditingLobbyInfo ? (
-                        <form onSubmit={handleSaveLobbyInfo} className="mt-4 space-y-3">
-                          <input
-                            type="text"
-                            value={editLobbyShortDescription}
-                            onChange={e => setEditLobbyShortDescription(e.target.value)}
-                            className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-semibold focus:ring-2 focus:ring-red-500 transition-all outline-none"
-                            placeholder={lang === 'cz' ? 'Krátké shrnutí skupiny' : 'Short group summary'}
-                            maxLength={120}
-                          />
-                          <textarea
-                            value={editLobbyLongDescription}
-                            onChange={e => setEditLobbyLongDescription(e.target.value)}
-                            className="w-full min-h-[120px] px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm font-medium focus:ring-2 focus:ring-red-500 transition-all outline-none resize-y"
-                            placeholder={lang === 'cz' ? 'Zatím bez popisu skupiny.' : 'No group description yet.'}
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsEditingLobbyInfo(false);
-                                setEditLobbyShortDescription(activeLobby?.short_description || '');
-                                setEditLobbyLongDescription(activeLobby?.long_description || '');
-                                setLobbyInfoError('');
-                              }}
-                              className="px-3 py-2 rounded-xl bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-wider"
-                            >
-                              {lang === 'cz' ? 'Zrušit' : 'Cancel'}
-                            </button>
-                            <button
-                              type="submit"
-                              disabled={isLobbyInfoSaving}
-                              className="px-3 py-2 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider disabled:opacity-60"
-                            >
-                              {isLobbyInfoSaving ? (lang === 'cz' ? 'Ukládám...' : 'Saving...') : (lang === 'cz' ? 'Uložit' : 'Save')}
-                            </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <div className="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4">
-                          <p className="text-xs font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
-                            {activeLobby.long_description || (lang === 'cz' ? 'Zatím bez popisu skupiny.' : 'No group description yet.')}
-                          </p>
-                        </div>
-                      )}
-                      {lobbyInfoMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-3">{lobbyInfoMsg}</p>}
-                      {lobbyInfoError && <p className="text-[10px] text-red-600 font-bold text-center mt-3">{lobbyInfoError}</p>}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              <button 
-                onClick={handleLogout}
-                className="w-full py-4 bg-slate-50 text-slate-400 rounded-3xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:text-red-500 transition-colors active:scale-95"
-              >
-                <LogOut className="w-4 h-4" />
-                {lang === 'cz' ? 'Odhlásit se' : 'Logout'}
-              </button>
-            </motion.div>
+            <LazyScreenErrorBoundary>
+              <Suspense fallback={<DeferredProfileSkeleton />}>
+                <LazyProfileScreen
+                  t={t}
+                  lang={lang}
+                  user={user}
+                  currentUserStats={currentUserStats}
+                  currentUserRank={currentUserRank}
+                  currentUserLeaderGap={currentUserLeaderGap}
+                  winnerPickerTeams={winnerPickerTeams}
+                  currentUserPickId={currentUserPickId}
+                  isWinnerPickerLocked={isWinnerPickerLocked}
+                  onPickTournamentWinner={pickTournamentWinner}
+                  passData={passData}
+                  setPassData={setPassData}
+                  passMsg={passMsg}
+                  passError={passError}
+                  isPassSaving={isPassSaving}
+                  onUpdatePassword={handleUpdatePassword}
+                  avatarData={avatarData}
+                  showAvatarEditor={showAvatarEditor}
+                  setShowAvatarEditor={setShowAvatarEditor}
+                  avatarMsg={avatarMsg}
+                  avatarError={avatarError}
+                  onSaveAvatar={handleSaveAvatar}
+                  activeLobby={activeLobby}
+                  isLobbyRulesOpen={isLobbyRulesOpen}
+                  setIsLobbyRulesOpen={setIsLobbyRulesOpen}
+                  canEditActiveLobby={canEditActiveLobby}
+                  isEditingLobbyInfo={isEditingLobbyInfo}
+                  setIsEditingLobbyInfo={setIsEditingLobbyInfo}
+                  editLobbyShortDescription={editLobbyShortDescription}
+                  setEditLobbyShortDescription={setEditLobbyShortDescription}
+                  editLobbyLongDescription={editLobbyLongDescription}
+                  setEditLobbyLongDescription={setEditLobbyLongDescription}
+                  isLobbyInfoSaving={isLobbyInfoSaving}
+                  lobbyInfoMsg={lobbyInfoMsg}
+                  lobbyInfoError={lobbyInfoError}
+                  onSaveLobbyInfo={handleSaveLobbyInfo}
+                  onLogout={handleLogout}
+                  setLang={setLang}
+                  TeamFlag={TeamFlag}
+                  UserAvatar={UserAvatar}
+                />
+              </Suspense>
+            </LazyScreenErrorBoundary>
           )}
 
           {tab === 'admin' && user.role === 'admin' && (
-            <motion.div 
-               key="admin"
-               initial={{ opacity: 0, x: -20 }}
-               animate={{ opacity: 1, x: 0 }}
-               exit={{ opacity: 0, x: 20 }}
-            >
-               <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                 <ShieldCheck className="w-4 h-4" /> {t.adminControls}
-              </h2>
-
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-8 overflow-hidden transition-colors">
-                 <div className="flex items-center justify-between mb-4">
-                   <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                     <UserPlus className="w-4 h-4" /> {t.createUser}
-                   </h3>
-                   <button 
-                     onClick={() => setShowCreatePlayer(!showCreatePlayer)}
-                     className="p-1 rounded-full hover:bg-slate-50 transition-colors"
-                   >
-                     {showCreatePlayer ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                   </button>
-                 </div>
-                 <AnimatePresence>
-                   {showCreatePlayer && (
-                     <motion.form 
-                       initial={{ height: 0, opacity: 0 }}
-                       animate={{ height: 'auto', opacity: 1 }}
-                       exit={{ height: 0, opacity: 0 }}
-                       onSubmit={handleAdminCreateUser} 
-                       className="space-y-3 overflow-hidden"
-                     >
-                       <div>
-                         <input 
-                           type="text"
-                           required
-                           placeholder={t.newUsername}
-                           value={newUserData.username}
-                           onChange={e => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
-                           className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600 transition-colors"
-                         />
-                       </div>
-                       <div>
-                         <input 
-                           type="password"
-                           required
-                           placeholder={t.newPassword}
-                           value={newUserData.password}
-                           onChange={e => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
-                           className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600 transition-colors"
-                         />
-                       </div>
-                       <button 
-                         type="submit"
-                         className="w-full py-3 bg-red-600 text-white rounded-xl font-bold shadow-md shadow-red-100 transition-transform active:scale-95"
-                       >
-                         {t.create}
-                       </button>
-                       {createUserMsg && (
-                         <p className={`text-[10px] font-bold uppercase text-center mt-2 ${createUserMsg.includes('!') ? 'text-green-600' : 'text-red-500'}`}>
-                           {createUserMsg}
-                         </p>
-                       )}
-                     </motion.form>
-                   )}
-                 </AnimatePresence>
-              </div>
-
-               <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl transition-colors">
-                 <button 
-                    onClick={() => setAdminMatchFilter('scheduled')}
-                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${adminMatchFilter === 'scheduled' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
-                 >
-                    {t.upcoming}
-                 </button>
-                 <button 
-                    onClick={() => setAdminMatchFilter('finished')}
-                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${adminMatchFilter === 'finished' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
-                 >
-                    {t.finished}
-                 </button>
-               </div>
-
-               <div className="flex gap-1 overflow-x-auto pb-4 no-scrollbar mb-4">
-                {stageFilters.map(f => (
-                  <button
-                    key={f.id}
-                    onClick={() => setAdminGroupFilter(f.id)}
-                    className={`flex-none px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all ${
-                      adminGroupFilter === f.id ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-400 border border-slate-100'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
-
-              {adminMatchesForView.map(m => (
-                    <AdminMatchCard 
-                      key={m.id} 
-                      match={m} 
-                      t={t} 
-                      onUpdate={(h, a) => updateMatchResult(m.id, h, a)} 
-                      isHockey={m.tournament_id === "ms-hockey-2026"}
-                    />
-                  ))}
-
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-4 mt-8">
-                 <h3 className="text-xs font-bold text-slate-400 uppercase mb-4">{t.setFinalWinner}</h3>
-                 <div className="grid grid-cols-4 gap-2 mb-4">
-                   {adminChampionOptions.map(tm => (
-                     <button
-                       key={tm.id}
-                       onClick={() => setSelectedWinner(tm.id)}
-                       className={`p-2 rounded-xl flex flex-col items-center border transition-all ${
-                         selectedWinner === tm.id ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-transparent'
-                       }`}
-                     >
-                       <TeamFlag code={tm.flag_code || tm.id} className="w-10 h-6 mb-1" />
-                       <span className="text-[10px] font-bold">{(tm.short_name || tm.id).toUpperCase()}</span>
-                     </button>
-                   ))}
-                 </div>
-                 <button 
-                   disabled={!selectedWinner}
-                   onClick={() => selectedWinner && setTournamentWinner(selectedWinner)}
-                   className={`w-full py-3 rounded-xl font-bold shadow-md transition-colors ${
-                     selectedWinner
-                       ? 'bg-orange-600 text-white shadow-orange-100'
-                       : 'bg-slate-100 text-slate-400 shadow-none cursor-not-allowed'
-                   }`}
-                 >
-                   {t.setFinalChampion}
-                 </button>
-                 {championMsg && <p className="mt-2 text-[10px] text-green-600 font-bold text-center">{championMsg}</p>}
-                 {championError && <p className="mt-2 text-[10px] text-red-600 font-bold text-center">{championError}</p>}
-              </div>
-            </motion.div>
+            <LazyScreenErrorBoundary>
+              <Suspense fallback={<DeferredScreenSkeleton />}>
+                <LazyAdminScreen
+                  t={t}
+                  stageFilters={stageFilters}
+                  adminMatchFilter={adminMatchFilter}
+                  setAdminMatchFilter={setAdminMatchFilter}
+                  adminGroupFilter={adminGroupFilter}
+                  setAdminGroupFilter={setAdminGroupFilter}
+                  adminMatchesForView={adminMatchesForView}
+                  onUpdateMatchResult={updateMatchResult}
+                  showCreatePlayer={showCreatePlayer}
+                  setShowCreatePlayer={setShowCreatePlayer}
+                  newUserData={newUserData}
+                  setNewUserData={setNewUserData}
+                  createUserMsg={createUserMsg}
+                  onCreateUser={handleAdminCreateUser}
+                  adminChampionOptions={adminChampionOptions}
+                  selectedWinner={selectedWinner}
+                  setSelectedWinner={setSelectedWinner}
+                  onSetTournamentWinner={setTournamentWinner}
+                  championMsg={championMsg}
+                  championError={championError}
+                  TeamFlag={TeamFlag}
+                />
+              </Suspense>
+            </LazyScreenErrorBoundary>
           )}
         </AnimatePresence>
       </main>
