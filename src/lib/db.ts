@@ -1224,11 +1224,18 @@ export const fetchDeferredAppData = async (lobbyId: string, tournamentId: string
  * Admin: Update match score and recalculate points of corresponding predictions (FÁZE S11)
  */
 export const updateMatchResult = async (adminUserId: string, matchId: string, homeScore: number, awayScore: number) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
+
   const response = await fetch("/api/admin/match-result", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers,
     body: JSON.stringify({
       userId: adminUserId,
       matchId,

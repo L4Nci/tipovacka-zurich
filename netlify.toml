@@ -29,6 +29,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/admin/match-result"
+  to = "/.netlify/functions/match-result"
+  status = 200
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api-not-found"
+  status = 404
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
