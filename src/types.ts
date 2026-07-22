@@ -66,6 +66,7 @@ export type Tournament = {
   end_date?: string;
   status: 'upcoming' | 'ongoing' | 'finished';
   winner_participant_id?: string;
+  actual_tournament_winner_id?: string | null;
   external_id?: string;
   provider_name?: string;
   created_at?: string;

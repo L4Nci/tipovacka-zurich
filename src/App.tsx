@@ -1200,20 +1200,32 @@ export default function App() {
 
     const tournamentMatches = matches.filter(match => !match.tournament_id || match.tournament_id === defaultTournamentId);
     const scheduledMatches = tournamentMatches.filter(match => match.status === 'scheduled');
+    const unresolvedMatches = tournamentMatches.filter(match => (
+      match.status !== 'finished' ||
+      match.home_score === null ||
+      match.away_score === null
+    ));
     const nextMatch = scheduledMatches
       .slice()
       .sort((a, b) => new Date(a.start_time_utc).getTime() - new Date(b.start_time_utc).getTime())[0];
+    const champion = teams.find(tm => tm.is_final_winner === 1) || null;
+    const isCompleted = Boolean(champion) && tournamentMatches.length > 0 && unresolvedMatches.length === 0;
 
     return {
       [defaultTournamentId]: {
         total: tournamentMatches.length,
         scheduled: scheduledMatches.length,
         finished: tournamentMatches.filter(match => match.status === 'finished').length,
+        unresolved: unresolvedMatches.length,
+        isCompleted,
+        championName: champion?.name || null,
+        championShortName: champion?.short_name || null,
+        championFlag: champion?.flag_code || null,
         nextStart: nextMatch?.start_time_utc || null,
         nextMatchLabel: nextMatch ? `${nextMatch.home_name} vs ${nextMatch.away_name}` : null
       }
     };
-  }, [activeLobby, activeTournamentId, matches]);
+  }, [activeLobby, activeTournamentId, matches, teams]);
 
   useEffect(() => {
     if (!stageFilters.some(filter => filter.id === matchFilter)) {
@@ -1808,6 +1820,23 @@ export default function App() {
     return Math.min(0, (currentUserStats.total_points ?? 0) - leaderPoints);
   }, [currentUserStats, leaderboardWithStreaks]);
 
+  const hallOfFameEntries = useMemo(() => {
+    const completedTournamentCount = Object.values(tournamentStats as Record<string, { isCompleted?: boolean }>)
+      .filter(stats => stats.isCompleted)
+      .length;
+
+    if (completedTournamentCount === 0) return [];
+
+    return leaderboardWithStreaks.map(player => ({
+      player_id: player.id,
+      username: player.username,
+      avatar_emoji: player.avatar_emoji,
+      avatar_bg: player.avatar_bg,
+      total_points: player.total_points ?? 0,
+      completed_tournaments_count: completedTournamentCount
+    }));
+  }, [leaderboardWithStreaks, tournamentStats]);
+
   const officialWinnerTeam = useMemo(() => {
     return teams.find(tm => tm.is_final_winner === 1) || null;
   }, [teams]);
@@ -2271,6 +2300,7 @@ export default function App() {
                 }}
                 membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
                 tournamentStats={tournamentStats}
+                hallOfFameEntries={hallOfFameEntries}
               />
             </Suspense>
           </LazyScreenErrorBoundary>

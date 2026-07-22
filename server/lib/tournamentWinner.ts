@@ -104,6 +104,31 @@ const loadValidatedChampion = async (
   return { tournament, participant };
 };
 
+const loadTournamentCompletionState = async (
+  supabaseAdmin: SupabaseClient,
+  tournamentId: string
+) => {
+  const { data: matches, error } = await supabaseAdmin
+    .from("matches")
+    .select("id, status, home_score, away_score")
+    .eq("tournament_id", tournamentId);
+
+  if (error) throw error;
+
+  const rows = matches || [];
+  const unresolved = rows.filter((match: any) => (
+    match.status !== "finished" ||
+    match.home_score === null ||
+    match.away_score === null
+  ));
+
+  return {
+    total_matches: rows.length,
+    unresolved_matches: unresolved.length,
+    is_complete: rows.length > 0 && unresolved.length === 0
+  };
+};
+
 export const buildTournamentWinnerPreview = async (
   supabaseAdmin: SupabaseClient,
   input: TournamentWinnerInput
@@ -128,6 +153,7 @@ export const buildTournamentWinnerPreview = async (
   }
 
   const { tournament, participant } = await loadValidatedChampion(supabaseAdmin, tournamentId, teamId);
+  const completion = await loadTournamentCompletionState(supabaseAdmin, tournamentId);
 
   const { data: predictions, error: predictionsError } = await supabaseAdmin
     .from("longterm_predictions")
@@ -183,7 +209,10 @@ export const buildTournamentWinnerPreview = async (
       longterm_predictions: preview.length,
       users_receiving_10: preview.filter((row) => row.after_points === TOURNAMENT_WINNER_POINTS).length,
       users_receiving_0: preview.filter((row) => row.after_points === 0).length,
-      rows_that_would_change: preview.filter((row) => row.would_change).length
+      rows_that_would_change: preview.filter((row) => row.would_change).length,
+      total_matches: completion.total_matches,
+      unresolved_matches: completion.unresolved_matches,
+      tournament_complete: completion.is_complete
     },
     preview
   };
@@ -215,6 +244,19 @@ export const executeTournamentWinnerConfirmation = async (
         mode: "confirmation_required",
         wrote_to_db: false,
         error: "Vyhlášení vítěze vyžaduje explicitní potvrzení.",
+        ...preview
+      }
+    };
+  }
+
+  if (!preview.summary.tournament_complete) {
+    return {
+      statusCode: 409,
+      body: {
+        success: false,
+        mode: "blocked_unresolved_matches",
+        wrote_to_db: false,
+        error: "Vítěze turnaje lze potvrdit až po dohrání a zadání skóre všech zápasů.",
         ...preview
       }
     };

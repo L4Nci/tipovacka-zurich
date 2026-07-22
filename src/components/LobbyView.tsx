@@ -48,12 +48,35 @@ interface LobbyViewProps {
     total: number;
     scheduled: number;
     finished: number;
+    unresolved?: number;
+    isCompleted?: boolean;
+    championName?: string | null;
+    championShortName?: string | null;
+    championFlag?: string | null;
     nextStart?: string | null;
     nextMatchLabel?: string | null;
   }>;
+  hallOfFameEntries?: {
+    player_id: string;
+    username: string;
+    avatar_emoji?: string | null;
+    avatar_bg?: string | null;
+    total_points: number;
+    completed_tournaments_count: number;
+  }[];
 }
 
-export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, onLobbyDeleted, membersCount, tournamentStats = {} }: LobbyViewProps) {
+export function LobbyView({
+  lobby,
+  user,
+  onSelectTournament,
+  lang,
+  onRefresh,
+  onLobbyDeleted,
+  membersCount,
+  tournamentStats = {},
+  hallOfFameEntries = []
+}: LobbyViewProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
@@ -113,28 +136,19 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
     }
   };
 
-  // Read tournaments dynamically from the lobby
-  let activeTournaments = (lobby.tournaments || [])
-    .filter(t => t.status === 'active')
+  // Read tournaments dynamically from the lobby. Completion is derived from results,
+  // not persisted by mutating lobby_tournaments.status.
+  let lobbyTournaments = (lobby.tournaments || [])
     .map(lt => ({
       id: lt.tournament_id,
       name: lt.tournament?.name || (lt.tournament_id === 'ms-hockey-2026' ? 'MS v hokeji 2026' : 'FIFA World Cup 2026'),
       description: lt.tournament?.description || '',
-      status: 'active' as const
-    }));
-
-  let archivedTournaments = (lobby.tournaments || [])
-    .filter(t => t.status === 'archived')
-    .map(lt => ({
-      id: lt.tournament_id,
-      name: lt.tournament?.name || (lt.tournament_id === 'ms-hockey-2026' ? 'MS v hokeji 2026' : 'FIFA World Cup 2026'),
-      description: lt.tournament?.description || '',
-      status: 'archived' as const
+      status: lt.status
     }));
 
   // Fallback to legacy if no tournaments are present
-  if (activeTournaments.length === 0 && archivedTournaments.length === 0) {
-    activeTournaments = [
+  if (lobbyTournaments.length === 0) {
+    lobbyTournaments = [
       {
         id: lobby.tournament_id || 'fifa-world-cup-2026',
         name: lobby.tournament_name || (lobby.tournament_id === 'ms-hockey-2026' ? 'MS v hokeji 2026' : 'FIFA World Cup 2026'),
@@ -144,12 +158,23 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
     ];
   }
 
+  const completedTournaments = lobbyTournaments
+    .filter(t => Boolean(tournamentStats[t.id]?.isCompleted))
+    .sort((a, b) => {
+      const aNext = tournamentStats[a.id]?.nextStart || '';
+      const bNext = tournamentStats[b.id]?.nextStart || '';
+      return bNext.localeCompare(aNext) || a.name.localeCompare(b.name);
+    });
+
+  const activeTournaments = lobbyTournaments.filter(t => (
+    t.status === 'active' && !tournamentStats[t.id]?.isCompleted
+  ));
+
   // Check which tournaments can be added
   const availableToAdd = [
     { id: 'fifa-world-cup-2026', name: '🏆 FIFA World Cup 2026' }
   ].filter(at => 
-    !activeTournaments.some(t => t.id === at.id) && 
-    !archivedTournaments.some(t => t.id === at.id)
+    !lobbyTournaments.some(t => t.id === at.id)
   );
 
   const handleAddTournament = async (tournamentId: string) => {
@@ -295,13 +320,18 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
               {lang === 'cz' ? 'Aktivní soutěže' : 'Active Tournaments'}
             </h2>
             <div className="space-y-3">
-              {activeTournaments.map(t => {
+              {activeTournaments.length > 0 ? activeTournaments.map(t => {
                 const stats = tournamentStats[t.id] || { total: 0, scheduled: 0, finished: 0, nextStart: null };
-                const progress = stats.total > 0 ? Math.round((stats.finished / stats.total) * 100) : 0;
-                const nextLabel = stats.nextStart
+                const isCompleted = Boolean(stats.isCompleted);
+                const progress = isCompleted ? 100 : (stats.total > 0 ? Math.round((stats.finished / stats.total) * 100) : 0);
+                const statusLabel = isCompleted
+                  ? (lang === 'cz' ? 'Ukončeno' : 'Completed')
+                  : stats.nextStart
                   ? new Date(stats.nextStart).toLocaleDateString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
                   : (lang === 'cz' ? 'Čeká na rozpis' : 'Schedule pending');
-                const nextMatchLabel = stats.nextMatchLabel || null;
+                const statusDetail = isCompleted
+                  ? (stats.championShortName || stats.championName || null)
+                  : (stats.nextMatchLabel || null);
 
                 return (
                   <button
@@ -335,11 +365,13 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                         <p className="text-sm font-black text-slate-800 group-hover:text-white">{progress}%</p>
                       </div>
                       <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10 min-w-0">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Další' : 'Next'}</p>
-                        {nextMatchLabel && (
-                          <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{nextMatchLabel}</p>
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">
+                          {isCompleted ? (lang === 'cz' ? 'Stav' : 'Status') : (lang === 'cz' ? 'Další' : 'Next')}
+                        </p>
+                        {statusDetail && (
+                          <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{statusDetail}</p>
                         )}
-                        <p className={`${nextMatchLabel ? 'text-[9px]' : 'text-[10px]'} font-black text-slate-500 group-hover:text-slate-300 truncate`}>{nextLabel}</p>
+                        <p className={`${statusDetail ? 'text-[9px]' : 'text-[10px]'} font-black text-slate-500 group-hover:text-slate-300 truncate`}>{statusLabel}</p>
                       </div>
                     </div>
 
@@ -350,7 +382,11 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                     )}
                   </button>
                 );
-              })}
+              }) : (
+                <p className="text-xs text-slate-400 italic text-center py-4">
+                  {lang === 'cz' ? 'Žádné aktivní soutěže' : 'No active tournaments'}
+                </p>
+              )}
             </div>
 
             {/* ACTION: ADD TOURNAMENT TO LOBBY */}
@@ -413,23 +449,54 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
               {lang === 'cz' ? 'Historie soutěží' : 'Past Tournaments'}
             </h2>
             <div className="space-y-3">
-              {archivedTournaments.length > 0 ? (
-                archivedTournaments.map(t => (
+              {completedTournaments.length > 0 ? (
+                completedTournaments.map(t => {
+                  const stats = tournamentStats[t.id] || { total: 0, scheduled: 0, finished: 0 };
+                  const champion = stats.championName || stats.championShortName || null;
+
+                  return (
                   <button
                     key={t.id}
                     onClick={() => onSelectTournament(t.id)}
-                    className="w-full relative group overflow-hidden bg-slate-50 hover:bg-slate-900 rounded-2xl p-4 flex items-center justify-between transition-all"
+                    className="w-full relative group overflow-hidden bg-slate-50 hover:bg-slate-900 rounded-2xl p-4 text-left transition-all"
                   >
-                    <div className="relative z-10 text-left">
-                      <p className="text-sm font-bold text-slate-400 group-hover:text-white transition-colors uppercase">
-                        {t.name}
-                      </p>
+                    <div className="relative z-10 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-slate-700 group-hover:text-white transition-colors uppercase">
+                          {t.name}
+                        </p>
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-emerald-600 group-hover:text-emerald-200">
+                          {lang === 'cz' ? 'Ukončeno' : 'Completed'}
+                        </p>
+                      </div>
+                      <div className="shrink-0 w-8 h-8 rounded-full bg-white group-hover:bg-slate-800 flex items-center justify-center transition-colors">
+                        <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+                      </div>
                     </div>
-                    <div className="relative z-10 w-8 h-8 rounded-full bg-white group-hover:bg-slate-800 flex items-center justify-center transition-colors">
-                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+
+                    <div className="relative z-10 mt-4 grid grid-cols-3 gap-2">
+                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Zápasy' : 'Matches'}</p>
+                        <p className="text-sm font-black text-slate-800 group-hover:text-white">{stats.total}</p>
+                      </div>
+                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Hotovo' : 'Done'}</p>
+                        <p className="text-sm font-black text-slate-800 group-hover:text-white">100%</p>
+                      </div>
+                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10 min-w-0">
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Vítěz' : 'Winner'}</p>
+                        <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{champion || '—'}</p>
+                      </div>
                     </div>
+
+                    {stats.total > 0 && (
+                      <div className="relative z-10 mt-3 h-1.5 rounded-full bg-white overflow-hidden group-hover:bg-white/10">
+                        <div className="h-full bg-amber-500 group-hover:bg-white transition-all" style={{ width: '100%' }} />
+                      </div>
+                    )}
                   </button>
-                ))
+                  );
+                })
               ) : (
                 <p className="text-xs text-slate-400 italic text-center py-4">
                   {lang === 'cz' ? 'Žádné archivované turnaje' : 'No archived tournaments'}
@@ -451,15 +518,52 @@ export function LobbyView({ lobby, user, onSelectTournament, lang, onRefresh, on
                {lang === 'cz' ? 'Kumulované body za všechny turnaje' : 'All-time accumulated points'}
              </p>
              
-             <div className="flex flex-col items-center justify-center p-6 text-center border-t border-slate-50">
-               <Trophy className="w-8 h-8 text-slate-200 mb-2" />
-               <p className="text-sm font-bold text-slate-400 mb-1">
-                 {lang === 'cz' ? 'Zatím žádné záznamy' : 'No records yet'}
-               </p>
-               <p className="text-[10px] items-center text-slate-400 max-w-[180px]">
-                 {lang === 'cz' ? 'Hall of Fame bude dostupná po dokončení prvního turnaje.' : 'Hall of Fame will be available after the first tournament ends.'}
-               </p>
-             </div>
+             {hallOfFameEntries.length > 0 ? (
+               <div className="space-y-2 border-t border-slate-50 pt-4">
+                 {hallOfFameEntries.map((entry, index) => {
+                   const rankTone = index === 0 ? 'bg-yellow-400 text-yellow-900' :
+                     index === 1 ? 'bg-slate-300 text-slate-700' :
+                     index === 2 ? 'bg-amber-600 text-amber-50' :
+                     'bg-slate-100 text-slate-500';
+
+                   return (
+                     <div key={entry.player_id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 border border-slate-100 p-3">
+                       <div className="flex items-center gap-3 min-w-0">
+                         <div className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${rankTone}`}>
+                           {index + 1}
+                         </div>
+                         <div
+                           className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-lg shadow-sm border border-white"
+                           style={{ backgroundColor: entry.avatar_bg || '#fee2e2' }}
+                         >
+                           {entry.avatar_emoji || '😀'}
+                         </div>
+                         <div className="min-w-0">
+                           <p className="text-sm font-black text-slate-800 truncate">{entry.username}</p>
+                           <p className="text-[9px] font-bold uppercase text-slate-400">
+                             {entry.completed_tournaments_count} {lang === 'cz' ? 'dokončený turnaj' : 'completed tournament'}
+                           </p>
+                         </div>
+                       </div>
+                       <div className="text-right shrink-0">
+                         <p className="text-lg font-black text-slate-900 leading-none">{entry.total_points}</p>
+                         <p className="text-[8px] font-black uppercase text-slate-400">{lang === 'cz' ? 'bodů' : 'pts'}</p>
+                       </div>
+                     </div>
+                   );
+                 })}
+               </div>
+             ) : (
+               <div className="flex flex-col items-center justify-center p-6 text-center border-t border-slate-50">
+                 <Trophy className="w-8 h-8 text-slate-200 mb-2" />
+                 <p className="text-sm font-bold text-slate-400 mb-1">
+                   {lang === 'cz' ? 'Zatím žádné záznamy' : 'No records yet'}
+                 </p>
+                 <p className="text-[10px] items-center text-slate-400 max-w-[180px]">
+                   {lang === 'cz' ? 'Hall of Fame bude dostupná po dokončení prvního turnaje.' : 'Hall of Fame will be available after the first tournament ends.'}
+                 </p>
+               </div>
+             )}
            </div>
         </div>
       </div>

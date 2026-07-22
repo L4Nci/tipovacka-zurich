@@ -527,7 +527,8 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
           tournament:tournaments (
             name,
             sport_id,
-            status
+            status,
+            actual_tournament_winner_id
           )
         )
       `)
@@ -538,7 +539,11 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
     lobby = data;
     tournamentId = explicitTournamentId || lobby.tournament_id;
     lobbyName = lobby.name;
-    actualWinnerId = (lobby as any)?.tournament?.actual_tournament_winner_id || null;
+    actualWinnerId = (lobby as any)?.lobby_tournaments
+      ?.find((row: any) => row.tournament_id === tournamentId)
+      ?.tournament?.actual_tournament_winner_id ||
+      (lobby as any)?.tournament?.actual_tournament_winner_id ||
+      null;
   } catch (err: any) {
     console.warn("fetchLobbyDashboard original query failed. Attempting fallback.", err);
     try {

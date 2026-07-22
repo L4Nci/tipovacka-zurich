@@ -221,6 +221,8 @@ Football group-stage draw predictions are supported. Football playoff draw predi
 
 Players can make long-term tournament winner predictions. Tournament champion confirmation awards the long-term bonus deterministically.
 
+Tournament completion is derived from the global confirmed champion and all tournament matches being finished and scored. There is no separate mandatory manual "end tournament" action.
+
 ### Locking Rules
 
 Predictions lock before kickoff. Locking is a trust boundary. Frontend behavior may help the user, but authoritative protection must stay in the save path.
@@ -266,7 +268,9 @@ Fixture sync is separate from result sync and must remain separately guarded.
 
 The product supports tournament closing through champion confirmation and deterministic long-term point assignment.
 
-This completes the basic tournament lifecycle from setup to final leaderboard.
+Completed tournaments move out of active lobby competition display into tournament history, and Hall of Fame starts from completed tournament leaderboard totals.
+
+This completes the basic tournament lifecycle from setup to final leaderboard, history, and first post-tournament recognition.
 
 ### Production Safety Model
 
