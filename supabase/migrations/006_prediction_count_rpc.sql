@@ -30,4 +30,6 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.get_lobby_tournament_prediction_counts(TEXT, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_lobby_tournament_prediction_counts(TEXT, TEXT) FROM anon;
+REVOKE ALL ON FUNCTION public.get_lobby_tournament_prediction_counts(TEXT, TEXT) FROM service_role;
 GRANT EXECUTE ON FUNCTION public.get_lobby_tournament_prediction_counts(TEXT, TEXT) TO authenticated;
