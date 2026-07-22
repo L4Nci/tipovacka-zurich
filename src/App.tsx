@@ -1657,7 +1657,6 @@ export default function App() {
   };
 
   const leaderboardWithStreaks = useMemo(() => {
-    const activeLobby = lobbies.find(l => l.id === activeLobbyId);
     const isHockey = activeTournamentId === "ms-hockey-2026";
 
     // Determine the most recently finished match to calculate "previous" state
@@ -1666,100 +1665,119 @@ export default function App() {
       .sort((a, b) => new Date(b.start_time_utc).getTime() - new Date(a.start_time_utc).getTime());
     
     const lastFinishedMatchId = finishedMatchesSorted[0]?.id;
+    const finalWinnerIds = new Set(teams.filter(tm => tm.is_final_winner === 1).map(tm => tm.id));
 
     // Current ranks - only use finished matches for scoring
-    const calculateRanks = (preds: Prediction[], excludeMatchId?: string) => {
-      const filteredPreds = preds.filter(p => {
-        const scoreH = (p as any).home_score;
-        const scoreA = (p as any).away_score;
-        const isFinished = scoreH !== null && scoreA !== null && scoreH !== undefined && scoreA !== undefined;
-        return isFinished && (excludeMatchId ? p.match_id !== excludeMatchId : true);
-      });
+    const calculateRanks = (excludeMatchId?: string) => {
+      const statsByUserId = new Map<string, {
+        id: string;
+        username: string;
+        total: number;
+        exact: number;
+        outcomeHits: number;
+        goalDifferenceHits: number;
+        winnerHits: number;
+        drawHits: number;
+        currentStreak: number;
+        tempStreak: number;
+        history: { points: number, res: 'W' | 'L' | 'E' }[];
+      }>();
 
-      const pStats = leaderboard.map(p => {
-        const userPreds = filteredPreds.filter(pr => pr.player_id === p.id);
-        let total = 0;
-        let exact = 0;
-        let outcomeHits = 0;
-        let goalDifferenceHits = 0;
-        let winnerHits = 0;
-        let drawHits = 0;
-        let currentStreak = 0;
-        let tempStreak = 0;
-        const history: { points: number, res: 'W' | 'L' | 'E' }[] = [];
-
-        userPreds.forEach(pr => {
-          const mh = (pr as any).home_score;
-          const ma = (pr as any).away_score;
-          const ph = pr.predicted_home_score;
-          const pa = pr.predicted_away_score;
-
-          const pts = calculatePoints(ph, pa, mh, ma, isHockey ? 'hockey' : 'football');
-
-          total += pts;
-          if (pts === 5) exact++;
-          else if (pts > 0) {
-            outcomeHits++;
-
-            if (!isHockey) {
-              const isActualDraw = mh === ma;
-              const isPredictedDraw = ph === pa;
-              const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
-
-              if (isActualDraw && isPredictedDraw) {
-                drawHits++;
-              } else if (correctWinner && ph - pa === mh - ma) {
-                goalDifferenceHits++;
-              } else if (correctWinner) {
-                winnerHits++;
-              }
-            }
-          }
-
-          if (pts > 0) tempStreak++;
-          else tempStreak = 0;
-          currentStreak = tempStreak;
-          history.push({ points: pts, res: pts === 5 ? 'E' : pts > 0 ? 'W' : 'L' });
+      leaderboard.forEach(player => {
+        statsByUserId.set(player.id, {
+          id: player.id,
+          username: player.username,
+          total: 0,
+          exact: 0,
+          outcomeHits: 0,
+          goalDifferenceHits: 0,
+          winnerHits: 0,
+          drawHits: 0,
+          currentStreak: 0,
+          tempStreak: 0,
+          history: []
         });
-
-        // Add tournament winner points if applicable
-        if (p.tournament_winner_id && teams.find(tm => tm.id === p.tournament_winner_id && tm.is_final_winner === 1)) {
-          total += 10;
-        }
-
-        return {
-          id: p.id,
-          username: p.username,
-          total,
-          exact,
-          outcomeHits,
-          goalDifferenceHits,
-          winnerHits,
-          drawHits,
-          currentStreak,
-          history
-        };
       });
 
-      return pStats.sort((a, b) => b.total - a.total || b.exact - a.exact || b.outcomeHits - a.outcomeHits || a.username.localeCompare(b.username));
-    };
+      allPredictions.forEach(pr => {
+        const scoreH = (pr as any).home_score;
+        const scoreA = (pr as any).away_score;
+        const isFinished = scoreH !== null && scoreA !== null && scoreH !== undefined && scoreA !== undefined;
+        if (!isFinished || (excludeMatchId && pr.match_id === excludeMatchId)) return;
 
-    const currentResults = calculateRanks(allPredictions);
-    const prevResults = lastFinishedMatchId ? calculateRanks(allPredictions, lastFinishedMatchId) : currentResults;
+        const stats = statsByUserId.get(pr.player_id);
+        if (!stats) return;
 
-    return leaderboard.map(p => {
-      const stats = currentResults.find(r => r.id === p.id);
-      const prevIndex = prevResults.findIndex(r => r.id === p.id);
-      const currentIndex = currentResults.findIndex(r => r.id === p.id);
-      
-      const finishedPredictions = allPredictions.filter(pr => {
         const mh = (pr as any).home_score;
         const ma = (pr as any).away_score;
-        return mh !== null && ma !== null && mh !== undefined && ma !== undefined;
+        const ph = pr.predicted_home_score;
+        const pa = pr.predicted_away_score;
+
+        const pts = calculatePoints(ph, pa, mh, ma, isHockey ? 'hockey' : 'football');
+
+        stats.total += pts;
+        if (pts === 5) stats.exact++;
+        else if (pts > 0) {
+          stats.outcomeHits++;
+
+          if (!isHockey) {
+            const isActualDraw = mh === ma;
+            const isPredictedDraw = ph === pa;
+            const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
+
+            if (isActualDraw && isPredictedDraw) {
+              stats.drawHits++;
+            } else if (correctWinner && ph - pa === mh - ma) {
+              stats.goalDifferenceHits++;
+            } else if (correctWinner) {
+              stats.winnerHits++;
+            }
+          }
+        }
+
+        if (pts > 0) stats.tempStreak++;
+        else stats.tempStreak = 0;
+        stats.currentStreak = stats.tempStreak;
+        stats.history.push({ points: pts, res: pts === 5 ? 'E' : pts > 0 ? 'W' : 'L' });
       });
 
-      const userPredsAll = finishedPredictions
-        .filter(pr => pr.player_id === p.id)
+      leaderboard.forEach(player => {
+        if (player.tournament_winner_id && finalWinnerIds.has(player.tournament_winner_id)) {
+          const stats = statsByUserId.get(player.id);
+          if (stats) stats.total += 10;
+        }
+      });
+
+      return Array.from(statsByUserId.values())
+        .map(({ tempStreak, ...stats }) => stats)
+        .sort((a, b) => b.total - a.total || b.exact - a.exact || b.outcomeHits - a.outcomeHits || a.username.localeCompare(b.username));
+    };
+
+    const currentResults = calculateRanks();
+    const prevResults = lastFinishedMatchId ? calculateRanks(lastFinishedMatchId) : currentResults;
+    const currentStatsByUserId = new Map(currentResults.map((result, index) => [result.id, { ...result, index }]));
+    const prevIndexByUserId = new Map(prevResults.map((result, index) => [result.id, index]));
+
+    const finishedPredictionsByUserId = new Map<string, Prediction[]>();
+    allPredictions.forEach(pr => {
+      const mh = (pr as any).home_score;
+      const ma = (pr as any).away_score;
+      if (mh === null || ma === null || mh === undefined || ma === undefined) return;
+
+      const existing = finishedPredictionsByUserId.get(pr.player_id);
+      if (existing) {
+        existing.push(pr);
+      } else {
+        finishedPredictionsByUserId.set(pr.player_id, [pr]);
+      }
+    });
+
+    return leaderboard.map(p => {
+      const stats = currentStatsByUserId.get(p.id);
+      const prevIndex = prevIndexByUserId.get(p.id) ?? -1;
+      const currentIndex = stats?.index ?? -1;
+      const userPredsAll = (finishedPredictionsByUserId.get(p.id) || [])
+        .slice()
         .sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
       
       let bestStreak = 0;

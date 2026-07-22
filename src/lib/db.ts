@@ -5,6 +5,7 @@ import { Player, Team, Match, Prediction, Lobby } from "../types.ts";
 
 const SUPABASE_PAGE_SIZE = 1000;
 const SUPABASE_MAX_PAGES = 20;
+let warnedMissingPredictionCountRpc = false;
 
 const fetchAllSupabaseRows = async <T>(query: any, label: string): Promise<T[]> => {
   const rows: T[] = [];
@@ -25,6 +26,62 @@ const fetchAllSupabaseRows = async <T>(query: any, label: string): Promise<T[]> 
   }
 
   throw new Error(`${label} exceeded safe pagination limit (${SUPABASE_MAX_PAGES * SUPABASE_PAGE_SIZE} rows).`);
+};
+
+const isMissingPredictionCountRpcError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+  return error?.code === "PGRST202" ||
+    message.includes("get_lobby_tournament_prediction_counts") &&
+    (message.includes("not find") || message.includes("not found") || message.includes("missing"));
+};
+
+const fetchPredictionCountsByMatchId = async (
+  lobbyId: string,
+  tournamentId: string | undefined,
+  matchIds: string[]
+) => {
+  const statsMap = new Map<string, number>();
+  if (matchIds.length === 0) return statsMap;
+
+  const { data: groupedCounts, error: groupedCountsError } = await supabase
+    .rpc("get_lobby_tournament_prediction_counts", {
+      lobby_id_param: lobbyId,
+      tournament_id_param: tournamentId || null
+    });
+
+  if (!groupedCountsError && groupedCounts) {
+    groupedCounts.forEach((row: any) => {
+      statsMap.set(row.match_id, Number(row.prediction_count) || 0);
+    });
+    return statsMap;
+  }
+
+  if (groupedCountsError && !isMissingPredictionCountRpcError(groupedCountsError)) {
+    throw groupedCountsError;
+  }
+
+  if (groupedCountsError && !warnedMissingPredictionCountRpc) {
+    warnedMissingPredictionCountRpc = true;
+    console.warn("Prediction count RPC is unavailable; falling back to client-side grouped counts.");
+  }
+
+  let countQuery = supabase
+    .from("predictions")
+    .select("match_id")
+    .eq("lobby_id", lobbyId)
+    .in("match_id", matchIds)
+    .order("match_id", { ascending: true });
+
+  const countRows = await fetchAllSupabaseRows<{ match_id: string }>(
+    countQuery,
+    "fetchPredictionCountsByMatchId fallback"
+  );
+
+  countRows.forEach(pred => {
+    statsMap.set(pred.match_id, (statsMap.get(pred.match_id) || 0) + 1);
+  });
+
+  return statsMap;
 };
 
 /**
@@ -637,16 +694,12 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
   const predictionsMap = new Map();
   userPreds?.forEach(p => predictionsMap.set(p.match_id, p));
 
-  // 5. Query prediction counts per match inside this lobby
-  const { data: totalPredsCountList } = await supabase
-    .from("predictions")
-    .select("match_id")
-    .eq("lobby_id", lobbyId);
-
-  const statsMap = new Map<string, number>();
-  totalPredsCountList?.forEach(pred => {
-    statsMap.set(pred.match_id, (statsMap.get(pred.match_id) || 0) + 1);
-  });
+  // 5. Query grouped prediction counts per match inside this lobby/tournament.
+  const statsMap = await fetchPredictionCountsByMatchId(
+    lobbyId,
+    tournamentId,
+    (matches || []).map(match => match.id)
+  );
 
   // 6. Map matches to the expected frontend Match signature
   const formattedMatches: Match[] = (matches || []).map(m => {
@@ -800,7 +853,11 @@ export const fetchMatchPredictions = async (lobbyId: string, matchId: string) =>
 /**
  * Fetch Leaderboard for a lobby on-the-fly (FÁZE S12)
  */
-export const fetchLobbyLeaderboard = async (lobbyId: string, tournamentId?: string) => {
+export const fetchLobbyLeaderboard = async (
+  lobbyId: string,
+  tournamentId?: string,
+  preloadedPredictions?: Prediction[]
+) => {
   // 1. Get all members of the lobby
   const { data: members, error: mErr } = await supabase
     .from("lobby_members")
@@ -818,41 +875,59 @@ export const fetchLobbyLeaderboard = async (lobbyId: string, tournamentId?: stri
 
   if (mErr) throw mErr;
 
-  // 2. Get predictions of this lobby to count earned points
-  let predsQuery = supabase
-    .from("predictions")
-    .select(`
-      user_id,
-      points_earned,
-      match_id,
-      predicted_home_score,
-      predicted_away_score,
-      match:matches (
-        home_score,
-        away_score,
-        tournament_id
-      )
-    `)
-    .eq("lobby_id", lobbyId)
-    .order("user_id", { ascending: true })
-    .order("lobby_id", { ascending: true })
-    .order("match_id", { ascending: true });
+  // 2. Get predictions of this lobby to count earned points.
+  // Deferred app loading can pass the already-loaded tournament prediction rows
+  // to avoid downloading the same prediction dataset twice.
+  let preds: any[];
+  if (preloadedPredictions) {
+    preds = preloadedPredictions.map(p => ({
+      user_id: p.player_id,
+      points_earned: p.points_earned,
+      match_id: p.match_id,
+      predicted_home_score: p.predicted_home_score,
+      predicted_away_score: p.predicted_away_score,
+      match: {
+        home_score: (p as any).home_score,
+        away_score: (p as any).away_score,
+        tournament_id: (p as any).tournament_id
+      }
+    }));
+  } else {
+    let predsQuery = supabase
+      .from("predictions")
+      .select(`
+        user_id,
+        points_earned,
+        match_id,
+        predicted_home_score,
+        predicted_away_score,
+        match:matches (
+          home_score,
+          away_score,
+          tournament_id
+        )
+      `)
+      .eq("lobby_id", lobbyId)
+      .order("user_id", { ascending: true })
+      .order("lobby_id", { ascending: true })
+      .order("match_id", { ascending: true });
 
-  if (tournamentId) {
-    const { data: tMatches } = await supabase
-      .from("matches")
-      .select("id")
-      .eq("tournament_id", tournamentId);
+    if (tournamentId) {
+      const { data: tMatches } = await supabase
+        .from("matches")
+        .select("id")
+        .eq("tournament_id", tournamentId);
 
-    if (tMatches && tMatches.length > 0) {
-      const matchIds = tMatches.map(m => m.id);
-      predsQuery = predsQuery.in("match_id", matchIds);
-    } else if (tMatches) {
-      predsQuery = predsQuery.in("match_id", ["none"]); // force empty if no matches
+      if (tMatches && tMatches.length > 0) {
+        const matchIds = tMatches.map(m => m.id);
+        predsQuery = predsQuery.in("match_id", matchIds);
+      } else if (tMatches) {
+        predsQuery = predsQuery.in("match_id", ["none"]); // force empty if no matches
+      }
     }
-  }
 
-  const preds = await fetchAllSupabaseRows<any>(predsQuery, "fetchLobbyLeaderboard predictions");
+    preds = await fetchAllSupabaseRows<any>(predsQuery, "fetchLobbyLeaderboard predictions");
+  }
 
   // 2b. Get longterm predictions of this lobby to aggregate points and determine chosen winners
   let ltQuery = supabase
@@ -1043,7 +1118,6 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
     matches,
     participants
   } = await fetchLobbyDashboard(activeLobbyId!, userId, targetTournamentId);
-  const leaderboard = await fetchLobbyLeaderboard(activeLobbyId!, targetTournamentId);
   const hydratedLobbiesList = lobbiesList.map(lobby => (
     lobby.id === activeLobbyId
       ? {
@@ -1060,6 +1134,7 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
     matches,
     "fetchAllData predictions"
   );
+  const leaderboard = await fetchLobbyLeaderboard(activeLobbyId!, targetTournamentId, formattedPreds);
 
   // Map participants to Teams interface for compatibility in profile selection
   const teams: Team[] = participants.map(p => ({
@@ -1089,31 +1164,29 @@ const fetchFormattedLobbyPredictions = async (
   matches: Match[],
   label: string
 ): Promise<Prediction[]> => {
+  const matchById = new Map(matches.map(match => [match.id, match]));
+  const matchIds = matches
+    .filter(match => !tournamentId || !match.tournament_id || match.tournament_id === tournamentId)
+    .map(match => match.id);
+
+  if (tournamentId && matchIds.length === 0) {
+    return [];
+  }
+
   let predsQuery = supabase
     .from("predictions")
-    .select("*")
+    .select("user_id, lobby_id, match_id, predicted_home_score, predicted_away_score, points_earned")
     .eq("lobby_id", lobbyId)
     .order("user_id", { ascending: true })
     .order("lobby_id", { ascending: true })
     .order("match_id", { ascending: true });
 
-  if (tournamentId) {
-    const { data: tMatches } = await supabase
-      .from("matches")
-      .select("id")
-      .eq("tournament_id", tournamentId);
-
-    if (tMatches && tMatches.length > 0) {
-      const matchIds = tMatches.map(m => m.id);
-      predsQuery = predsQuery.in("match_id", matchIds);
-    } else if (tMatches) {
-      predsQuery = predsQuery.in("match_id", ["none"]); // force empty if no matches
-    }
+  if (matchIds.length > 0) {
+    predsQuery = predsQuery.in("match_id", matchIds);
   }
 
   const allPreds = await fetchAllSupabaseRows<any>(predsQuery, label);
 
-  const matchById = new Map(matches.map(match => [match.id, match]));
   return (allPreds || []).map(p => {
     const match = matchById.get(p.match_id);
     return {
@@ -1194,8 +1267,8 @@ export const fetchCriticalAppData = async (userId: string, lobbyId?: string, tou
 };
 
 export const fetchDeferredAppData = async (lobbyId: string, tournamentId: string | undefined, matches: Match[]) => {
-  const leaderboard = await fetchLobbyLeaderboard(lobbyId, tournamentId);
   const allPredictions = await fetchFormattedLobbyPredictions(lobbyId, tournamentId, matches, "fetchDeferredAppData predictions");
+  const leaderboard = await fetchLobbyLeaderboard(lobbyId, tournamentId, allPredictions);
 
   return {
     leaderboard,
