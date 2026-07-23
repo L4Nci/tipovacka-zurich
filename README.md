@@ -83,6 +83,7 @@ Current source-of-truth documents:
 * Concrete work and project memory: GitHub Issues
 * Agent and production safety: [AGENTS.md](AGENTS.md) and [PROJECT_RULES.md](PROJECT_RULES.md)
 * Issue workflow: [docs/ISSUE_WORKFLOW.md](docs/ISSUE_WORKFLOW.md)
+* Authentication security and OAuth setup: [docs/auth-security.md](docs/auth-security.md) and [docs/oauth-setup.md](docs/oauth-setup.md)
 * Result sync and TheSportsDB provider behavior: [docs/thesportsdb-dry-run.md](docs/thesportsdb-dry-run.md)
 * Fixture/TBA sync cron setup: [docs/fixture-sync-cron.md](docs/fixture-sync-cron.md)
 

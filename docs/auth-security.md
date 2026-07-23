@@ -6,6 +6,11 @@ authentication and platform-level authorization.
 ## Identity and roles
 
 - Browser authentication is provided by Supabase Auth.
+- A Supabase session is the only source of truth for signed-in state. The app
+  restores it with `getSession()` and follows subsequent changes through
+  `onAuthStateChange()`.
+- `auth.users.id` / `session.user.id` is the application identity. A cached
+  profile or OAuth metadata is never caller authorization.
 - Server endpoints derive the caller from a verified Supabase Bearer token or
   `auth.uid()`.
 - Request fields such as `userId`, `role`, or `isAdmin` are never authoritative
@@ -18,6 +23,12 @@ authentication and platform-level authorization.
 - Profile identity fields such as username, avatar, and profile color remain
   user-editable under RLS.
 - Lobby roles are lobby-scoped and never grant platform-admin access.
+
+The Phase 009 frontend supports e-mail/password, confirmation-pending,
+password-recovery, and feature-flagged Google/Apple OAuth flows. Provider setup
+and redirect requirements are documented in [oauth-setup.md](oauth-setup.md).
+OAuth metadata may suggest a display name only; it cannot set platform or lobby
+roles.
 
 Migration 008 also prevents self-join inserts from assigning an `owner` or
 `admin` lobby role, pins the privileged helper functions' `search_path`, and
@@ -58,6 +69,12 @@ The rollback-only regression scenario in
 `supabase/tests/008_authorization_hardening.sql` is intended for local or staging
 Supabase after the migration is installed. It does not update production profile
 rows.
+
+Migration 009 was deployed separately on 2026-07-23. It hardens
+`handle_new_user()`, assigns new profiles the fixed role `player`, preserves
+existing profile rows, and repaired the one Auth identity that had no profile.
+See [oauth-setup.md](oauth-setup.md) for the verified rollout state and external
+provider checklist.
 
 Future paid-plan entitlements must use a separate server-managed entitlement or
 subscription model. They must not be encoded in `profiles.role` or a lobby role.
