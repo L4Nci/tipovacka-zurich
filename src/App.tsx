@@ -11,7 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { Player, Team, Match, Prediction, Lobby } from './types.ts';
+import { Player, Team, Match, Prediction, Lobby, type AuthStatus } from './types.ts';
 import { supabase } from './lib/supabase.ts';
 import { isDrawPrediction, isFootballKnockoutStage } from './lib/matchRules.ts';
 import { 
@@ -29,13 +29,25 @@ import {
   pickTournamentWinner as pickWinnerDB,
   changePassword as changePassDB,
   updateProfileAvatar,
-  checkSession,
+  updateProfileUsername,
+  loadPlayerFromAuthUser,
   createLobby,
   joinLobbyByCode,
   calculatePoints
 } from './lib/db.ts';
+import AuthScreen from './components/AuthScreen.tsx';
 import { HomeDashboard, type AddLobbyMode } from './components/HomeDashboard.tsx';
 import { isUntippedMatchForDisplay, type HomeDashboardSummary } from './lib/homeDashboard.ts';
+import {
+  getUserAuthProviders,
+  isGeneratedProfileName,
+  requestPasswordReset,
+  resendSignupConfirmation,
+  signInWithOAuthProvider,
+  toFriendlyAuthError,
+  type SupportedOAuthProvider
+} from './lib/auth.ts';
+import { getAuthEventAction } from './lib/authLifecycle.ts';
 
 const LazyAdminScreen = lazy(() => import('./components/AdminScreen.tsx'));
 const LazyLeaderboardScreen = lazy(() => import('./components/LeaderboardScreen.tsx'));
@@ -918,10 +930,14 @@ const TournamentWinnerScreen = ({
 // --- Main App ---
 
 export default function App() {
-  const [user, setUser] = useState<Player | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<Player | null>(null);
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('initializing');
+  const [authProviders, setAuthProviders] = useState<string[]>([]);
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
+  const authSyncRequestRef = useRef(0);
+  const authenticatedUserIdRef = useRef<string | null>(null);
+  const authenticatingUserIdRef = useRef<string | null>(null);
+  const passwordRecoveryRef = useRef(false);
   
   const [tab, setTab] = useState<'matches' | 'results' | 'leaderboard' | 'winner' | 'admin' | 'profile'>('matches');
   const [matchFilter, setMatchFilter] = useState('all');
@@ -986,7 +1002,7 @@ export default function App() {
     };
 
     const fetchWinnerPickerTeams = async () => {
-      if (!activeTournamentId) {
+      if (authStatus !== 'authenticated' || !activeTournamentId) {
         setWinnerPickerTeams([]);
         return;
       }
@@ -1039,7 +1055,7 @@ export default function App() {
     return () => {
       isCancelled = true;
     };
-  }, [activeTournamentId, teams]);
+  }, [authStatus, activeTournamentId, teams]);
 
   const [lobbyFormActive, setLobbyFormActive] = useState<AddLobbyMode>(() => {
     if (new URLSearchParams(window.location.search).get("join")) return 'join';
@@ -1237,27 +1253,120 @@ export default function App() {
     });
   }, [user?.id, user?.avatar_emoji, user?.avatar_bg]);
 
-  // Try to restore Supabase session automatically on launch
+  const clearAuthenticatedState = useCallback(() => {
+    authSyncRequestRef.current += 1;
+    authenticatedUserIdRef.current = null;
+    authenticatingUserIdRef.current = null;
+    setUser(null);
+    setAuthProviders([]);
+    localStorage.removeItem('user');
+    localStorage.removeItem('activeLobbyId');
+    sessionStorage.removeItem('activeTournamentId');
+    setMatches([]);
+    setTeams([]);
+    setLeaderboard([]);
+    setAllPredictions([]);
+    setLobbies([]);
+    setHomeDashboardSummaries([]);
+    setLoadedDataContext({ lobbyId: null, tournamentId: null });
+    setActiveLobbyId(null);
+    setActiveLobbyName('');
+    setActiveTournamentId(null);
+    setTab('matches');
+    setLoading(false);
+    setDeferredLoading(false);
+  }, []);
+
+  // Supabase session is the only authoritative identity source.
   useEffect(() => {
-    const checkSupSession = async () => {
+    let active = true;
+
+    const synchronizeSession = async (
+      session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']
+    ) => {
+      if (!session?.user) {
+        if (!active) return;
+        clearAuthenticatedState();
+        setAuthStatus('signed_out');
+        return;
+      }
+
+      if (
+        authenticatedUserIdRef.current === session.user.id ||
+        authenticatingUserIdRef.current === session.user.id
+      ) return;
+
+      const requestId = ++authSyncRequestRef.current;
+      authenticatingUserIdRef.current = session.user.id;
       try {
-        const restored = await checkSession();
-        if (restored) {
-          setUser(restored);
-          localStorage.setItem('user', JSON.stringify(restored));
-        } else {
-          // If no database session, prompt to sign in
-          setUser(null);
-          localStorage.removeItem('user');
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error("Error checking passive session:", err);
+        const restored = await loadPlayerFromAuthUser(session.user);
+        if (!active || requestId !== authSyncRequestRef.current || passwordRecoveryRef.current) return;
+
+        authenticatedUserIdRef.current = session.user.id;
+        setUser(restored);
+        setAuthProviders(getUserAuthProviders(session.user));
+        setAuthStatus(isGeneratedProfileName(restored.username) ? 'profile_onboarding' : 'authenticated');
+      } catch (err: any) {
+        if (!active || requestId !== authSyncRequestRef.current) return;
+        console.error('Error restoring authenticated profile:', err);
+        authenticatedUserIdRef.current = null;
+        setUser(null);
+        setAuthProviders([]);
+        setError(err?.message || 'Nepodařilo se načíst přihlášený profil.');
+        setAuthStatus('auth_error');
         setLoading(false);
+      } finally {
+        if (authenticatingUserIdRef.current === session.user.id) {
+          authenticatingUserIdRef.current = null;
+        }
       }
     };
-    checkSupSession();
-  }, []);
+
+    supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (!active) return;
+      if (sessionError) {
+        setError(toFriendlyAuthError(sessionError));
+        setAuthStatus('auth_error');
+        setLoading(false);
+        return;
+      }
+      void synchronizeSession(data.session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      const action = getAuthEventAction(event, Boolean(session), passwordRecoveryRef.current);
+
+      if (action === 'password_recovery') {
+        passwordRecoveryRef.current = true;
+        authenticatedUserIdRef.current = null;
+        setUser(null);
+        setAuthProviders([]);
+        setError('');
+        setAuthStatus('password_recovery');
+        setLoading(false);
+        return;
+      }
+
+      if (action === 'signed_out') {
+        passwordRecoveryRef.current = false;
+        clearAuthenticatedState();
+        setAuthStatus('signed_out');
+        return;
+      }
+
+      if (action === 'ignore') return;
+
+      window.setTimeout(() => {
+        if (active) void synchronizeSession(session);
+      }, 0);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [clearAuthenticatedState]);
 
   const syncUserFromLeaderboard = (nextLeaderboard: Player[]) => {
     const myPlayer = nextLeaderboard.find(p => p.id === user?.id);
@@ -1270,14 +1379,12 @@ export default function App() {
           avatar_bg: myPlayer.avatar_bg || prev.avatar_bg || '#fee2e2',
           tournament_winner_id: myPlayer.tournament_winner_id || undefined
         };
-        localStorage.setItem('user', JSON.stringify(updated));
         return updated;
       });
     } else {
       setUser(prev => {
         if (!prev) return prev;
         const updated = { ...prev, tournament_winner_id: undefined };
-        localStorage.setItem('user', JSON.stringify(updated));
         return updated;
       });
     }
@@ -1491,31 +1598,86 @@ export default function App() {
   }, [loading, entryOrigin, activeTournamentId, tournamentStats]);
 
   useEffect(() => {
-    if (user?.id) {
+    if (authStatus === 'authenticated' && user?.id) {
       loadInitialData();
     }
-  }, [user?.id, activeLobbyId, activeTournamentId]);
+  }, [authStatus, user?.id, activeLobbyId, activeTournamentId]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
+    setLogoutError('');
+    setAuthStatus(isRegistering ? 'signing_up' : 'authenticating');
+
     try {
-      let data;
       if (isRegistering) {
-        // Register using email, username, password (FÁZE S6)
-        const emailToSubmit = loginData.email || `${loginData.username.toLowerCase().replace(/\s+/g, "")}@tipovacka.cz`;
-        data = await registerUser(loginData.username, loginData.password, undefined, emailToSubmit);
+        const result = await registerUser(loginData.username, loginData.password, loginData.email);
+        if (result.status === 'email_confirmation_pending') {
+          setPendingConfirmationEmail(result.email);
+          setAuthStatus('email_confirmation_pending');
+        }
       } else {
-        // Sign in using email (or username) and password
-        data = await loginUser(loginData.email || loginData.username, loginData.password);
+        await loginUser(loginData.email, loginData.password);
       }
-      setUser(data);
-      localStorage.setItem('user', JSON.stringify(data));
     } catch (err: any) {
-      setError(err.message || 'Chyba serveru při ověřování identity.');
-      setLoading(false);
+      setError(toFriendlyAuthError(err));
+      setAuthStatus('auth_error');
     }
+  };
+
+  const handleOAuthLogin = async (provider: SupportedOAuthProvider) => {
+    setError('');
+    setAuthStatus('authenticating');
+    try {
+      await signInWithOAuthProvider(provider);
+    } catch (err: any) {
+      setError(toFriendlyAuthError(err));
+      setAuthStatus('auth_error');
+    }
+  };
+
+  const handlePasswordResetRequest = async (email: string) => {
+    setError('');
+    await requestPasswordReset(email);
+  };
+
+  const handleResendConfirmation = async () => {
+    setError('');
+    await resendSignupConfirmation(pendingConfirmationEmail);
+  };
+
+  const handleFinishPasswordRecovery = async (newPassword: string) => {
+    setError('');
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    if (updateError) throw new Error(toFriendlyAuthError(updateError));
+
+    passwordRecoveryRef.current = false;
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw new Error(toFriendlyAuthError(sessionError));
+    if (!session?.user) {
+      clearAuthenticatedState();
+      setAuthStatus('signed_out');
+      return;
+    }
+
+    const restored = await loadPlayerFromAuthUser(session.user);
+    authenticatedUserIdRef.current = session.user.id;
+    setUser(restored);
+    setAuthProviders(getUserAuthProviders(session.user));
+    setAuthStatus(isGeneratedProfileName(restored.username) ? 'profile_onboarding' : 'authenticated');
+  };
+
+  const handleCompleteProfileOnboarding = async (username: string) => {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw new Error(toFriendlyAuthError(sessionError));
+    if (!session?.user) throw new Error('Přihlášení vypršelo. Přihlas se prosím znovu.');
+
+    await updateProfileUsername(session.user.id, username);
+    const restored = await loadPlayerFromAuthUser(session.user);
+    authenticatedUserIdRef.current = session.user.id;
+    setUser(restored);
+    setAuthProviders(getUserAuthProviders(session.user));
+    setAuthStatus('authenticated');
   };
 
   const handleLogout = async () => {
@@ -1525,24 +1687,12 @@ export default function App() {
 
     try {
       await logoutUser();
-      setUser(null);
-      localStorage.removeItem('user');
-      localStorage.removeItem('activeLobbyId');
-      sessionStorage.removeItem('activeTournamentId');
-      setMatches([]);
-      setTeams([]);
-      setLeaderboard([]);
-      setAllPredictions([]);
-      setLobbies([]);
-      setHomeDashboardSummaries([]);
-      setLoadedDataContext({ lobbyId: null, tournamentId: null });
-      setActiveLobbyId(null);
-      setActiveLobbyName("");
-      setActiveTournamentId(null);
-      setTab('matches');
+      passwordRecoveryRef.current = false;
+      clearAuthenticatedState();
+      setAuthStatus('signed_out');
     } catch (logoutFailure: any) {
       setLogoutError(
-        logoutFailure?.message ||
+        toFriendlyAuthError(logoutFailure) ||
         (lang === 'cz' ? 'Odhlášení se nezdařilo. Zkus to prosím znovu.' : 'Logout failed. Please try again.')
       );
     } finally {
@@ -1683,14 +1833,14 @@ export default function App() {
       setPassError(t.passMismatch);
       return;
     }
-    if (passData.newPass.length < 6) {
-      setPassError(lang === 'cz' ? 'Heslo musí mít aspoň 6 znaků' : 'Password must be at least 6 characters');
+    if (passData.newPass.length < 8) {
+      setPassError(lang === 'cz' ? 'Heslo musí mít alespoň 8 znaků.' : 'Password must be at least 8 characters.');
       return;
     }
 
     setIsPassSaving(true);
     try {
-      await changePassDB(user?.id || '', passData.newPass);
+      await changePassDB(passData.newPass);
       setPassMsg(t.passUpdated);
       setPassData({ newPass: '', confirmPass: '' });
     } catch (err: any) {
@@ -1713,7 +1863,6 @@ export default function App() {
         avatar_bg: nextBg
       };
       setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
       setAvatarData({ emoji: nextEmoji, bg: nextBg });
       setAvatarMsg(lang === 'cz' ? 'Avatar uložen.' : 'Avatar saved.');
       setLeaderboard(prev => prev.map(player => (
@@ -1939,84 +2088,35 @@ export default function App() {
     });
   }, [winnerPickerTeams]);
 
-  if (!user) {
-    const loginT = translations.cz; 
+  if (authStatus !== 'authenticated' || !user) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-sm bg-white rounded-[40px] shadow-2xl p-8 border border-slate-100"
-        >
-          <div className="flex flex-col items-center mb-8 text-center">
-            <div className="w-20 h-20 bg-red-600 rounded-3xl flex items-center justify-center shadow-lg shadow-red-200 mb-6 transform rotate-3">
-              <Trophy className="w-12 h-12 text-white" />
-            </div>
-            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic leading-none">{loginT.loginTitle}</h1>
-            <p className="text-[10px] font-bold text-red-600 uppercase tracking-[0.2em] mt-1">UNOFFICIAL FAN PREDICTOR</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            {isRegistering && (
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">E-mail</label>
-                <input 
-                  required
-                  type="email" 
-                  value={loginData.email}
-                  onChange={e => setLoginData(prev => ({ ...prev, email: e.target.value }))}
-                  className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all focus:bg-white"
-                  placeholder="e.g. test@tipovacka.cz"
-                />
-              </div>
-            )}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">
-                {loginT.username}
-              </label>
-              <input 
-                required
-                type="text" 
-                value={loginData.username}
-                onChange={e => setLoginData(prev => ({ ...prev, username: e.target.value }))}
-                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all focus:bg-white font-semibold text-slate-800"
-                placeholder={isRegistering ? "e.g. lukas" : "e.g. Hana"}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">{loginT.password}</label>
-              <input 
-                required
-                type="password" 
-                value={loginData.password}
-                onChange={e => setLoginData(prev => ({ ...prev, password: e.target.value }))}
-                className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-red-600 outline-none transition-all focus:bg-white"
-                placeholder="••••••••"
-              />
-            </div>
-            {error && <p className="text-red-500 text-xs font-bold text-center bg-red-50 p-3 rounded-2xl">{error}</p>}
-            <button 
-              type="submit"
-              className="w-full py-4 bg-red-600 text-white rounded-2xl font-black shadow-lg shadow-red-200 active:scale-95 transition-transform uppercase tracking-wider text-xs cursor-pointer"
-            >
-              {isRegistering ? loginT.register : loginT.signin}
-            </button>
-
-            <div className="text-center mt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRegistering(!isRegistering);
-                  setError('');
-                }}
-                className="text-xs font-black text-red-600 hover:underline uppercase tracking-wide cursor-pointer animate-pulse"
-              >
-                {isRegistering ? loginT.hasAccount : loginT.noAccount}
-              </button>
-            </div>
-          </form>
-        </motion.div>
-      </div>
+      <AuthScreen
+        status={authStatus}
+        registering={isRegistering}
+        email={loginData.email}
+        username={authStatus === 'profile_onboarding' ? (user?.username || loginData.username) : loginData.username}
+        password={loginData.password}
+        pendingEmail={pendingConfirmationEmail}
+        error={error}
+        onChange={(field, value) => setLoginData(previous => ({ ...previous, [field]: value }))}
+        onSubmit={handleLogin}
+        onToggleRegistering={() => {
+          setIsRegistering(previous => !previous);
+          setError('');
+          setAuthStatus('signed_out');
+        }}
+        onForgotPassword={handlePasswordResetRequest}
+        onOAuth={handleOAuthLogin}
+        onResendConfirmation={handleResendConfirmation}
+        onBackToLogin={() => {
+          setPendingConfirmationEmail('');
+          setError('');
+          setIsRegistering(false);
+          setAuthStatus('signed_out');
+        }}
+        onFinishPasswordRecovery={handleFinishPasswordRecovery}
+        onCompleteProfileOnboarding={handleCompleteProfileOnboarding}
+      />
     );
   }
 
@@ -2068,6 +2168,7 @@ export default function App() {
                 t={t}
                 lang={lang}
                 user={user}
+                authProviders={authProviders}
                 currentUserStats={currentUserStats}
                 currentUserRank={currentUserRank}
                 currentUserLeaderGap={currentUserLeaderGap}
