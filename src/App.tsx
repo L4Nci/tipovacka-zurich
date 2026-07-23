@@ -1052,9 +1052,6 @@ export default function App() {
   const [championError, setChampionError] = useState('');
   const [adminMatchFilter, setAdminMatchFilter] = useState<'scheduled' | 'finished'>('scheduled');
   const [adminGroupFilter, setAdminGroupFilter] = useState('all');
-  const [showCreatePlayer, setShowCreatePlayer] = useState(false);
-  const [newUserData, setNewUserData] = useState({ username: '', password: '' });
-  const [createUserMsg, setCreateUserMsg] = useState('');
   const [passData, setPassData] = useState({ newPass: '', confirmPass: '' });
   const [passMsg, setPassMsg] = useState('');
   const [passError, setPassError] = useState('');
@@ -1591,24 +1588,11 @@ export default function App() {
 
   const updateMatchResult = async (matchId: string, h: number, a: number) => {
     try {
-      const result = await updateMatchResDB(user?.id || '', matchId, h, a);
+      const result = await updateMatchResDB(matchId, h, a);
       await fetchAll();
       alert(`Výsledek uložen. Přepočteno ${result.updated_predictions_count}/${result.expected_predictions_count} tipů.`);
     } catch (err: any) {
       alert(err.message);
-    }
-  };
-
-  const handleAdminCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreateUserMsg('');
-    try {
-      await registerUser(newUserData.username, newUserData.password, user?.id);
-      setCreateUserMsg(t.userCreated);
-      setNewUserData({ username: '', password: '' });
-      await fetchAll();
-    } catch (err: any) {
-      setCreateUserMsg(err.message);
     }
   };
 
@@ -1619,7 +1603,7 @@ export default function App() {
     try {
       const tournamentId = activeTournamentId || activeLobby?.tournament_id || 'fifa-world-cup-2026';
       const champion = winnerPickerTeams.find(tm => tm.id === teamId) || teams.find(tm => tm.id === teamId);
-      const preview = await setWinnerDB(user?.id || '', teamId, tournamentId, { previewOnly: true });
+      const preview = await setWinnerDB(teamId, tournamentId, { previewOnly: true });
       const summary = preview.summary || {};
       const confirmed = window.confirm(
         `Potvrdit šampiona: ${champion?.name || preview.selected_champion?.name || teamId}?\n\n` +
@@ -1631,7 +1615,7 @@ export default function App() {
 
       if (!confirmed) return;
 
-      const result = await setWinnerDB(user?.id || '', teamId, tournamentId, { confirm: true });
+      const result = await setWinnerDB(teamId, tournamentId, { confirm: true });
       await fetchAll();
       setChampionMsg(
         `Šampion potvrzen: ${result.selected_champion?.name || champion?.name || teamId}. ` +
@@ -2458,12 +2442,6 @@ export default function App() {
                   setAdminGroupFilter={setAdminGroupFilter}
                   adminMatchesForView={adminMatchesForView}
                   onUpdateMatchResult={updateMatchResult}
-                  showCreatePlayer={showCreatePlayer}
-                  setShowCreatePlayer={setShowCreatePlayer}
-                  newUserData={newUserData}
-                  setNewUserData={setNewUserData}
-                  createUserMsg={createUserMsg}
-                  onCreateUser={handleAdminCreateUser}
                   adminChampionOptions={adminChampionOptions}
                   selectedWinner={selectedWinner}
                   setSelectedWinner={setSelectedWinner}

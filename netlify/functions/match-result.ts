@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "../../server/lib/supabaseAdmin.ts";
 import { applyMatchResult } from "../../server/lib/resultSync.ts";
+import { isAuthoritativePlatformAdmin } from "../../server/lib/platformAuthorization.ts";
 
 type NetlifyEvent = {
   httpMethod?: string;
@@ -70,13 +71,7 @@ export const handler = async (event: NetlifyEvent) => {
     }
 
     const adminUserId = authData.user.id;
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", adminUserId)
-      .single();
-
-    if (profileError || profile?.role !== "admin") {
+    if (!await isAuthoritativePlatformAdmin(supabaseAdmin, adminUserId)) {
       return jsonResponse(403, { error: "Pouze administrátor může vkládat výsledky a spouštět vyhodnocení." });
     }
 

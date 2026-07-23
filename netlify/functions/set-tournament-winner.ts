@@ -42,7 +42,6 @@ export const handler = async (event: NetlifyEvent) => {
 
   try {
     const result = await executeTournamentWinnerConfirmation(getSupabaseAdmin(), {
-      userId: body.userId ? String(body.userId) : null,
       teamId: body.teamId ? String(body.teamId) : null,
       tournamentId: body.tournamentId ? String(body.tournamentId) : null,
       confirm: body.confirm === true,
@@ -52,8 +51,10 @@ export const handler = async (event: NetlifyEvent) => {
 
     return jsonResponse(result.statusCode, result.body);
   } catch (err: any) {
-    console.error("Set tournament winner function error:", err);
     const result = tournamentWinnerErrorResponse(err);
+    if (result.statusCode >= 500) {
+      console.error("Set tournament winner function error:", err);
+    }
     return jsonResponse(result.statusCode, result.body);
   }
 };

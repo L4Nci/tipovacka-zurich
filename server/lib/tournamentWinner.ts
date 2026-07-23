@@ -1,10 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isAuthoritativePlatformAdmin } from "./platformAuthorization.ts";
 
 const DEFAULT_TOURNAMENT_ID = "fifa-world-cup-2026";
 const TOURNAMENT_WINNER_POINTS = 10;
 
 type TournamentWinnerInput = {
-  userId?: string | null;
   teamId?: string | null;
   tournamentId?: string | null;
   confirm?: boolean;
@@ -30,26 +30,27 @@ const bearerTokenFromHeader = (authorizationHeader?: string | null) => {
   return header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : null;
 };
 
-const resolveAdminUserId = async (
+export const authorizeTournamentWinnerAdmin = async (
   supabaseAdmin: SupabaseClient,
-  userId?: string | null,
   authorizationHeader?: string | null
 ) => {
   const bearerToken = bearerTokenFromHeader(authorizationHeader);
 
-  if (bearerToken) {
-    const { data, error } = await supabaseAdmin.auth.getUser(bearerToken);
-    if (error || !data.user?.id) {
-      throw httpError("Neplatné přihlášení administrátora.", 401);
-    }
-    return data.user.id;
+  if (!bearerToken) {
+    throw httpError("Chybí přihlášení administrátora.", 401);
   }
 
-  if (!userId) {
-    throw httpError("Chybějící administrátor.", 400);
+  const { data, error } = await supabaseAdmin.auth.getUser(bearerToken);
+  if (error || !data.user?.id) {
+    throw httpError("Neplatné přihlášení administrátora.", 401);
   }
 
-  return userId;
+  const adminUserId = data.user.id;
+  if (!await isAuthoritativePlatformAdmin(supabaseAdmin, adminUserId)) {
+    throw httpError("Pouze administrátor může vyhlásit celkového vítěze.", 403);
+  }
+
+  return adminUserId;
 };
 
 const loadValidatedChampion = async (
@@ -133,23 +134,13 @@ export const buildTournamentWinnerPreview = async (
   supabaseAdmin: SupabaseClient,
   input: TournamentWinnerInput
 ) => {
+  await authorizeTournamentWinnerAdmin(supabaseAdmin, input.authorizationHeader);
+
   const tournamentId = input.tournamentId || DEFAULT_TOURNAMENT_ID;
   const teamId = String(input.teamId || "");
 
   if (!teamId) {
     throw httpError("Chybějící vítěz turnaje.", 400);
-  }
-
-  const adminUserId = await resolveAdminUserId(supabaseAdmin, input.userId, input.authorizationHeader);
-
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from("profiles")
-    .select("role")
-    .eq("id", adminUserId)
-    .single();
-
-  if (profileError || profile?.role !== "admin") {
-    throw httpError("Pouze administrátor může vyhlásit celkového vítěze.", 403);
   }
 
   const { tournament, participant } = await loadValidatedChampion(supabaseAdmin, tournamentId, teamId);

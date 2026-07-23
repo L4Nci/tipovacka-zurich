@@ -1,6 +1,6 @@
-import React, { Dispatch, FormEvent, SetStateAction, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { ChevronDown, ChevronUp, ShieldCheck, UserPlus } from 'lucide-react';
+import React, { Dispatch, SetStateAction, useState } from 'react';
+import { motion } from 'motion/react';
+import { ShieldCheck } from 'lucide-react';
 import { Match, Team } from '../types.ts';
 
 type StageFilter = {
@@ -22,12 +22,6 @@ type AdminScreenProps = {
   setAdminGroupFilter: Dispatch<SetStateAction<string>>;
   adminMatchesForView: Match[];
   onUpdateMatchResult: (matchId: string, homeScore: number, awayScore: number) => Promise<void>;
-  showCreatePlayer: boolean;
-  setShowCreatePlayer: Dispatch<SetStateAction<boolean>>;
-  newUserData: { username: string; password: string };
-  setNewUserData: Dispatch<SetStateAction<{ username: string; password: string }>>;
-  createUserMsg: string;
-  onCreateUser: (event: FormEvent) => Promise<void>;
   adminChampionOptions: Team[];
   selectedWinner: string | null;
   setSelectedWinner: Dispatch<SetStateAction<string | null>>;
@@ -129,12 +123,6 @@ export default function AdminScreen({
   setAdminGroupFilter,
   adminMatchesForView,
   onUpdateMatchResult,
-  showCreatePlayer,
-  setShowCreatePlayer,
-  newUserData,
-  setNewUserData,
-  createUserMsg,
-  onCreateUser,
   adminChampionOptions,
   selectedWinner,
   setSelectedWinner,
@@ -153,63 +141,6 @@ export default function AdminScreen({
       <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
         <ShieldCheck className="w-4 h-4" /> {t.adminControls}
       </h2>
-
-      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-8 overflow-hidden transition-colors">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-            <UserPlus className="w-4 h-4" /> {t.createUser}
-          </h3>
-          <button
-            onClick={() => setShowCreatePlayer(!showCreatePlayer)}
-            className="p-1 rounded-full hover:bg-slate-50 transition-colors"
-          >
-            {showCreatePlayer ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-          </button>
-        </div>
-        <AnimatePresence>
-          {showCreatePlayer && (
-            <motion.form
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              onSubmit={onCreateUser}
-              className="space-y-3 overflow-hidden"
-            >
-              <div>
-                <input
-                  type="text"
-                  required
-                  placeholder={t.newUsername}
-                  value={newUserData.username}
-                  onChange={e => setNewUserData(prev => ({ ...prev, username: e.target.value }))}
-                  className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600 transition-colors"
-                />
-              </div>
-              <div>
-                <input
-                  type="password"
-                  required
-                  placeholder={t.newPassword}
-                  value={newUserData.password}
-                  onChange={e => setNewUserData(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full p-3 bg-slate-50 rounded-xl border-none text-sm outline-none focus:ring-2 focus:ring-red-600 transition-colors"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full py-3 bg-red-600 text-white rounded-xl font-bold shadow-md shadow-red-100 transition-transform active:scale-95"
-              >
-                {t.create}
-              </button>
-              {createUserMsg && (
-                <p className={`text-[10px] font-bold uppercase text-center mt-2 ${createUserMsg.includes('!') ? 'text-green-600' : 'text-red-500'}`}>
-                  {createUserMsg}
-                </p>
-              )}
-            </motion.form>
-          )}
-        </AnimatePresence>
-      </div>
 
       <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl transition-colors">
         <button

@@ -1416,7 +1416,7 @@ export const fetchDeferredAppData = async (lobbyId: string, tournamentId: string
 /**
  * Admin: Update match score and recalculate points of corresponding predictions (FÁZE S11)
  */
-export const updateMatchResult = async (adminUserId: string, matchId: string, homeScore: number, awayScore: number) => {
+export const updateMatchResult = async (matchId: string, homeScore: number, awayScore: number) => {
   const { data: { session } } = await supabase.auth.getSession();
   const headers: Record<string, string> = {
     "Content-Type": "application/json"
@@ -1430,7 +1430,6 @@ export const updateMatchResult = async (adminUserId: string, matchId: string, ho
     method: "POST",
     headers,
     body: JSON.stringify({
-      userId: adminUserId,
       matchId,
       homeScore,
       awayScore
@@ -1448,7 +1447,6 @@ export const updateMatchResult = async (adminUserId: string, matchId: string, ho
  * Admin: Declare absolute final winner of tournament
  */
 export const setTournamentWinner = async (
-  adminUserId: string,
   participantId: string,
   tournamentId: string = "fifa-world-cup-2026",
   options: { confirm?: boolean; previewOnly?: boolean } = {}
@@ -1466,7 +1464,6 @@ export const setTournamentWinner = async (
     method: "POST",
     headers,
     body: JSON.stringify({
-      userId: adminUserId,
       teamId: participantId,
       tournamentId,
       confirm: options.confirm === true,
@@ -1486,11 +1483,17 @@ export const setTournamentWinner = async (
 /**
  * Update Lobby name (Owner only - enforced by API/app logic context)
  */
-export const updateLobbyName = async (userId: string, lobbyId: string, newName: string) => {
+export const updateLobbyName = async (lobbyId: string, newName: string) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Chybí přihlášení uživatele.");
+
   const response = await fetch("/api/lobby/update-name", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, lobbyId, newName })
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`
+    },
+    body: JSON.stringify({ lobbyId, newName })
   });
   
   if (!response.ok) {
