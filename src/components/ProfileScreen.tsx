@@ -27,6 +27,7 @@ type ProfileScreenProps = {
   t: any;
   lang: 'cz' | 'en';
   user: Player;
+  authProviders: string[];
   currentUserStats: ProfileStats;
   currentUserRank: number | null;
   currentUserLeaderGap: number;
@@ -53,6 +54,7 @@ export default function ProfileScreen({
   t,
   lang,
   user,
+  authProviders,
   currentUserStats,
   currentUserRank,
   currentUserLeaderGap,
@@ -241,10 +243,37 @@ export default function ProfileScreen({
       </div>
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
+          {lang === 'cz' ? 'Účet' : 'Account'}
+        </h3>
+        <div className="space-y-3">
+          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-[9px] font-black uppercase text-slate-400">E-mail</p>
+            <p className="mt-1 truncate text-xs font-semibold text-slate-700">
+              {user.email || (lang === 'cz' ? 'Není dostupný' : 'Not available')}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-[9px] font-black uppercase text-slate-400">
+              {lang === 'cz' ? 'Přihlášení' : 'Sign-in methods'}
+            </p>
+            <p className="mt-1 text-xs font-semibold text-slate-700">
+              {authProviders.length > 0
+                ? authProviders.map(provider => (
+                    provider === 'email' ? 'E-mail' : provider === 'google' ? 'Google' : provider === 'apple' ? 'Apple' : provider
+                  )).join(', ')
+                : (lang === 'cz' ? 'E-mail' : 'Email')}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 italic">{t.changePass}</h3>
         <form onSubmit={onUpdatePassword} className="space-y-3">
           <input
             type="password"
+            autoComplete="new-password"
             placeholder={t.newPass}
             value={passData.newPass}
             onChange={e => setPassData(p => ({ ...p, newPass: e.target.value }))}
@@ -253,6 +282,7 @@ export default function ProfileScreen({
           />
           <input
             type="password"
+            autoComplete="new-password"
             placeholder={t.confirmPass}
             value={passData.confirmPass}
             onChange={e => setPassData(p => ({ ...p, confirmPass: e.target.value }))}

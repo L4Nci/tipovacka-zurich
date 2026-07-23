@@ -1,7 +1,10 @@
 import { supabase } from "./supabase.ts";
+import type { User } from "@supabase/supabase-js";
 import { calculatePoints } from "./scoring.ts";
 import { isDrawPrediction, isFootballKnockoutStage } from "./matchRules.ts";
 import { Player, Team, Match, Prediction, Lobby } from "../types.ts";
+import { getAuthRedirectUrl } from "./auth.ts";
+import { getSignupOutcome } from "./authLifecycle.ts";
 import {
   summarizeHomeDashboardContext,
   type HomeDashboardContextInput,
@@ -98,149 +101,91 @@ const fetchPredictionCountsByMatchId = async (
   return statsMap;
 };
 
-/**
- * Direct check of active session.
- * Used on app mount to restore user profile.
- */
-export const checkSession = async () => {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error || !session || !session.user) return null;
-  
-  const { data: profile } = await supabase
+export const loadPlayerFromAuthUser = async (authUser: User): Promise<Player> => {
+  const { data: profile, error } = await supabase
     .from("profiles")
-    .select("*")
-    .eq("id", session.user.id)
+    .select("id, username, role, tournament_winner_id, avatar_emoji, avatar_bg")
+    .eq("id", authUser.id)
     .maybeSingle();
 
-  if (!profile) return null;
+  if (error) throw error;
+  if (!profile) {
+    throw new Error("Přihlášení proběhlo, ale profil zatím není připravený. Zkus to prosím znovu.");
+  }
 
   return {
     id: profile.id,
+    email: authUser.email || null,
     username: profile.username,
     role: profile.role || "player",
     tournament_winner_id: profile.tournament_winner_id,
     avatar_emoji: profile.avatar_emoji || "😀",
     avatar_bg: profile.avatar_bg || "#fee2e2"
   } as Player;
+};
+
+/**
+ * Direct session check kept for small callers outside App auth orchestration.
+ */
+export const checkSession = async () => {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session?.user) return null;
+  return loadPlayerFromAuthUser(session.user);
 };
 
 /**
  * Sign In
  */
-export const loginUser = async (emailOrUsername: string, pass: string) => {
-  const login = emailOrUsername.trim();
-  const normalizedUsername = login.toLowerCase().replace(/\s+/g, "");
-  const loginEmails = login.includes("@")
-    ? [login]
-    : [
-        `${normalizedUsername}@tipovacka.local`,
-        `${normalizedUsername}@tipovacka.cz`
-      ];
-
-  let authData = null;
-  let authError = null;
-
-  for (const email of loginEmails) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: pass
-    });
-
-    if (!error && data.user) {
-      authData = data;
-      authError = null;
-      break;
-    }
-
-    authError = error;
+export const loginUser = async (email: string, pass: string) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail.includes("@")) {
+    throw new Error("Přihlašování uživatelským jménem není bezpečně dostupné. Použij e-mail.");
   }
 
-  if (authError) throw authError;
-  if (!authData?.user) throw new Error("Chyba při přihlašování.");
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password: pass
+  });
 
-  // Fetch corresponding profile
-  const { data: profile, error: pErr } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", authData.user.id)
-    .single();
-
-  if (pErr) {
-    return {
-      id: authData.user.id,
-      username: authData.user.user_metadata?.username || authData.user.email?.split("@")[0] || "Hráč",
-      role: "player",
-      avatar_emoji: "😀",
-      avatar_bg: "#fee2e2"
-    } as Player;
-  }
-
-  return {
-    id: profile.id,
-    username: profile.username,
-    role: profile.role || "player",
-    tournament_winner_id: profile.tournament_winner_id,
-    avatar_emoji: profile.avatar_emoji || "😀",
-    avatar_bg: profile.avatar_bg || "#fee2e2"
-  } as Player;
+  if (error) throw error;
+  if (!data.user || !data.session) throw new Error("Chyba při přihlašování.");
+  return data;
 };
 
 /**
  * Sign Up / Registration
  */
-export const registerUser = async (username: string, pass: string, adminId?: string, emailParam?: string) => {
-  // If registered by admin, we could handle differently, but here we can register standard users.
-  // Note: Supabase requires an email. Therefore, we construct a dummy or virtual email if the input is a simple string without '@'.
-  let email = emailParam || username;
-  if (!email.includes("@")) {
-    email = `${email.toLowerCase().replace(/\s+/g, "")}@tipovacka.cz`;
-  }
-  
+export const registerUser = async (username: string, pass: string, emailParam: string) => {
+  const email = emailParam.trim().toLowerCase();
+  const trimmedUsername = username.trim();
+  if (!email.includes("@")) throw new Error("Zadej platnou e-mailovou adresu.");
+  if (trimmedUsername.length < 2) throw new Error("Zobrazované jméno musí mít alespoň 2 znaky.");
+  if (pass.length < 8) throw new Error("Heslo musí mít alespoň 8 znaků.");
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password: pass,
     options: {
       data: {
-        username: username
-      }
+        username: trimmedUsername
+      },
+      emailRedirectTo: getAuthRedirectUrl()
     }
   });
 
   if (error) throw error;
   if (!data.user) throw new Error("Registrace se nezdařila.");
 
-  const trimmedUsername = username.trim();
-  if (trimmedUsername) {
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("role, avatar_emoji, avatar_bg")
-      .eq("id", data.user.id)
-      .maybeSingle();
-
-    const { error: upsertErr } = await supabase
-      .from("profiles")
-      .upsert({
-        id: data.user.id,
-        username: trimmedUsername,
-        role: existingProfile?.role || "player",
-        avatar_emoji: existingProfile?.avatar_emoji || "😀",
-        avatar_bg: existingProfile?.avatar_bg || "#fee2e2"
-      });
-      
-    if (upsertErr) {
-      console.error("Chyba při aktualizaci profilu:", upsertErr);
-      throw new Error("Nepodařilo se uložit uživatelské jméno.");
-    }
+  if (getSignupOutcome(Boolean(data.session)) === "email_confirmation_pending") {
+    return {
+      status: "email_confirmation_pending" as const,
+      email
+    };
   }
 
   return {
-    id: data.user.id,
-    username: trimmedUsername || username,
-    role: "player",
-    avatar_emoji: "😀",
-    avatar_bg: "#fee2e2",
-    tournament_winner_id: undefined
-  } as Player;
+    status: "authenticated" as const
+  };
 };
 
 /**
@@ -1199,8 +1144,22 @@ export const pickTournamentWinner = async (
 /**
  * Change profile password (Supabase Auth built-in service)
  */
-export const changePassword = async (userId: string, newPass: string) => {
+export const changePassword = async (newPass: string) => {
   const { error } = await supabase.auth.updateUser({ password: newPass });
+  if (error) throw error;
+};
+
+export const updateProfileUsername = async (userId: string, username: string) => {
+  const normalizedUsername = username.trim();
+  if (normalizedUsername.length < 2) {
+    throw new Error("Zobrazované jméno musí mít alespoň 2 znaky.");
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ username: normalizedUsername })
+    .eq("id", userId);
+
   if (error) throw error;
 };
 

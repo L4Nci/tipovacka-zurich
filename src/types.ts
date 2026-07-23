@@ -1,6 +1,7 @@
 export type Player = {
   id: string;
   username: string;
+  email?: string | null;
   role: 'player' | 'admin';
   lobby_role?: 'owner' | 'admin' | 'member';
   avatar_emoji?: string | null;
@@ -15,6 +16,17 @@ export type Player = {
   winner_hits?: number;
   draw_hits?: number;
 };
+
+export type AuthStatus =
+  | 'initializing'
+  | 'signed_out'
+  | 'authenticating'
+  | 'signing_up'
+  | 'email_confirmation_pending'
+  | 'password_recovery'
+  | 'profile_onboarding'
+  | 'authenticated'
+  | 'auth_error';
 
 export type Team = {
   id: string;
