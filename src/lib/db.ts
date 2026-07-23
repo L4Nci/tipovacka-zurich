@@ -2,10 +2,17 @@ import { supabase } from "./supabase.ts";
 import { calculatePoints } from "./scoring.ts";
 import { isDrawPrediction, isFootballKnockoutStage } from "./matchRules.ts";
 import { Player, Team, Match, Prediction, Lobby } from "../types.ts";
+import {
+  summarizeHomeDashboardContext,
+  type HomeDashboardContextInput,
+  type HomeDashboardMatchInput,
+  type HomeDashboardSummary
+} from "./homeDashboard.ts";
 
 const SUPABASE_PAGE_SIZE = 1000;
 const SUPABASE_MAX_PAGES = 20;
 let warnedMissingPredictionCountRpc = false;
+let warnedMissingHomeDashboardRpc = false;
 
 const fetchAllSupabaseRows = async <T>(query: any, label: string): Promise<T[]> => {
   const rows: T[] = [];
@@ -32,6 +39,13 @@ const isMissingPredictionCountRpcError = (error: any) => {
   const message = String(error?.message || "").toLowerCase();
   return error?.code === "PGRST202" ||
     message.includes("get_lobby_tournament_prediction_counts") &&
+    (message.includes("not find") || message.includes("not found") || message.includes("missing"));
+};
+
+const isMissingHomeDashboardRpcError = (error: any) => {
+  const message = String(error?.message || "").toLowerCase();
+  return error?.code === "PGRST202" ||
+    message.includes("get_user_home_dashboard") &&
     (message.includes("not find") || message.includes("not found") || message.includes("missing"));
 };
 
@@ -359,6 +373,7 @@ export const fetchUserLobbies = async (userId: string) => {
         visibility: lob.visibility,
         tournament_name: lob.tournament?.name || "FIFA World Cup 2026",
         is_owner: lob.owner_id === userId,
+        lobby_role: lob.owner_id === userId ? 'owner' : (item.role || 'member'),
         tournaments
       });
     }
@@ -385,6 +400,128 @@ export const fetchUserLobbies = async (userId: string) => {
   }
 
   return formatted;
+};
+
+const normalizeHomeDashboardSummary = (row: any): HomeDashboardSummary => ({
+  lobby_id: String(row.lobby_id),
+  lobby_name: String(row.lobby_name),
+  lobby_role: row.lobby_role === 'owner' || row.lobby_role === 'admin' ? row.lobby_role : 'member',
+  member_count: Number(row.member_count) || 0,
+  tournament_id: String(row.tournament_id),
+  tournament_name: String(row.tournament_name),
+  tournament_status: row.tournament_status === 'archived' ? 'archived' : 'active',
+  is_completed: Boolean(row.is_completed),
+  actionable_match_count: Number(row.actionable_match_count) || 0,
+  next_actionable_lock_time: row.next_actionable_lock_time || null,
+  next_missing_lock_time: row.next_missing_lock_time || null,
+  all_known_unlocked_predicted: Boolean(row.all_known_unlocked_predicted),
+  schedule_state: row.schedule_state,
+  requires_owner_attention: Boolean(row.requires_owner_attention)
+});
+
+const fetchHomeDashboardBatchedFallback = async (
+  userId: string,
+  lobbies: Lobby[]
+): Promise<HomeDashboardSummary[]> => {
+  const contexts: HomeDashboardContextInput[] = lobbies.flatMap(lobby => {
+    const relations = lobby.tournaments?.length
+      ? lobby.tournaments
+      : lobby.tournament_id
+        ? [{ lobby_id: lobby.id, tournament_id: lobby.tournament_id, status: 'active' as const }]
+        : [];
+
+    return relations
+      .filter(relation => relation.status === 'active')
+      .map(relation => ({
+        lobby_id: lobby.id,
+        lobby_name: lobby.name,
+        lobby_role: lobby.lobby_role || (lobby.is_owner ? 'owner' : 'member'),
+        member_count: lobby.member_count || 0,
+        tournament_id: relation.tournament_id,
+        tournament_name: relation.tournament?.name || lobby.tournament_name || relation.tournament_id,
+        tournament_status: relation.status,
+        actual_tournament_winner_id: null
+      }));
+  });
+
+  const tournamentIds = Array.from(new Set(contexts.map(context => context.tournament_id)));
+  if (tournamentIds.length === 0) return [];
+
+  const [{ data: tournamentRows, error: tournamentsError }, { data: matchRows, error: matchesError }] = await Promise.all([
+    supabase
+      .from('tournaments')
+      .select('id, name, actual_tournament_winner_id')
+      .in('id', tournamentIds),
+    supabase
+      .from('matches')
+      .select('id, tournament_id, home_participant_id, away_participant_id, lock_time_utc, status, home_score, away_score')
+      .in('tournament_id', tournamentIds)
+      .order('lock_time_utc', { ascending: true })
+  ]);
+
+  if (tournamentsError) throw tournamentsError;
+  if (matchesError) throw matchesError;
+
+  const matches = (matchRows || []) as HomeDashboardMatchInput[];
+  const matchIds = matches.map(match => match.id);
+  const lobbyIds = Array.from(new Set(contexts.map(context => context.lobby_id)));
+  let predictionRows: Array<{ lobby_id: string; match_id: string }> = [];
+
+  if (matchIds.length > 0 && lobbyIds.length > 0) {
+    const predictionsQuery = supabase
+      .from('predictions')
+      .select('lobby_id, match_id')
+      .eq('user_id', userId)
+      .in('lobby_id', lobbyIds)
+      .in('match_id', matchIds)
+      .order('lobby_id', { ascending: true })
+      .order('match_id', { ascending: true });
+    predictionRows = await fetchAllSupabaseRows(predictionsQuery, 'fetchHomeDashboard fallback predictions');
+  }
+
+  const tournamentsById = new Map((tournamentRows || []).map(row => [row.id, row]));
+  const predictionsByLobby = new Map<string, Set<string>>();
+  predictionRows.forEach(row => {
+    const current = predictionsByLobby.get(row.lobby_id) || new Set<string>();
+    current.add(row.match_id);
+    predictionsByLobby.set(row.lobby_id, current);
+  });
+
+  return contexts.map(context => {
+    const tournament = tournamentsById.get(context.tournament_id);
+    return summarizeHomeDashboardContext(
+      {
+        ...context,
+        tournament_name: tournament?.name || context.tournament_name,
+        actual_tournament_winner_id: tournament?.actual_tournament_winner_id || null
+      },
+      matches,
+      predictionsByLobby.get(context.lobby_id) || new Set<string>()
+    );
+  });
+};
+
+export const fetchHomeDashboard = async (userId: string, lobbies: Lobby[]) => {
+  const { data, error } = await supabase.rpc('get_user_home_dashboard');
+
+  if (!error && data) {
+    return {
+      summaries: data.map(normalizeHomeDashboardSummary),
+      source: 'rpc' as const
+    };
+  }
+
+  if (error && !isMissingHomeDashboardRpcError(error)) throw error;
+
+  if (error && !warnedMissingHomeDashboardRpc) {
+    warnedMissingHomeDashboardRpc = true;
+    console.warn('Home dashboard RPC is unavailable; using the batched read-only fallback.');
+  }
+
+  return {
+    summaries: await fetchHomeDashboardBatchedFallback(userId, lobbies),
+    source: 'batched-fallback' as const
+  };
 };
 
 /**
@@ -1279,7 +1416,7 @@ export const fetchDeferredAppData = async (lobbyId: string, tournamentId: string
 /**
  * Admin: Update match score and recalculate points of corresponding predictions (FÁZE S11)
  */
-export const updateMatchResult = async (adminUserId: string, matchId: string, homeScore: number, awayScore: number) => {
+export const updateMatchResult = async (matchId: string, homeScore: number, awayScore: number) => {
   const { data: { session } } = await supabase.auth.getSession();
   const headers: Record<string, string> = {
     "Content-Type": "application/json"
@@ -1293,7 +1430,6 @@ export const updateMatchResult = async (adminUserId: string, matchId: string, ho
     method: "POST",
     headers,
     body: JSON.stringify({
-      userId: adminUserId,
       matchId,
       homeScore,
       awayScore
@@ -1311,7 +1447,6 @@ export const updateMatchResult = async (adminUserId: string, matchId: string, ho
  * Admin: Declare absolute final winner of tournament
  */
 export const setTournamentWinner = async (
-  adminUserId: string,
   participantId: string,
   tournamentId: string = "fifa-world-cup-2026",
   options: { confirm?: boolean; previewOnly?: boolean } = {}
@@ -1329,7 +1464,6 @@ export const setTournamentWinner = async (
     method: "POST",
     headers,
     body: JSON.stringify({
-      userId: adminUserId,
       teamId: participantId,
       tournamentId,
       confirm: options.confirm === true,
@@ -1349,11 +1483,17 @@ export const setTournamentWinner = async (
 /**
  * Update Lobby name (Owner only - enforced by API/app logic context)
  */
-export const updateLobbyName = async (userId: string, lobbyId: string, newName: string) => {
+export const updateLobbyName = async (lobbyId: string, newName: string) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Chybí přihlášení uživatele.");
+
   const response = await fetch("/api/lobby/update-name", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, lobbyId, newName })
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`
+    },
+    body: JSON.stringify({ lobbyId, newName })
   });
   
   if (!response.ok) {

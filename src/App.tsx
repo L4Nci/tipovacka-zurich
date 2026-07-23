@@ -1,4 +1,4 @@
-import React, { Component, Suspense, lazy, useState, useEffect, useMemo, useRef } from 'react';
+import React, { Component, Suspense, lazy, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Trophy, 
@@ -18,8 +18,10 @@ import {
   fetchAllData, 
   fetchCriticalAppData,
   fetchDeferredAppData,
+  fetchHomeDashboard,
   loginUser, 
   registerUser, 
+  logoutUser,
   savePrediction as savePredDB, 
   fetchMatchPredictions,
   updateMatchResult as updateMatchResDB,
@@ -32,6 +34,8 @@ import {
   joinLobbyByCode,
   calculatePoints
 } from './lib/db.ts';
+import { HomeDashboard, type AddLobbyMode } from './components/HomeDashboard.tsx';
+import { isUntippedMatchForDisplay, type HomeDashboardSummary } from './lib/homeDashboard.ts';
 
 const LazyAdminScreen = lazy(() => import('./components/AdminScreen.tsx'));
 const LazyLeaderboardScreen = lazy(() => import('./components/LeaderboardScreen.tsx'));
@@ -945,12 +949,17 @@ export default function App() {
   
   // Lobbies State (FÁZE S7 & S8)
   const [lobbies, setLobbies] = useState<Lobby[]>([]);
-  const [activeLobbyId, setActiveLobbyId] = useState<string | null>(() => localStorage.getItem('activeLobbyId'));
+  const [activeLobbyId, setActiveLobbyId] = useState<string | null>(() => (
+    sessionStorage.getItem('activeTournamentId') ? localStorage.getItem('activeLobbyId') : null
+  ));
   const [activeLobbyName, setActiveLobbyName] = useState<string>("");
   const [activeTournamentId, setActiveTournamentId] = useState<string | null>(() => sessionStorage.getItem('activeTournamentId'));
-  const [suppressAutoEnter, setSuppressAutoEnter] = useState(() => sessionStorage.getItem('suppressAutoEnter') === 'true');
   const previousActiveLobbyIdRef = useRef<string | null>(activeLobbyId);
-  const [lobbyExpanded, setLobbyExpanded] = useState(false);
+  const [entryOrigin, setEntryOrigin] = useState<'direct-home-action' | 'lobby-detail' | 'normal-tournament-navigation'>('normal-tournament-navigation');
+  const [homeDashboardSummaries, setHomeDashboardSummaries] = useState<HomeDashboardSummary[]>([]);
+  const [homeDashboardLoading, setHomeDashboardLoading] = useState(false);
+  const [homeDashboardError, setHomeDashboardError] = useState('');
+  const homeDashboardRequestRef = useRef(0);
   const [newLobbyName, setNewLobbyName] = useState("");
   const [newLobbyShortDescription, setNewLobbyShortDescription] = useState("");
   const [newLobbyLongDescription, setNewLobbyLongDescription] = useState("");
@@ -1032,7 +1041,7 @@ export default function App() {
     };
   }, [activeTournamentId, teams]);
 
-  const [lobbyFormActive, setLobbyFormActive] = useState<'none' | 'create' | 'join'>(() => {
+  const [lobbyFormActive, setLobbyFormActive] = useState<AddLobbyMode>(() => {
     if (new URLSearchParams(window.location.search).get("join")) return 'join';
     return 'none';
   });
@@ -1044,13 +1053,12 @@ export default function App() {
   const [championError, setChampionError] = useState('');
   const [adminMatchFilter, setAdminMatchFilter] = useState<'scheduled' | 'finished'>('scheduled');
   const [adminGroupFilter, setAdminGroupFilter] = useState('all');
-  const [showCreatePlayer, setShowCreatePlayer] = useState(false);
-  const [newUserData, setNewUserData] = useState({ username: '', password: '' });
-  const [createUserMsg, setCreateUserMsg] = useState('');
   const [passData, setPassData] = useState({ newPass: '', confirmPass: '' });
   const [passMsg, setPassMsg] = useState('');
   const [passError, setPassError] = useState('');
   const [isPassSaving, setIsPassSaving] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [avatarData, setAvatarData] = useState({
     emoji: user?.avatar_emoji || '😀',
     bg: user?.avatar_bg || '#fee2e2'
@@ -1087,28 +1095,6 @@ export default function App() {
     }
   }, [activeTournamentId]);
 
-  useEffect(() => {
-    if (suppressAutoEnter) {
-      sessionStorage.setItem('suppressAutoEnter', 'true');
-    } else {
-      sessionStorage.removeItem('suppressAutoEnter');
-    }
-  }, [suppressAutoEnter]);
-
-  useEffect(() => {
-    if (!user || activeLobbyId || activeTournamentId || suppressAutoEnter || lobbyFormActive !== 'none') return;
-    if (lobbies.length !== 1) return;
-
-    const onlyLobby = lobbies[0];
-    const activeTournaments = (onlyLobby.tournaments || []).filter(tournament => tournament.status === 'active');
-    if (activeTournaments.length !== 1) return;
-
-    setActiveLobbyId(onlyLobby.id);
-    setActiveLobbyName(onlyLobby.name);
-    setActiveTournamentId(activeTournaments[0].tournament_id);
-    setTab('matches');
-  }, [user, lobbies, activeLobbyId, activeTournamentId, suppressAutoEnter, lobbyFormActive]);
-
   const t = (translations as any)[lang];
 
   const stageFilters = useMemo(() => {
@@ -1141,6 +1127,12 @@ export default function App() {
     ];
   }, [matches, t.all, lang]);
 
+  const matchFilters = useMemo(() => [
+    stageFilters[0],
+    { id: 'untipped', label: lang === 'cz' ? 'Bez tipu' : 'Missing' },
+    ...stageFilters.slice(1)
+  ], [stageFilters, lang]);
+
   const matchPassesStageFilter = (match: Match, filter: string) => {
     return filter === 'all' || match.stage === filter;
   };
@@ -1161,6 +1153,7 @@ export default function App() {
   const scheduledMatchesForView = useMemo(() => {
     return matches.filter(match => {
       if (match.status !== 'scheduled') return false;
+      if (matchFilter === 'untipped') return isUntippedMatchForDisplay(match);
       if (matchFilter === 'all') return true;
       return matchPassesStageFilter(match, matchFilter);
     });
@@ -1170,7 +1163,7 @@ export default function App() {
     return [...matches]
       .filter(match => {
         if (match.status !== 'finished') return false;
-        if (matchFilter === 'all') return true;
+        if (matchFilter === 'all' || matchFilter === 'untipped') return true;
         return matchPassesStageFilter(match, matchFilter);
       })
       .reverse();
@@ -1228,13 +1221,13 @@ export default function App() {
   }, [activeLobby, activeTournamentId, matches, teams]);
 
   useEffect(() => {
-    if (!stageFilters.some(filter => filter.id === matchFilter)) {
+    if (!matchFilters.some(filter => filter.id === matchFilter)) {
       setMatchFilter('all');
     }
     if (!stageFilters.some(filter => filter.id === adminGroupFilter)) {
       setAdminGroupFilter('all');
     }
-  }, [stageFilters, matchFilter, adminGroupFilter]);
+  }, [stageFilters, matchFilters, matchFilter, adminGroupFilter]);
 
   useEffect(() => {
     if (!user) return;
@@ -1419,7 +1412,83 @@ export default function App() {
     if (lobbyId === activeLobbyId && updates.name) {
       setActiveLobbyName(updates.name);
     }
+    if (updates.name) {
+      setHomeDashboardSummaries(prev => prev.map(summary => (
+        summary.lobby_id === lobbyId ? { ...summary, lobby_name: updates.name as string } : summary
+      )));
+    }
   };
+
+  const loadHomeDashboard = useCallback(async () => {
+    if (!user) return;
+
+    const requestId = homeDashboardRequestRef.current + 1;
+    homeDashboardRequestRef.current = requestId;
+    setHomeDashboardLoading(true);
+    setHomeDashboardError('');
+
+    try {
+      const result = await fetchHomeDashboard(user.id, lobbies);
+      if (homeDashboardRequestRef.current !== requestId) return;
+      setHomeDashboardSummaries(result.summaries);
+    } catch (homeError: any) {
+      if (homeDashboardRequestRef.current !== requestId) return;
+      console.error('home dashboard load error:', homeError);
+      setHomeDashboardError(homeError?.message || 'Akční přehled se nepodařilo načíst.');
+    } finally {
+      if (homeDashboardRequestRef.current === requestId) {
+        setHomeDashboardLoading(false);
+      }
+    }
+  }, [user, lobbies]);
+
+  useEffect(() => {
+    if (!user || loading) return;
+    if (activeLobbyId) {
+      homeDashboardRequestRef.current += 1;
+      setHomeDashboardLoading(false);
+      return;
+    }
+    void loadHomeDashboard();
+  }, [user, loading, activeLobbyId, loadHomeDashboard]);
+
+  const goHome = () => {
+    setHomeDashboardLoading(true);
+    setHomeDashboardError('');
+    setEntryOrigin('normal-tournament-navigation');
+    setMatchFilter('all');
+    setActiveTournamentId(null);
+    setActiveLobbyId(null);
+    setTab('matches');
+    window.scrollTo({ top: 0 });
+  };
+
+  const openLobbyDetail = (lobby: Lobby) => {
+    setEntryOrigin('lobby-detail');
+    setMatchFilter('all');
+    setActiveTournamentId(null);
+    setActiveLobbyId(lobby.id);
+    setActiveLobbyName(lobby.name);
+    setTab('matches');
+    window.scrollTo({ top: 0 });
+  };
+
+  const openHomeContext = (summary: HomeDashboardSummary, showOnlyMissing: boolean) => {
+    setEntryOrigin('direct-home-action');
+    setActiveLobbyId(summary.lobby_id);
+    setActiveLobbyName(summary.lobby_name);
+    setActiveTournamentId(summary.tournament_id);
+    setMatchFilter(showOnlyMissing ? 'untipped' : 'all');
+    setTab('matches');
+    window.scrollTo({ top: 0 });
+  };
+
+  useEffect(() => {
+    if (loading || entryOrigin !== 'normal-tournament-navigation' || !activeTournamentId) return;
+    if (tournamentStats[activeTournamentId]?.isCompleted) {
+      goHome();
+    }
+  }, [loading, entryOrigin, activeTournamentId, tournamentStats]);
 
   useEffect(() => {
     if (user?.id) {
@@ -1441,7 +1510,6 @@ export default function App() {
         // Sign in using email (or username) and password
         data = await loginUser(loginData.email || loginData.username, loginData.password);
       }
-      setSuppressAutoEnter(false);
       setUser(data);
       localStorage.setItem('user', JSON.stringify(data));
     } catch (err: any) {
@@ -1450,21 +1518,36 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('activeLobbyId');
-    sessionStorage.removeItem('activeTournamentId');
-    sessionStorage.removeItem('suppressAutoEnter');
-    setMatches([]);
-    setLeaderboard([]);
-    setAllPredictions([]);
-    setLobbies([]);
-    setLoadedDataContext({ lobbyId: null, tournamentId: null });
-    setActiveLobbyId(null);
-    setActiveLobbyName("");
-    setActiveTournamentId(null);
-    setSuppressAutoEnter(false);
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutError('');
+
+    try {
+      await logoutUser();
+      setUser(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('activeLobbyId');
+      sessionStorage.removeItem('activeTournamentId');
+      setMatches([]);
+      setTeams([]);
+      setLeaderboard([]);
+      setAllPredictions([]);
+      setLobbies([]);
+      setHomeDashboardSummaries([]);
+      setLoadedDataContext({ lobbyId: null, tournamentId: null });
+      setActiveLobbyId(null);
+      setActiveLobbyName("");
+      setActiveTournamentId(null);
+      setTab('matches');
+    } catch (logoutFailure: any) {
+      setLogoutError(
+        logoutFailure?.message ||
+        (lang === 'cz' ? 'Odhlášení se nezdařilo. Zkus to prosím znovu.' : 'Logout failed. Please try again.')
+      );
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const savePrediction = async (matchId: string, h: number, a: number) => {
@@ -1525,24 +1608,11 @@ export default function App() {
 
   const updateMatchResult = async (matchId: string, h: number, a: number) => {
     try {
-      const result = await updateMatchResDB(user?.id || '', matchId, h, a);
+      const result = await updateMatchResDB(matchId, h, a);
       await fetchAll();
       alert(`Výsledek uložen. Přepočteno ${result.updated_predictions_count}/${result.expected_predictions_count} tipů.`);
     } catch (err: any) {
       alert(err.message);
-    }
-  };
-
-  const handleAdminCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCreateUserMsg('');
-    try {
-      await registerUser(newUserData.username, newUserData.password, user?.id);
-      setCreateUserMsg(t.userCreated);
-      setNewUserData({ username: '', password: '' });
-      await fetchAll();
-    } catch (err: any) {
-      setCreateUserMsg(err.message);
     }
   };
 
@@ -1553,7 +1623,7 @@ export default function App() {
     try {
       const tournamentId = activeTournamentId || activeLobby?.tournament_id || 'fifa-world-cup-2026';
       const champion = winnerPickerTeams.find(tm => tm.id === teamId) || teams.find(tm => tm.id === teamId);
-      const preview = await setWinnerDB(user?.id || '', teamId, tournamentId, { previewOnly: true });
+      const preview = await setWinnerDB(teamId, tournamentId, { previewOnly: true });
       const summary = preview.summary || {};
       const confirmed = window.confirm(
         `Potvrdit šampiona: ${champion?.name || preview.selected_champion?.name || teamId}?\n\n` +
@@ -1565,7 +1635,7 @@ export default function App() {
 
       if (!confirmed) return;
 
-      const result = await setWinnerDB(user?.id || '', teamId, tournamentId, { confirm: true });
+      const result = await setWinnerDB(teamId, tournamentId, { confirm: true });
       await fetchAll();
       setChampionMsg(
         `Šampion potvrzen: ${result.selected_champion?.name || champion?.name || teamId}. ` +
@@ -2006,6 +2076,8 @@ export default function App() {
                 passMsg={passMsg}
                 passError={passError}
                 isPassSaving={isPassSaving}
+                logoutError={logoutError}
+                isLoggingOut={isLoggingOut}
                 onUpdatePassword={handleUpdatePassword}
                 avatarData={avatarData}
                 showAvatarEditor={showAvatarEditor}
@@ -2045,88 +2117,26 @@ export default function App() {
           </div>
         </header>
         
-        <main className="p-6 flex-1 flex flex-col">
-          {lobbies.length > 0 ? (
-            <div className="space-y-4">
-               <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">
-                 {lang === 'cz' ? 'Moje lobby' : 'My lobbies'} ({lobbies.length})
-               </h2>
-               <div className="space-y-3">
-                 {lobbies.map(l => (
-                   <div key={l.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-3">
-                      <div className="flex justify-between items-start">
-                         <div>
-                           <h3 className="text-sm uppercase font-black text-slate-800">{l.name}</h3>
-                           {l.short_description && (
-                             <p className="text-xs text-slate-500 font-medium mt-1 line-clamp-1">{l.short_description}</p>
-                           )}
-                           <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">{l.tournament_name || "Football"}</p>
-                         </div>
-                         <div className="flex items-center gap-2">
-                            {l.is_owner && (
-                              <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-slate-100 text-slate-400">Owner</span>
-                            )}
-                         </div>
-                      </div>
-                      
-                      <div className="flex gap-2 mt-2">
-                         <button 
-                           onClick={() => {
-                             setActiveLobbyId(l.id);
-                             setActiveTournamentId(null);
-                             setActiveLobbyName(l.name);
-                           }}
-                           className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform"
-                         >
-                           Otevřít lobby
-                         </button>
-                      </div>
-                   </div>
-                 ))}
-               </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
-               <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-6">
-                 <TrophyIcon className="w-8 h-8" />
-               </div>
-               <h2 className="text-xl font-black text-slate-800 mb-2">
-                 Zatím nejsi v žádné lobby
-               </h2>
-               <p className="text-[12px] text-slate-500 max-w-[250px] mx-auto font-medium leading-relaxed">
-                 Připoj se ke svým přátelům pomocí kódu, nebo založ úplně novou tipovačku.
-               </p>
-            </div>
-          )}
-
-          <div className="mt-8 space-y-4">
-            <div className="flex gap-2">
-               <button 
-                 onClick={() => {
-                   setLobbyFormActive(lobbyFormActive === 'join' ? 'none' : 'join');
-                   setLobbyError(""); setLobbySuccess("");
-                 }}
-                 className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${
-                   lobbyFormActive === 'join' || (lobbies.length === 0 && lobbyFormActive !== 'create') ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-200' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                 }`}
-               >
-                 {lang === 'cz' ? 'Připojit kód' : 'Join via Code'}
-               </button>
-               <button 
-                 onClick={() => {
-                   setLobbyFormActive(lobbyFormActive === 'create' ? 'none' : 'create');
-                   setLobbyError(""); setLobbySuccess("");
-                 }}
-                 className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border ${
-                   lobbyFormActive === 'create' ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                 }`}
-               >
-                 {lang === 'cz' ? 'Založit lobby' : 'Create Lobby'}
-               </button>
-            </div>
-
+        <div className="flex-1">
+          <HomeDashboard
+            lang={lang}
+            lobbies={lobbies}
+            summaries={homeDashboardSummaries}
+            summariesLoading={homeDashboardLoading}
+            summariesError={homeDashboardError}
+            addLobbyMode={lobbyFormActive}
+            onRetrySummaries={() => void loadHomeDashboard()}
+            onOpenContext={openHomeContext}
+            onOpenLobby={openLobbyDetail}
+            onSetAddLobbyMode={mode => {
+              setLobbyFormActive(mode);
+              setLobbyError('');
+              setLobbySuccess('');
+            }}
+          />
+          <div className="px-4 pb-6 sm:px-6">
             {/* Expanded Forms */}
-            {(lobbyFormActive !== 'none' || (lobbies.length === 0 && lobbyFormActive === 'none')) && (
+            {(lobbyFormActive === 'create' || lobbyFormActive === 'join') && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
@@ -2151,6 +2161,7 @@ export default function App() {
                       setNewLobbyShortDescription("");
                       setNewLobbyLongDescription("");
                       setLobbyFormActive('none');
+                      setEntryOrigin('lobby-detail');
                       setActiveLobbyId(created.id);
                       setActiveTournamentId(null);
                       setActiveLobbyName(created.name);
@@ -2212,6 +2223,7 @@ export default function App() {
                       setLobbySuccess(`Úspěšně ses připojil k lobby "${joined.name}"!`);
                       setJoinCodeInput("");
                       setLobbyFormActive('none');
+                      setEntryOrigin('lobby-detail');
                       setActiveLobbyId(joined.id);
                       setActiveTournamentId(null);
                       setActiveLobbyName(joined.name);
@@ -2240,7 +2252,7 @@ export default function App() {
               </motion.div>
             )}
           </div>
-        </main>
+        </div>
       </div>
     );
   }
@@ -2253,8 +2265,11 @@ export default function App() {
               {activeTournamentId ? (
               <button 
                 onClick={() => {
-                  setSuppressAutoEnter(true);
-                  setActiveTournamentId(null);
+                  if (entryOrigin === 'direct-home-action') {
+                    goHome();
+                  } else {
+                    setActiveTournamentId(null);
+                  }
                 }}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
                 title="Zpět do Lobby"
@@ -2263,11 +2278,7 @@ export default function App() {
               </button>
             ) : activeLobbyId ? (
               <button 
-                onClick={() => {
-                  setSuppressAutoEnter(true);
-                  setActiveLobbyId(null);
-                  setActiveTournamentId(null);
-                }}
+                onClick={goHome}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
                 title={lang === 'cz' ? 'Zpět na Seznam Lobby' : 'Back to Lobbies'}
               >
@@ -2301,6 +2312,7 @@ export default function App() {
                 user={{ ...user, username: user.username || '' }}
                 lang={lang as 'cz' | 'en'}
                 onSelectTournament={id => {
+                  setEntryOrigin('lobby-detail');
                   setActiveTournamentId(id);
                   setTab('matches');
                 }}
@@ -2328,7 +2340,7 @@ export default function App() {
           {/* Match Filter Bar */}
           {(tab === 'matches' || tab === 'results') && (
             <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar -mx-4 px-4 bg-slate-50 py-1 transition-colors">
-              {stageFilters.map(f => (
+              {matchFilters.map(f => (
               <button
                 key={f.id}
                 onClick={() => setMatchFilter(f.id)}
@@ -2452,12 +2464,6 @@ export default function App() {
                   setAdminGroupFilter={setAdminGroupFilter}
                   adminMatchesForView={adminMatchesForView}
                   onUpdateMatchResult={updateMatchResult}
-                  showCreatePlayer={showCreatePlayer}
-                  setShowCreatePlayer={setShowCreatePlayer}
-                  newUserData={newUserData}
-                  setNewUserData={setNewUserData}
-                  createUserMsg={createUserMsg}
-                  onCreateUser={handleAdminCreateUser}
                   adminChampionOptions={adminChampionOptions}
                   selectedWinner={selectedWinner}
                   setSelectedWinner={setSelectedWinner}

@@ -18,6 +18,7 @@ import {
   executeTournamentWinnerConfirmation,
   tournamentWinnerErrorResponse
 } from "./server/lib/tournamentWinner.ts";
+import { isAuthoritativePlatformAdmin } from "./server/lib/platformAuthorization.ts";
 
 type SyncAuthResult =
   | { ok: true }
@@ -168,7 +169,6 @@ async function startServer() {
   app.post("/api/admin/set-tournament-winner", async (req, res) => {
     try {
       const result = await executeTournamentWinnerConfirmation(getSupabaseAdmin(), {
-        userId: req.body.userId,
         teamId: req.body.teamId,
         tournamentId: req.body.tournamentId,
         confirm: req.body.confirm === true,
@@ -178,8 +178,10 @@ async function startServer() {
 
       return res.status(result.statusCode).json(result.body);
     } catch (err: any) {
-      console.error("Set tournament winner admin error:", err);
       const result = tournamentWinnerErrorResponse(err);
+      if (result.statusCode >= 500) {
+        console.error("Set tournament winner admin error:", err);
+      }
       return res.status(result.statusCode).json(result.body);
     }
   });
@@ -211,13 +213,7 @@ async function startServer() {
       }
 
       const adminUserId = authData.user.id;
-      const { data: profile, error: profileError } = await supabaseAdmin
-        .from("profiles")
-        .select("role")
-        .eq("id", adminUserId)
-        .single();
-
-      if (profileError || profile?.role !== "admin") {
+      if (!await isAuthoritativePlatformAdmin(supabaseAdmin, adminUserId)) {
         return res.status(403).json({ error: "Pouze administrátor může vkládat výsledky a spouštět vyhodnocení." });
       }
 
@@ -238,14 +234,26 @@ async function startServer() {
   });
 
   app.post("/api/lobby/update-name", async (req, res) => {
-    const { userId, lobbyId, newName, shortDescription, longDescription } = req.body;
+    const { lobbyId, newName, shortDescription, longDescription } = req.body;
 
-    if (!userId || !lobbyId || !newName) {
+    if (!lobbyId || !newName) {
       return res.status(400).json({ error: "Chybějí povinné parametry." });
+    }
+
+    const bearerToken = bearerTokenFromHeader(req.headers.authorization);
+    if (!bearerToken) {
+      return res.status(401).json({ error: "Chybí přihlášení uživatele." });
     }
 
     try {
       const supabaseAdmin = getSupabaseAdmin();
+      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(bearerToken);
+
+      if (authError || !authData.user?.id) {
+        return res.status(401).json({ error: "Neplatné přihlášení uživatele." });
+      }
+
+      const userId = authData.user.id;
 
       const { data: lobby, error: lobbyErr } = await supabaseAdmin
         .from("lobbies")
@@ -258,13 +266,7 @@ async function startServer() {
       }
 
       if (lobby.owner_id !== userId) {
-        const { data: profile } = await supabaseAdmin
-          .from("profiles")
-          .select("role")
-          .eq("id", userId)
-          .single();
-
-        if (profile?.role !== "admin") {
+        if (!await isAuthoritativePlatformAdmin(supabaseAdmin, userId)) {
           return res.status(403).json({ error: "Pouze zakladatel lobby může měnit její název." });
         }
       }
@@ -292,6 +294,10 @@ async function startServer() {
       console.error("/api/lobby/update-name err:", err);
       return res.status(500).json({ error: err.message });
     }
+  });
+
+  app.use("/api", (_req, res) => {
+    return res.status(404).json({ error: "API endpoint not found." });
   });
 
   if (process.env.NODE_ENV !== "production") {
