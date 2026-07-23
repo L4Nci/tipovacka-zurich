@@ -35,6 +35,8 @@ type ProfileScreenProps = {
   passMsg: string;
   passError: string;
   isPassSaving: boolean;
+  logoutError: string;
+  isLoggingOut: boolean;
   onUpdatePassword: (event: FormEvent) => Promise<void>;
   avatarData: { emoji: string; bg: string };
   showAvatarEditor: boolean;
@@ -42,7 +44,7 @@ type ProfileScreenProps = {
   avatarMsg: string;
   avatarError: string;
   onSaveAvatar: (emoji?: string, bg?: string) => Promise<void>;
-  onLogout: () => void;
+  onLogout: () => Promise<void>;
   setLang: Dispatch<SetStateAction<'cz' | 'en'>>;
   UserAvatar: UserAvatarComponent;
 };
@@ -59,6 +61,8 @@ export default function ProfileScreen({
   passMsg,
   passError,
   isPassSaving,
+  logoutError,
+  isLoggingOut,
   onUpdatePassword,
   avatarData,
   showAvatarEditor,
@@ -287,11 +291,19 @@ export default function ProfileScreen({
 
       <button
         onClick={onLogout}
-        className="w-full py-4 bg-slate-50 text-slate-400 rounded-3xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:text-red-500 transition-colors active:scale-95"
+        disabled={isLoggingOut}
+        className="w-full py-4 bg-slate-50 text-slate-400 rounded-3xl font-bold uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 hover:text-red-500 transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <LogOut className="w-4 h-4" />
-        {lang === 'cz' ? 'Odhlásit se' : 'Logout'}
+        {isLoggingOut
+          ? (lang === 'cz' ? 'Odhlašuji...' : 'Logging out...')
+          : (lang === 'cz' ? 'Odhlásit se' : 'Logout')}
       </button>
+      {logoutError && (
+        <p className="rounded-2xl bg-red-50 px-4 py-3 text-center text-[10px] font-bold text-red-600">
+          {logoutError}
+        </p>
+      )}
     </motion.div>
   );
 }

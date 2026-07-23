@@ -21,6 +21,7 @@ import {
   fetchHomeDashboard,
   loginUser, 
   registerUser, 
+  logoutUser,
   savePrediction as savePredDB, 
   fetchMatchPredictions,
   updateMatchResult as updateMatchResDB,
@@ -1056,6 +1057,8 @@ export default function App() {
   const [passMsg, setPassMsg] = useState('');
   const [passError, setPassError] = useState('');
   const [isPassSaving, setIsPassSaving] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [avatarData, setAvatarData] = useState({
     emoji: user?.avatar_emoji || '😀',
     bg: user?.avatar_bg || '#fee2e2'
@@ -1515,19 +1518,36 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('activeLobbyId');
-    sessionStorage.removeItem('activeTournamentId');
-    setMatches([]);
-    setLeaderboard([]);
-    setAllPredictions([]);
-    setLobbies([]);
-    setLoadedDataContext({ lobbyId: null, tournamentId: null });
-    setActiveLobbyId(null);
-    setActiveLobbyName("");
-    setActiveTournamentId(null);
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutError('');
+
+    try {
+      await logoutUser();
+      setUser(null);
+      localStorage.removeItem('user');
+      localStorage.removeItem('activeLobbyId');
+      sessionStorage.removeItem('activeTournamentId');
+      setMatches([]);
+      setTeams([]);
+      setLeaderboard([]);
+      setAllPredictions([]);
+      setLobbies([]);
+      setHomeDashboardSummaries([]);
+      setLoadedDataContext({ lobbyId: null, tournamentId: null });
+      setActiveLobbyId(null);
+      setActiveLobbyName("");
+      setActiveTournamentId(null);
+      setTab('matches');
+    } catch (logoutFailure: any) {
+      setLogoutError(
+        logoutFailure?.message ||
+        (lang === 'cz' ? 'Odhlášení se nezdařilo. Zkus to prosím znovu.' : 'Logout failed. Please try again.')
+      );
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   const savePrediction = async (matchId: string, h: number, a: number) => {
@@ -2056,6 +2076,8 @@ export default function App() {
                 passMsg={passMsg}
                 passError={passError}
                 isPassSaving={isPassSaving}
+                logoutError={logoutError}
+                isLoggingOut={isLoggingOut}
                 onUpdatePassword={handleUpdatePassword}
                 avatarData={avatarData}
                 showAvatarEditor={showAvatarEditor}
