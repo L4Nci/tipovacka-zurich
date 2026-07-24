@@ -66,6 +66,24 @@ export const hasPendingMembershipRequest = (items: MembershipHomeItem[]) => (
   ))
 );
 
+export const getLatestMembershipHomeItems = (items: MembershipHomeItem[]) => {
+  const latestByLobby = new Map<string, MembershipHomeItem>();
+
+  items.forEach(item => {
+    const scope = item.item_type === 'management' ? 'management' : 'applicant';
+    const key = `${scope}:${item.lobby_id}`;
+    const current = latestByLobby.get(key);
+    if (!current || item.event_at > current.event_at) {
+      latestByLobby.set(key, item);
+    }
+  });
+
+  return Array.from(latestByLobby.values()).sort((left, right) => (
+    right.event_at.localeCompare(left.event_at) ||
+    left.lobby_id.localeCompare(right.lobby_id)
+  ));
+};
+
 export const getManagementRequestCount = (
   items: MembershipHomeItem[],
   lobbyId: string
