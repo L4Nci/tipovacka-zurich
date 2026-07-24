@@ -590,7 +590,7 @@ export const fetchLobbyMembers = async (lobbyId: string): Promise<LobbyMember[]>
       joined_at,
       ended_at,
       ended_by,
-      profile:profiles (
+      profile:profiles!lobby_members_user_id_fkey (
         username,
         role,
         avatar_emoji,
@@ -979,7 +979,7 @@ export const fetchLobbyLeaderboard = async (
       user_id,
       role,
       membership_status,
-      profile:profiles (
+      profile:profiles!lobby_members_user_id_fkey (
         username,
         role,
         avatar_emoji,
