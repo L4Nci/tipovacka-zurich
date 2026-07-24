@@ -2250,7 +2250,6 @@ export default function App() {
                     try {
                       if (!newLobbyName.trim()) throw new Error("Prosím zadejte název lobby.");
                       const created = await createLobby(
-                        user.id,
                         newLobbyName.trim(),
                         newLobbyTournament,
                         'public',
@@ -2320,7 +2319,7 @@ export default function App() {
                     setLobbyError(""); setLobbySuccess("");
                     try {
                       if (!joinCodeInput.trim()) throw new Error("Prosím zadejte kód.");
-                      const joined = await joinLobbyByCode(user.id, joinCodeInput.trim());
+                      const joined = await joinLobbyByCode(joinCodeInput.trim());
                       setLobbySuccess(`Úspěšně ses připojil k lobby "${joined.name}"!`);
                       setJoinCodeInput("");
                       setLobbyFormActive('none');

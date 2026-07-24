@@ -469,77 +469,61 @@ export const fetchHomeDashboard = async (userId: string, lobbies: Lobby[]) => {
   };
 };
 
+type LobbyRpcRow = {
+  id: string;
+  name: string;
+  owner_id: string;
+  tournament_id: string;
+  short_description?: string | null;
+  long_description?: string | null;
+  join_code: string;
+  visibility: 'private' | 'public';
+  created_at?: string;
+  tournament_name?: string;
+  is_owner?: boolean;
+};
+
+const firstLobbyRpcRow = (data: LobbyRpcRow[] | LobbyRpcRow | null): LobbyRpcRow => {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("Databáze nevrátila lobby.");
+  return row;
+};
+
+const lobbyFromRpcRow = (row: LobbyRpcRow): Lobby => ({
+  id: row.id,
+  name: row.name,
+  owner_id: row.owner_id,
+  tournament_id: row.tournament_id,
+  short_description: row.short_description ?? null,
+  long_description: row.long_description ?? null,
+  join_code: row.join_code,
+  visibility: row.visibility,
+  created_at: row.created_at,
+  tournament_name: row.tournament_name || "",
+  is_owner: Boolean(row.is_owner),
+  lobby_role: row.is_owner ? 'owner' : 'member'
+});
+
 /**
- * Create new lobby and auto-enroll owner (FÁZE S7)
+ * Create a lobby atomically. Caller identity and ownership are derived in SQL.
  */
 export const createLobby = async (
-  userId: string,
   name: string,
   tournamentId: string,
   visibility: 'private' | 'public' = 'public',
   shortDescription = "",
   longDescription = ""
 ) => {
-  // Generate random unique 8-character code
-  const joinCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-  const lobbyId = "lobby-" + Math.random().toString(36).substring(2, 10);
+  const { data, error } = await supabase.rpc("create_lobby_secure", {
+    lobby_name_param: name,
+    tournament_id_param: tournamentId,
+    visibility_param: visibility,
+    short_description_param: shortDescription,
+    long_description_param: longDescription
+  });
 
-  // 1. Create the lobby
-  const { error: lobbyErr } = await supabase
-    .from("lobbies")
-    .insert({
-      id: lobbyId,
-      name,
-      owner_id: userId,
-      tournament_id: tournamentId,
-      short_description: shortDescription.trim() || null,
-      long_description: longDescription.trim() || null,
-      join_code: joinCode,
-      visibility
-    });
-
-  if (lobbyErr) throw lobbyErr;
-
-  // Keep the Supabase lobby_tournaments relation in sync with the created lobby.
-  const { error: ltErr } = await supabase
-    .from("lobby_tournaments")
-    .insert({
-      lobby_id: lobbyId,
-      tournament_id: tournamentId,
-      status: 'active'
-    });
-    
-  if (ltErr) {
-    console.warn("Creating lobby_tournaments relation failed (migration might be missing):", ltErr);
-  }
-
-  const lobby = {
-    id: lobbyId,
-    name,
-    owner_id: userId,
-    tournament_id: tournamentId,
-    short_description: shortDescription.trim() || null,
-    long_description: longDescription.trim() || null,
-    join_code: joinCode,
-    visibility
-  };
-
-  // 2. Add owner as member
-  const { error: lmErr } = await supabase
-    .from("lobby_members")
-    .insert({
-      lobby_id: lobbyId,
-      user_id: userId,
-      role: "owner"
-    });
-
-  if (lmErr) throw lmErr;
-
-  return {
-    ...lobby,
-    tournament_name: tournamentId === "fifa-world-cup-2026" ? "FIFA World Cup 2026" : "MS v Hokeji 2026",
-    is_owner: true
-  } as Lobby;
+  if (error) throw error;
+  return lobbyFromRpcRow(firstLobbyRpcRow(data as LobbyRpcRow[] | null));
 };
 
 /**
@@ -567,75 +551,22 @@ export const addTournamentToLobby = async (lobbyId: string, tournamentId: string
 };
 
 /**
- * Join Lobby by invitation join code (FÁZE S8)
+ * Join a lobby atomically. The RPC accepts only the invitation code and derives
+ * the caller identity and member role from auth.uid().
  */
-export const joinLobbyByCode = async (userId: string, joinCode: string) => {
-  const upperCode = joinCode.trim().toUpperCase();
+export const joinLobbyByCode = async (joinCode: string) => {
+  const { data, error } = await supabase.rpc("join_lobby_secure", {
+    join_code_param: joinCode.trim().toUpperCase()
+  });
 
-  // 1. Find lobby
-  const { data: lobby, error: lobbyErr } = await supabase
-    .from("lobbies")
-    .select(`
-      id,
-      name,
-      owner_id,
-      tournament_id,
-      join_code,
-      visibility,
-      tournament:tournaments (
-        name
-      )
-    `)
-    .eq("join_code", upperCode)
-    .maybeSingle();
-
-  if (lobbyErr) throw lobbyErr;
-  if (!lobby) throw new Error("Žádná lobby s tímto kódem neexistuje.");
-
-  const lob = lobby as any;
-
-  // 2. Check if already a member
-  const { data: membership, error: mErr } = await supabase
-    .from("lobby_members")
-    .select("id")
-    .eq("lobby_id", lob.id)
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (mErr) throw mErr;
-  if (membership) {
-    return {
-      id: lob.id,
-      name: lob.name,
-      owner_id: lob.owner_id,
-      tournament_id: lob.tournament_id,
-      join_code: lob.join_code,
-      visibility: lob.visibility,
-      tournament_name: lob.tournament?.name || ""
-    };
+  if (error) {
+    if (error.code === "P0002") {
+      throw new Error("Žádná lobby s tímto kódem neexistuje.");
+    }
+    throw error;
   }
 
-  // 3. Insert membership
-  const { error: joinErr } = await supabase
-    .from("lobby_members")
-    .insert({
-      lobby_id: lob.id,
-      user_id: userId,
-      role: "member"
-    });
-
-  if (joinErr) throw joinErr;
-
-  return {
-    id: lob.id,
-    name: lob.name,
-    owner_id: lob.owner_id,
-    tournament_id: lob.tournament_id,
-    join_code: lob.join_code,
-    visibility: lob.visibility,
-    tournament_name: lob.tournament?.name || "FIFA World Cup 2026",
-    is_owner: false
-  } as Lobby;
+  return lobbyFromRpcRow(firstLobbyRpcRow(data as LobbyRpcRow[] | null));
 };
 
 /**
@@ -951,6 +882,9 @@ export const fetchLobbyLeaderboard = async (
         role,
         avatar_emoji,
         avatar_bg
+      ),
+      lobby:lobbies (
+        owner_id
       )
     `)
     .eq("lobby_id", lobbyId);
@@ -1069,13 +1003,17 @@ export const fetchLobbyLeaderboard = async (
   const resolved: Player[] = (members || []).map(m => {
     const rawProf = m.profile as any;
     const prof = Array.isArray(rawProf) ? rawProf[0] : rawProf;
+    const rawLobby = (m as any).lobby;
+    const lobby = Array.isArray(rawLobby) ? rawLobby[0] : rawLobby;
     const stats = userPointsMap.get(m.user_id) || { total: 0, exact: 0, outcome: 0 };
 
     return {
       id: m.user_id,
       username: prof?.username || "Tipující",
       role: prof?.role || "player",
-      lobby_role: m.role || "member",
+      lobby_role: lobby?.owner_id === m.user_id
+        ? "owner"
+        : (m.role === "admin" ? "admin" : "member"),
       avatar_emoji: prof?.avatar_emoji || "😀",
       avatar_bg: prof?.avatar_bg || "#fee2e2",
       tournament_winner_id: ltWinnerMap.get(m.user_id) || undefined,
@@ -1493,10 +1431,7 @@ export const deleteLobby = async (lobbyId: string) => {
   await supabase.from("predictions").delete().eq("lobby_id", lobbyId);
   // 3. Delete lobby_tournaments
   await supabase.from("lobby_tournaments").delete().eq("lobby_id", lobbyId);
-  // 4. Delete lobby_members
-  await supabase.from("lobby_members").delete().eq("lobby_id", lobbyId);
-  
-  // 5. Delete lobby itself
+  // 4. Delete lobby itself. lobby_members is removed by the FK cascade.
   const { error } = await supabase.from("lobbies").delete().eq("id", lobbyId);
   if (error) throw error;
 };
