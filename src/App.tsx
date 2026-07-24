@@ -1947,7 +1947,7 @@ export default function App() {
         setJoinCodeInput('');
         setLobbySuccess(`Žádost o vstup do lobby "${navigationError.lobbyName}" čeká na schválení.`);
         setHomeMembershipLoading(true);
-        void loadHomeDashboard();
+        void loadHomeDashboard({ refreshLobbyCollection: true });
         return null;
       }
 
