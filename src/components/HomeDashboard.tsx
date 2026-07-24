@@ -18,6 +18,7 @@ import {
   type HomeDashboardCardState,
   type HomeDashboardSummary
 } from '../lib/homeDashboard.ts';
+import { getLatestMembershipHomeItems } from '../lib/membership.ts';
 
 export type AddLobbyMode = 'none' | 'menu' | 'create' | 'join';
 
@@ -60,6 +61,7 @@ const MembershipNotices = ({
 }) => {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
+  const visibleItems = getLatestMembershipHomeItems(items);
 
   if (loading) {
     return (
@@ -85,14 +87,14 @@ const MembershipNotices = ({
     );
   }
 
-  if (items.length === 0) return null;
+  if (visibleItems.length === 0) return null;
 
   return (
     <section className="mb-6 space-y-2" aria-label={lang === 'cz' ? 'Stav členství' : 'Membership status'}>
       {actionError && (
         <p className="rounded-xl bg-red-50 px-3 py-2 text-[10px] font-bold text-red-600">{actionError}</p>
       )}
-      {items.map(item => {
+      {visibleItems.map(item => {
         const lobby = lobbies.find(candidate => candidate.id === item.lobby_id);
         const isPending = item.item_type === 'join_request' && item.request_status === 'pending';
         const isApproved = item.item_type === 'join_request' && item.request_status === 'approved';

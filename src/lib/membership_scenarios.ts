@@ -4,6 +4,7 @@ import {
   canRemoveLobbyMember,
   canResolveJoinRequests,
   canRestoreLobbyMember,
+  getLatestMembershipHomeItems,
   getManagementRequestCount,
   hasPendingMembershipRequest,
   shouldRefreshHomeMembership
@@ -87,6 +88,34 @@ const homeItems: MembershipHomeItem[] = [
 assert.equal(hasPendingMembershipRequest(homeItems), true);
 assert.equal(getManagementRequestCount(homeItems, 'lobby-2'), 2);
 assert.equal(getManagementRequestCount(homeItems, 'lobby-missing'), 0);
+
+const latestHomeItems = getLatestMembershipHomeItems([
+  {
+    ...homeItems[0],
+    request_id: 'request-approved',
+    request_status: 'approved',
+    event_at: '2026-01-02T00:00:00.000Z'
+  },
+  {
+    ...homeItems[0],
+    request_id: 'request-pending',
+    request_status: 'pending',
+    event_at: '2026-01-03T00:00:00.000Z'
+  },
+  {
+    ...homeItems[0],
+    item_type: 'membership',
+    request_id: null,
+    request_status: null,
+    membership_status: 'left',
+    event_at: '2026-01-01T12:00:00.000Z'
+  },
+  homeItems[1]
+]);
+
+assert.equal(latestHomeItems.length, 2);
+assert.equal(latestHomeItems[0].request_status, 'pending');
+assert.equal(latestHomeItems[1].item_type, 'management');
 
 const homeRefreshContext = {
   hasAuthenticatedUser: true,
