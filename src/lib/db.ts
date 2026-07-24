@@ -2,7 +2,7 @@ import { supabase } from "./supabase.ts";
 import type { User } from "@supabase/supabase-js";
 import { calculatePoints } from "./scoring.ts";
 import { isDrawPrediction, isFootballKnockoutStage } from "./matchRules.ts";
-import { Player, Team, Match, Prediction, Lobby } from "../types.ts";
+import { Player, Team, Match, Prediction, Lobby, LobbyMember } from "../types.ts";
 import { getAuthRedirectUrl } from "./auth.ts";
 import { getSignupOutcome } from "./authLifecycle.ts";
 import {
@@ -260,7 +260,8 @@ export const fetchUserLobbies = async (userId: string) => {
           )
         )
       `)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("membership_status", "active");
 
     if (res.error) throw res.error;
     data = res.data;
@@ -286,7 +287,8 @@ export const fetchUserLobbies = async (userId: string) => {
           )
         )
       `)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("membership_status", "active");
     if (res.error) throw res.error;
     data = res.data;
   }
@@ -329,7 +331,8 @@ export const fetchUserLobbies = async (userId: string) => {
     const { data: memberRows, error: memberCountErr } = await supabase
       .from("lobby_members")
       .select("lobby_id")
-      .in("lobby_id", lobbyIds);
+      .in("lobby_id", lobbyIds)
+      .eq("membership_status", "active");
 
     if (memberCountErr) {
       console.warn("Could not fetch lobby member counts.", memberCountErr);
@@ -563,11 +566,109 @@ export const joinLobbyByCode = async (joinCode: string) => {
     if (error.code === "P0002") {
       throw new Error("Žádná lobby s tímto kódem neexistuje.");
     }
+    if (error.code === "42501" && error.message?.includes("restored")) {
+      throw new Error("Přístup do této lobby ti musí obnovit její majitel.");
+    }
+    if (error.code === "42501" && error.message?.includes("pending")) {
+      throw new Error("Tvoje žádost o vstup čeká na schválení.");
+    }
     throw error;
   }
 
   return lobbyFromRpcRow(firstLobbyRpcRow(data as LobbyRpcRow[] | null));
 };
+
+export const fetchLobbyMembers = async (lobbyId: string): Promise<LobbyMember[]> => {
+  const { data, error } = await supabase
+    .from("lobby_members")
+    .select(`
+      id,
+      lobby_id,
+      user_id,
+      role,
+      membership_status,
+      joined_at,
+      ended_at,
+      ended_by,
+      profile:profiles (
+        username,
+        role,
+        avatar_emoji,
+        avatar_bg,
+        tournament_winner_id
+      ),
+      lobby:lobbies (
+        owner_id
+      )
+    `)
+    .eq("lobby_id", lobbyId);
+
+  if (error) throw error;
+
+  const statusOrder = { active: 0, pending: 1, removed: 2, left: 3 };
+  return (data || [])
+    .map((row: any) => {
+      const profile = Array.isArray(row.profile) ? row.profile[0] : row.profile;
+      const lobby = Array.isArray(row.lobby) ? row.lobby[0] : row.lobby;
+      const membershipStatus = (
+        row.membership_status === "pending" ||
+        row.membership_status === "removed" ||
+        row.membership_status === "left"
+      ) ? row.membership_status : "active";
+
+      return {
+        id: row.id,
+        user_id: row.user_id,
+        username: profile?.username || "Tipující",
+        role: profile?.role === "admin" ? "admin" : "player",
+        lobby_role: lobby?.owner_id === row.user_id
+          ? "owner"
+          : (row.role === "admin" ? "admin" : "member"),
+        membership_status: membershipStatus,
+        avatar_emoji: profile?.avatar_emoji || "😀",
+        avatar_bg: profile?.avatar_bg || "#fee2e2",
+        joined_at: row.joined_at,
+        ended_at: row.ended_at,
+        ended_by: row.ended_by,
+        tournament_winner_id: profile?.tournament_winner_id || null
+      } as LobbyMember;
+    })
+    .sort((a, b) => {
+      if (a.lobby_role === "owner" && b.lobby_role !== "owner") return -1;
+      if (b.lobby_role === "owner" && a.lobby_role !== "owner") return 1;
+      return statusOrder[a.membership_status] - statusOrder[b.membership_status]
+        || a.username.localeCompare(b.username);
+    });
+};
+
+const runMembershipLifecycleRpc = async (
+  functionName: "leave_lobby_secure" | "remove_lobby_member_secure" | "restore_lobby_member_secure",
+  args: Record<string, string>
+) => {
+  const { data, error } = await supabase.rpc(functionName, args);
+  if (error) throw new Error(error.message || "Membership operation failed.");
+  return String(data || "");
+};
+
+export const leaveLobby = (lobbyId: string) => (
+  runMembershipLifecycleRpc("leave_lobby_secure", {
+    lobby_id_param: lobbyId
+  })
+);
+
+export const removeLobbyMember = (lobbyId: string, memberId: string) => (
+  runMembershipLifecycleRpc("remove_lobby_member_secure", {
+    lobby_id_param: lobbyId,
+    member_id_param: memberId
+  })
+);
+
+export const restoreLobbyMember = (lobbyId: string, memberId: string) => (
+  runMembershipLifecycleRpc("restore_lobby_member_secure", {
+    lobby_id_param: lobbyId,
+    member_id_param: memberId
+  })
+);
 
 /**
  * Fetch matches, participants, and users predictions in a single dashboard query (FÁZE S9 & FÁZE S10)
@@ -877,6 +978,7 @@ export const fetchLobbyLeaderboard = async (
     .select(`
       user_id,
       role,
+      membership_status,
       profile:profiles (
         username,
         role,
@@ -887,7 +989,8 @@ export const fetchLobbyLeaderboard = async (
         owner_id
       )
     `)
-    .eq("lobby_id", lobbyId);
+    .eq("lobby_id", lobbyId)
+    .in("membership_status", ["active", "left", "removed"]);
 
   if (mErr) throw mErr;
 
