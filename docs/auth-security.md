@@ -30,9 +30,12 @@ and redirect requirements are documented in [oauth-setup.md](oauth-setup.md).
 OAuth metadata may suggest a display name only; it cannot set platform or lobby
 roles.
 
-Migration 008 also prevents self-join inserts from assigning an `owner` or
-`admin` lobby role, pins the privileged helper functions' `search_path`, and
-removes public/anonymous execution grants.
+Migration 008 prevents self-join inserts from assigning an `owner` or `admin`
+lobby role, pins the privileged helper functions' `search_path`, and removes
+public/anonymous execution grants. The prepared Phase 010 foundation moves
+create/join to authenticated atomic RPCs and closes direct membership writes in
+a separate enforcement cutover; see
+[membership-security.md](membership-security.md).
 
 ## Admin endpoints
 

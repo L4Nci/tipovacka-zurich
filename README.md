@@ -84,6 +84,7 @@ Current source-of-truth documents:
 * Agent and production safety: [AGENTS.md](AGENTS.md) and [PROJECT_RULES.md](PROJECT_RULES.md)
 * Issue workflow: [docs/ISSUE_WORKFLOW.md](docs/ISSUE_WORKFLOW.md)
 * Authentication security and OAuth setup: [docs/auth-security.md](docs/auth-security.md) and [docs/oauth-setup.md](docs/oauth-setup.md)
+* Lobby membership security: [docs/membership-security.md](docs/membership-security.md)
 * Result sync and TheSportsDB provider behavior: [docs/thesportsdb-dry-run.md](docs/thesportsdb-dry-run.md)
 * Fixture/TBA sync cron setup: [docs/fixture-sync-cron.md](docs/fixture-sync-cron.md)
 
