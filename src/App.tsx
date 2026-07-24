@@ -48,6 +48,12 @@ import {
   type SupportedOAuthProvider
 } from './lib/auth.ts';
 import { getAuthEventAction } from './lib/authLifecycle.ts';
+import {
+  canStartLobbyNavigation,
+  getLobbyNavigationViewState,
+  runLobbyNavigationTransition,
+  type LobbyNavigationAction
+} from './lib/lobbyNavigation.ts';
 
 const LazyAdminScreen = lazy(() => import('./components/AdminScreen.tsx'));
 const LazyLeaderboardScreen = lazy(() => import('./components/LeaderboardScreen.tsx'));
@@ -853,6 +859,52 @@ const DeferredScreenSkeleton = () => (
   </div>
 );
 
+const LobbyContextFallback = ({
+  loading,
+  error,
+  onRetry,
+  onHome
+}: {
+  loading: boolean;
+  error: string;
+  onRetry: () => void;
+  onHome: () => void;
+}) => (
+  <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300">
+    <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100">
+      <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tighter italic uppercase">
+        FAN TIPOVAČKA
+      </h1>
+    </header>
+    <main className="p-4" aria-busy={loading}>
+      <DeferredScreenSkeleton />
+      <div className={`mt-4 rounded-2xl border bg-white p-4 text-center shadow-sm ${error ? 'border-red-100' : 'border-slate-100'}`}>
+        <p className={`text-sm font-bold ${error ? 'text-red-600' : 'text-slate-600'}`}>
+          {error || 'Připravuji lobby...'}
+        </p>
+        {error ? (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={onHome}
+              className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wider text-slate-600"
+            >
+              Zpět na Home
+            </button>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="min-h-10 rounded-xl bg-slate-900 px-3 text-[10px] font-black uppercase tracking-wider text-white"
+            >
+              Zkusit znovu
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </main>
+  </div>
+);
+
 type TournamentWinnerScreenProps = {
   t: any;
   lang: 'cz' | 'en';
@@ -976,6 +1028,9 @@ export default function App() {
   const [homeDashboardLoading, setHomeDashboardLoading] = useState(false);
   const [homeDashboardError, setHomeDashboardError] = useState('');
   const homeDashboardRequestRef = useRef(0);
+  const lobbyNavigationRequestRef = useRef(0);
+  const lobbyMutationInFlightRef = useRef(false);
+  const skipNextInitialDataLoadRef = useRef(false);
   const [newLobbyName, setNewLobbyName] = useState("");
   const [newLobbyShortDescription, setNewLobbyShortDescription] = useState("");
   const [newLobbyLongDescription, setNewLobbyLongDescription] = useState("");
@@ -1063,6 +1118,13 @@ export default function App() {
   });
   const [lobbyError, setLobbyError] = useState("");
   const [lobbySuccess, setLobbySuccess] = useState("");
+  const [isLobbyMutationSubmitting, setIsLobbyMutationSubmitting] = useState(false);
+  const [pendingLobbyNavigation, setPendingLobbyNavigation] = useState<{
+    action: LobbyNavigationAction;
+    targetLobby: Lobby;
+    status: 'loading' | 'error';
+    error: string;
+  } | null>(null);
 
   const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
   const [championMsg, setChampionMsg] = useState('');
@@ -1255,6 +1317,8 @@ export default function App() {
 
   const clearAuthenticatedState = useCallback(() => {
     authSyncRequestRef.current += 1;
+    lobbyNavigationRequestRef.current += 1;
+    lobbyMutationInFlightRef.current = false;
     authenticatedUserIdRef.current = null;
     authenticatingUserIdRef.current = null;
     setUser(null);
@@ -1268,6 +1332,8 @@ export default function App() {
     setAllPredictions([]);
     setLobbies([]);
     setHomeDashboardSummaries([]);
+    setPendingLobbyNavigation(null);
+    setIsLobbyMutationSubmitting(false);
     setLoadedDataContext({ lobbyId: null, tournamentId: null });
     setActiveLobbyId(null);
     setActiveLobbyName('');
@@ -1560,6 +1626,10 @@ export default function App() {
   }, [user, loading, activeLobbyId, loadHomeDashboard]);
 
   const goHome = () => {
+    lobbyNavigationRequestRef.current += 1;
+    lobbyMutationInFlightRef.current = false;
+    setIsLobbyMutationSubmitting(false);
+    setPendingLobbyNavigation(null);
     setHomeDashboardLoading(true);
     setHomeDashboardError('');
     setEntryOrigin('normal-tournament-navigation');
@@ -1571,6 +1641,10 @@ export default function App() {
   };
 
   const openLobbyDetail = (lobby: Lobby) => {
+    lobbyNavigationRequestRef.current += 1;
+    lobbyMutationInFlightRef.current = false;
+    setIsLobbyMutationSubmitting(false);
+    setPendingLobbyNavigation(null);
     setEntryOrigin('lobby-detail');
     setMatchFilter('all');
     setActiveTournamentId(null);
@@ -1581,6 +1655,10 @@ export default function App() {
   };
 
   const openHomeContext = (summary: HomeDashboardSummary, showOnlyMissing: boolean) => {
+    lobbyNavigationRequestRef.current += 1;
+    lobbyMutationInFlightRef.current = false;
+    setIsLobbyMutationSubmitting(false);
+    setPendingLobbyNavigation(null);
     setEntryOrigin('direct-home-action');
     setActiveLobbyId(summary.lobby_id);
     setActiveLobbyName(summary.lobby_name);
@@ -1599,9 +1677,130 @@ export default function App() {
 
   useEffect(() => {
     if (authStatus === 'authenticated' && user?.id) {
+      if (skipNextInitialDataLoadRef.current) {
+        skipNextInitialDataLoadRef.current = false;
+        return;
+      }
       loadInitialData();
     }
   }, [authStatus, user?.id, activeLobbyId, activeTournamentId]);
+
+  const navigateAfterLobbyMutation = async (
+    action: LobbyNavigationAction,
+    mutate: () => Promise<Lobby>
+  ) => {
+    if (!user || !canStartLobbyNavigation(
+      lobbyMutationInFlightRef.current,
+      pendingLobbyNavigation?.status
+    )) {
+      return null;
+    }
+
+    const requestId = lobbyNavigationRequestRef.current + 1;
+    lobbyNavigationRequestRef.current = requestId;
+    lobbyMutationInFlightRef.current = true;
+    setIsLobbyMutationSubmitting(true);
+    setLobbyError('');
+    setLobbySuccess('');
+
+    let targetLobby: Lobby | null = null;
+
+    try {
+      const result = await runLobbyNavigationTransition({
+        requestId,
+        isCurrent: currentRequestId => lobbyNavigationRequestRef.current === currentRequestId,
+        mutate,
+        refresh: lobbyId => fetchAllData(user.id, lobbyId, undefined),
+        onTarget: lobby => {
+          targetLobby = lobby;
+          setPendingLobbyNavigation({
+            action,
+            targetLobby: lobby,
+            status: 'loading',
+            error: ''
+          });
+        }
+      });
+
+      if (result.status === 'stale') return null;
+
+      const data = result.data;
+      setMatches(data.matches);
+      setTeams(data.teams);
+      setLeaderboard(data.leaderboard);
+      setAllPredictions(data.allPredictions);
+      setLobbies(data.lobbies);
+      setLoadedDataContext({
+        lobbyId: result.hydratedLobby.id,
+        tournamentId: null
+      });
+      syncUserFromLeaderboard(data.leaderboard);
+
+      skipNextInitialDataLoadRef.current = true;
+      setEntryOrigin('lobby-detail');
+      setActiveTournamentId(null);
+      setActiveLobbyName(result.hydratedLobby.name);
+      setTab('matches');
+      setActiveLobbyId(result.hydratedLobby.id);
+      setPendingLobbyNavigation(null);
+      setLobbyFormActive('none');
+      if (action === 'create') {
+        setLobbySuccess(`Lobby "${result.hydratedLobby.name}" vytvořena! Kód: ${result.hydratedLobby.join_code}`);
+        setNewLobbyName('');
+        setNewLobbyShortDescription('');
+        setNewLobbyLongDescription('');
+      } else {
+        setLobbySuccess(`Úspěšně ses připojil k lobby "${result.hydratedLobby.name}"!`);
+        setJoinCodeInput('');
+      }
+      window.scrollTo({ top: 0 });
+      return result.hydratedLobby;
+    } catch (navigationError: any) {
+      if (lobbyNavigationRequestRef.current !== requestId) return null;
+
+      const message = navigationError?.message || (
+        action === 'create'
+          ? 'Chyba při vytváření lobby.'
+          : 'Chyba při připojování k lobby.'
+      );
+
+      if (targetLobby) {
+        setPendingLobbyNavigation({
+          action,
+          targetLobby,
+          status: 'error',
+          error: message
+        });
+      } else {
+        setLobbyError(message);
+      }
+      return null;
+    } finally {
+      if (lobbyNavigationRequestRef.current === requestId) {
+        lobbyMutationInFlightRef.current = false;
+        setIsLobbyMutationSubmitting(false);
+      }
+    }
+  };
+
+  const retryPendingLobbyNavigation = () => {
+    const pending = pendingLobbyNavigation;
+    if (!pending) return;
+    void navigateAfterLobbyMutation(pending.action, async () => pending.targetLobby);
+  };
+
+  const recoverLobbyNavigationToHome = () => {
+    lobbyNavigationRequestRef.current += 1;
+    lobbyMutationInFlightRef.current = false;
+    setIsLobbyMutationSubmitting(false);
+    setPendingLobbyNavigation(null);
+    setLobbyFormActive('none');
+    setLobbyError('');
+    setActiveTournamentId(null);
+    setActiveLobbyId(null);
+    setLoading(true);
+    void loadInitialData();
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2088,6 +2287,13 @@ export default function App() {
     });
   }, [winnerPickerTeams]);
 
+  const lobbyNavigationViewState = getLobbyNavigationViewState({
+    activeLobbyId,
+    activeLobby,
+    activeTournamentId,
+    pendingLobbyId: pendingLobbyNavigation?.targetLobby.id ?? null
+  });
+
   if (authStatus !== 'authenticated' || !user) {
     return (
       <AuthScreen
@@ -2136,6 +2342,17 @@ export default function App() {
       onRetry={() => { setError(''); setLoading(true); loadInitialData(); }}
     />
   );
+
+  if (lobbyNavigationViewState === 'pending') {
+    return (
+      <LobbyContextFallback
+        loading={pendingLobbyNavigation?.status === 'loading'}
+        error={pendingLobbyNavigation?.error || ''}
+        onRetry={retryPendingLobbyNavigation}
+        onHome={recoverLobbyNavigationToHome}
+      />
+    );
+  }
 
   if (tab === 'profile') {
     return (
@@ -2197,7 +2414,29 @@ export default function App() {
     );
   }
 
-  if (!activeLobbyId) {
+  if (
+    lobbyNavigationViewState === 'missing-lobby' ||
+    lobbyNavigationViewState === 'missing-tournament'
+  ) {
+    const contextError = lobbyNavigationViewState === 'missing-lobby'
+      ? 'Lobby se nepodařilo načíst. Můžeš zkusit data obnovit nebo se vrátit na Home.'
+      : 'Turnaj se nepodařilo načíst. Můžeš zkusit data obnovit nebo se vrátit na Home.';
+
+    return (
+      <LobbyContextFallback
+        loading={false}
+        error={contextError}
+        onRetry={() => {
+          setError('');
+          setLoading(true);
+          void loadInitialData();
+        }}
+        onHome={goHome}
+      />
+    );
+  }
+
+  if (lobbyNavigationViewState === 'home') {
     return (
       <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300 animate-fade-in flex flex-col">
         <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100 transition-colors">
@@ -2247,34 +2486,28 @@ export default function App() {
                   <form onSubmit={async (e) => {
                     e.preventDefault();
                     setLobbyError(""); setLobbySuccess("");
-                    try {
-                      if (!newLobbyName.trim()) throw new Error("Prosím zadejte název lobby.");
-                      const created = await createLobby(
+                    if (lobbyMutationInFlightRef.current) return;
+                    if (!newLobbyName.trim()) {
+                      setLobbyError("Prosím zadejte název lobby.");
+                      return;
+                    }
+                    await navigateAfterLobbyMutation(
+                      'create',
+                      () => createLobby(
                         newLobbyName.trim(),
                         newLobbyTournament,
                         'public',
                         newLobbyShortDescription,
                         newLobbyLongDescription
-                      );
-                      setLobbySuccess(`Lobby "${created.name}" vytvořena! Kód: ${created.join_code}`);
-                      setNewLobbyName("");
-                      setNewLobbyShortDescription("");
-                      setNewLobbyLongDescription("");
-                      setLobbyFormActive('none');
-                      setEntryOrigin('lobby-detail');
-                      setActiveLobbyId(created.id);
-                      setActiveTournamentId(null);
-                      setActiveLobbyName(created.name);
-                      await fetchAll(created.id);
-                    } catch(err: any) {
-                      setLobbyError(err.message || "Chyba při vytváření lobby.");
-                    }
+                      )
+                    );
                   }} className="space-y-3">
                     <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider">Vytvořit novou lobby</h4>
                     <div>
                       <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Název lobby</label>
                       <input 
                         type="text" required value={newLobbyName} onChange={e => setNewLobbyName(e.target.value)}
+                        disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
                         placeholder="e.g. Kolegové z práce"
                       />
@@ -2285,6 +2518,7 @@ export default function App() {
                         type="text"
                         value={newLobbyShortDescription}
                         onChange={e => setNewLobbyShortDescription(e.target.value)}
+                        disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
                         placeholder="Friends League Brno"
                         maxLength={120}
@@ -2295,6 +2529,7 @@ export default function App() {
                       <textarea
                         value={newLobbyLongDescription}
                         onChange={e => setNewLobbyLongDescription(e.target.value)}
+                        disabled={isLobbyMutationSubmitting}
                         className="w-full min-h-[88px] p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-medium resize-y"
                         placeholder="Entry fee 200 CZK. Payment deadline 10.6.2026. Winner takes all."
                       />
@@ -2303,46 +2538,51 @@ export default function App() {
                       <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Turnaj</label>
                       <select
                         value={newLobbyTournament} onChange={e => setNewLobbyTournament(e.target.value)}
+                        disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-bold text-slate-700"
                       >
                         <option value="fifa-world-cup-2026">🏆 FIFA World Cup 2026</option>
                         <option value="ms-hockey-2026">🏒 MS v hokeji 2026</option>
                       </select>
                     </div>
-                    <button type="submit" className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer">
-                      Potvrdit a vytvořit
+                    <button
+                      type="submit"
+                      disabled={isLobbyMutationSubmitting}
+                      className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-wait text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer"
+                    >
+                      {isLobbyMutationSubmitting ? 'Vytvářím lobby...' : 'Potvrdit a vytvořit'}
                     </button>
                   </form>
                 ) : (
                   <form onSubmit={async (e) => {
                     e.preventDefault();
                     setLobbyError(""); setLobbySuccess("");
-                    try {
-                      if (!joinCodeInput.trim()) throw new Error("Prosím zadejte kód.");
-                      const joined = await joinLobbyByCode(joinCodeInput.trim());
-                      setLobbySuccess(`Úspěšně ses připojil k lobby "${joined.name}"!`);
-                      setJoinCodeInput("");
-                      setLobbyFormActive('none');
-                      setEntryOrigin('lobby-detail');
-                      setActiveLobbyId(joined.id);
-                      setActiveTournamentId(null);
-                      setActiveLobbyName(joined.name);
-                      await fetchAll(joined.id);
-                    } catch(err: any) {
-                      setLobbyError(err.message || "Chyba při připojování k lobby.");
+                    if (lobbyMutationInFlightRef.current) return;
+                    if (!joinCodeInput.trim()) {
+                      setLobbyError("Prosím zadejte kód.");
+                      return;
                     }
+                    await navigateAfterLobbyMutation(
+                      'join',
+                      () => joinLobbyByCode(joinCodeInput.trim())
+                    );
                   }} className="space-y-3">
                     <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider font-semibold">Připojit se k lobby</h4>
                     <div>
                       <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Pozvánkový kód</label>
                       <input 
                         type="text" required value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value)}
+                        disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-600 uppercase"
                         placeholder="e.g. LOB-C2F8"
                       />
                     </div>
-                    <button type="submit" className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer">
-                      Odeslat kód a připojit
+                    <button
+                      type="submit"
+                      disabled={isLobbyMutationSubmitting}
+                      className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-wait text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer"
+                    >
+                      {isLobbyMutationSubmitting ? 'Připojuji...' : 'Odeslat kód a připojit'}
                     </button>
                   </form>
                 )}
