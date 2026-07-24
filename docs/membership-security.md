@@ -1,19 +1,20 @@
 # Membership Security
 
-This document describes the Phase 010 membership security foundation. The two
-database migrations are deployed separately around the frontend cutover; the
-production migration ledger is the authoritative deployment record.
+This document describes the membership security foundation established in
+Phase 010 and extended with lifecycle states in Phase 011. The production
+migration ledger is the authoritative deployment record.
 
 ## Authoritative model
 
 - `auth.uid()` is the only caller identity accepted by membership RPCs.
 - `lobbies.owner_id` is the only source of truth for lobby ownership.
-- New `lobby_members.role` values are only `admin` or `member`.
-- Existing legacy `owner` membership rows are preserved without rewriting data.
-  A `NOT VALID` check constraint rejects new owner-role rows while allowing the
-  existing production row to remain until a later controlled normalization.
+- `lobby_members.role` values are only `admin` or `member`.
+- Legacy `owner` membership rows are normalized to `member`; ownership remains
+  derived exclusively from `lobbies.owner_id`.
+- Membership lifecycle values are `pending`, `active`, `removed`, and `left`.
+  Only `active` membership grants lobby access.
 - Platform administration remains separate in `profiles.role` under the Phase 0
-  protection. Phase 010 does not change platform authorization.
+  protection. Membership lifecycle does not change platform authorization.
 
 ## Write boundary
 
@@ -26,8 +27,20 @@ production migration ledger is the authoritative deployment record.
 5. inserts the owner as a plain membership `member`.
 
 `join_lobby_secure(join_code_param)` accepts only the join code. It derives the
-user from `auth.uid()`, always assigns `member`, and is idempotent for an
-existing member.
+user from `auth.uid()`, always assigns `member`, and is idempotent for an active
+member. A member who previously left is reactivated on the same row. A removed
+or pending member cannot self-activate.
+
+Lifecycle changes use narrow RPCs:
+
+- `leave_lobby_secure(lobby_id_param)` lets a non-owner member leave,
+- `remove_lobby_member_secure(lobby_id_param, member_user_id_param)` lets the
+  lobby owner remove a non-owner member,
+- `restore_lobby_member_secure(lobby_id_param, member_user_id_param)` lets the
+  owner reactivate a removed member.
+
+These operations update the existing membership row. They do not delete
+predictions, points, leaderboard history, or Hall of Fame history.
 
 Both functions are `SECURITY DEFINER` because direct table mutation is revoked.
 They have an empty fixed `search_path`, schema-qualified relations, explicit
@@ -71,9 +84,9 @@ and additionally require:
 - the match tournament is linked to that lobby.
 
 Long-term prediction INSERT and UPDATE policies use the same membership and
-lobby/tournament relationship. Phase 011 can make membership lifecycle-aware by
-updating `is_lobby_member()` to require an active status; prediction policies
-already call that helper.
+lobby/tournament relationship. `is_lobby_member()` requires
+`membership_status = 'active'`, so pending, removed, and left users cannot read
+lobby internals or create/update predictions.
 
 Before-write trigger guards make scoring fields server-managed without changing
 the scoring formulas:
@@ -117,12 +130,29 @@ The rollback-only integration tests are:
 - `supabase/tests/010a_membership_security_foundation.sql` after 010A,
 - `supabase/tests/010_membership_security_foundation.sql` after 010A and 010B.
 
+## Phase 011 rollout
+
+Phase 011 is a backwards-compatible database-first rollout:
+
+1. record a read-only production integrity snapshot,
+2. apply only `011_membership_lifecycle.sql`,
+3. verify columns, constraints, policies, functions, grants, and migration
+   ledger,
+4. deploy the frontend lifecycle controls,
+5. run controlled leave/remove/restore/rejoin acceptance tests,
+6. compare predictions, points, memberships, leaderboard, and Hall of Fame with
+   the baseline.
+
+The database migration defaults existing memberships to `active` and does not
+rewrite prediction or scoring data. The previous frontend remains compatible
+while the new frontend is deployed. If the frontend must be rolled back, the
+new schema and RPCs can remain in place. Database recovery should prefer a
+forward fix; reverting the migration would discard lifecycle state and is not a
+normal rollback.
+
 ## Deferred scope
 
-Phase 010 deliberately does not implement approval requests, leave, remove,
-restore, ownership transfer, public lobby discovery, Premium, or member
-management. Those flows must use new narrow RPCs rather than restoring direct
-membership table writes.
-
-Phase 011 may add membership lifecycle states, but must preserve these RPC,
-ownership, prediction-context, and server-managed scoring boundaries.
+Approval requests, ownership transfer, public lobby discovery, Premium, and
+advanced member-management UX remain deferred. `pending` exists only as a
+schema-compatible non-member state for Phase 012; Phase 011 does not create or
+approve pending requests.

@@ -113,11 +113,15 @@ export type Lobby = {
 
 export type LobbyMember = {
   id: string;
+  user_id: string;
   username: string;
   role: 'player' | 'admin';
   lobby_role: 'owner' | 'admin' | 'member';
+  membership_status: 'pending' | 'active' | 'removed' | 'left';
   avatar_emoji?: string | null;
   avatar_bg?: string | null;
   joined_at: string;
+  ended_at?: string | null;
+  ended_by?: string | null;
   tournament_winner_id?: string | null;
 };

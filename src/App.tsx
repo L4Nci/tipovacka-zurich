@@ -1590,6 +1590,13 @@ export default function App() {
         summary.lobby_id === lobbyId ? { ...summary, lobby_name: updates.name as string } : summary
       )));
     }
+    if (updates.member_count !== undefined && updates.member_count !== null) {
+      setHomeDashboardSummaries(prev => prev.map(summary => (
+        summary.lobby_id === lobbyId
+          ? { ...summary, member_count: updates.member_count as number }
+          : summary
+      )));
+    }
   };
 
   const loadHomeDashboard = useCallback(async () => {
@@ -1638,6 +1645,14 @@ export default function App() {
     setActiveLobbyId(null);
     setTab('matches');
     window.scrollTo({ top: 0 });
+  };
+
+  const handleMembershipEnded = (lobbyId: string) => {
+    setLobbies(prev => prev.filter(lobby => lobby.id !== lobbyId));
+    setHomeDashboardSummaries(prev => prev.filter(summary => summary.lobby_id !== lobbyId));
+    if (activeLobbyId === lobbyId) {
+      goHome();
+    }
   };
 
   const openLobbyDetail = (lobby: Lobby) => {
@@ -2668,6 +2683,7 @@ export default function App() {
                   setActiveTournamentId(null);
                   fetchAll();
                 }}
+                onMembershipEnded={handleMembershipEnded}
                 membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
                 tournamentStats={tournamentStats}
                 hallOfFameEntries={hallOfFameEntries}
