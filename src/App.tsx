@@ -50,6 +50,7 @@ import {
 import AuthScreen from './components/AuthScreen.tsx';
 import { HomeDashboard, type AddLobbyMode } from './components/HomeDashboard.tsx';
 import { isUntippedMatchForDisplay, type HomeDashboardSummary } from './lib/homeDashboard.ts';
+import { shouldRefreshHomeMembership } from './lib/membership.ts';
 import {
   getUserAuthProviders,
   isGeneratedProfileName,
@@ -1043,6 +1044,7 @@ export default function App() {
   const [homeMembershipLoading, setHomeMembershipLoading] = useState(false);
   const [homeMembershipError, setHomeMembershipError] = useState('');
   const homeDashboardRequestRef = useRef(0);
+  const homeExternalRefreshInFlightRef = useRef(false);
   const lobbyNavigationRequestRef = useRef(0);
   const lobbyMutationInFlightRef = useRef(false);
   const skipNextInitialDataLoadRef = useRef(false);
@@ -1673,6 +1675,37 @@ export default function App() {
     }
   }, [user, lobbies]);
 
+  const refreshHomeAfterMembershipMutation = useCallback(async () => {
+    if (!shouldRefreshHomeMembership({
+      trigger: 'local-mutation',
+      hasAuthenticatedUser: Boolean(user),
+      loading,
+      refreshing: homeDashboardLoading || homeMembershipLoading,
+      activeLobbyId,
+      activeTab: tab,
+      visibilityState: document.visibilityState
+    })) return;
+
+    await loadHomeDashboard();
+  }, [
+    activeLobbyId,
+    homeDashboardLoading,
+    homeMembershipLoading,
+    loadHomeDashboard,
+    loading,
+    tab,
+    user
+  ]);
+
+  const runGuardedHomeRefresh = useCallback(() => {
+    if (homeExternalRefreshInFlightRef.current) return;
+
+    homeExternalRefreshInFlightRef.current = true;
+    void loadHomeDashboard().finally(() => {
+      homeExternalRefreshInFlightRef.current = false;
+    });
+  }, [loadHomeDashboard]);
+
   useEffect(() => {
     if (!user || loading) return;
     if (activeLobbyId) {
@@ -1683,6 +1716,55 @@ export default function App() {
     }
     void loadHomeDashboard();
   }, [user, loading, activeLobbyId, loadHomeDashboard]);
+
+  useEffect(() => {
+    const refreshVisibleHome = (trigger: 'focus' | 'visibility') => {
+      if (!shouldRefreshHomeMembership({
+        trigger,
+        hasAuthenticatedUser: Boolean(user),
+        loading,
+        refreshing: homeDashboardLoading || homeMembershipLoading,
+        activeLobbyId,
+        activeTab: tab,
+        visibilityState: document.visibilityState
+      })) return;
+      runGuardedHomeRefresh();
+    };
+
+    const handleFocus = () => refreshVisibleHome('focus');
+    const handleVisibilityChange = () => refreshVisibleHome('visibility');
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [
+    activeLobbyId,
+    homeDashboardLoading,
+    homeMembershipLoading,
+    loadHomeDashboard,
+    loading,
+    runGuardedHomeRefresh,
+    tab,
+    user
+  ]);
+
+  const returnFromProfile = () => {
+    const refreshHome = shouldRefreshHomeMembership({
+      trigger: 'home-return',
+      hasAuthenticatedUser: Boolean(user),
+      loading,
+      refreshing: homeDashboardLoading || homeMembershipLoading,
+      activeLobbyId,
+      activeTab: 'matches',
+      visibilityState: document.visibilityState
+    });
+
+    setTab('matches');
+    if (refreshHome) runGuardedHomeRefresh();
+  };
 
   const goHome = () => {
     lobbyNavigationRequestRef.current += 1;
@@ -1713,6 +1795,7 @@ export default function App() {
   const handleCancelHomeJoinRequest = async (requestId: string) => {
     await cancelLobbyJoinRequest(requestId);
     setHomeMembershipItems(prev => prev.filter(item => item.request_id !== requestId));
+    await refreshHomeAfterMembershipMutation();
   };
 
   const openLobbyDetail = (lobby: Lobby) => {
@@ -2430,7 +2513,7 @@ export default function App() {
           <div className="flex justify-between items-center mr-1">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setTab('matches')}
+                onClick={returnFromProfile}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
                 title={lang === 'cz' ? 'Zpět' : 'Back'}
               >
@@ -2778,6 +2861,7 @@ export default function App() {
                   fetchAll();
                 }}
                 onMembershipEnded={handleMembershipEnded}
+                onMembershipMutation={refreshHomeAfterMembershipMutation}
                 membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
                 tournamentStats={tournamentStats}
               />
