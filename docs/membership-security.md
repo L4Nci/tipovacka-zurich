@@ -1,8 +1,10 @@
 # Membership Security
 
 This document describes the membership security foundation established in
-Phase 010 and extended with lifecycle states in Phase 011. The production
-migration ledger is the authoritative deployment record.
+Phase 010 and extended with lifecycle states in Phase 011. Phase 012 and
+Phase 013 add approval-based entry, member management, and membership-aware
+Home/Hall of Fame read models. The production migration ledger is the
+authoritative deployment record.
 
 ## Authoritative model
 
@@ -11,8 +13,10 @@ migration ledger is the authoritative deployment record.
 - `lobby_members.role` values are only `admin` or `member`.
 - Legacy `owner` membership rows are normalized to `member`; ownership remains
   derived exclusively from `lobbies.owner_id`.
-- Membership lifecycle values are `pending`, `active`, `removed`, and `left`.
-  Only `active` membership grants lobby access.
+- Membership lifecycle values are `active`, `removed`, and `left`. Only
+  `active` membership grants lobby access.
+- Pending access is represented only by `lobby_join_requests`; it is never a
+  membership row.
 - Platform administration remains separate in `profiles.role` under the Phase 0
   protection. Membership lifecycle does not change platform authorization.
 
@@ -27,9 +31,11 @@ migration ledger is the authoritative deployment record.
 5. inserts the owner as a plain membership `member`.
 
 `join_lobby_secure(join_code_param)` accepts only the join code. It derives the
-user from `auth.uid()`, always assigns `member`, and is idempotent for an active
-member. A member who previously left is reactivated on the same row. A removed
-or pending member cannot self-activate.
+user from `auth.uid()` and never accepts a role or user ID. Open lobbies
+activate a new or previously-left member on the single existing membership
+row. Approval-required lobbies create at most one pending
+`lobby_join_requests` row and do not create a membership until approval.
+Removed members cannot self-activate.
 
 Lifecycle changes use narrow RPCs:
 
@@ -38,11 +44,27 @@ Lifecycle changes use narrow RPCs:
   lobby owner remove a non-owner member,
 - `restore_lobby_member_secure(lobby_id_param, member_user_id_param)` lets the
   owner reactivate a removed member.
+- `resolve_lobby_join_request(request_id_param, decision_param)` atomically
+  approves or rejects a pending request,
+- `cancel_lobby_join_request(request_id_param)` lets the applicant cancel their
+  own pending request,
+- `set_lobby_join_policy(lobby_id_param, join_policy_param)` lets the owner
+  choose `open` or `approval_required`.
 
 These operations update the existing membership row. They do not delete
 predictions, points, leaderboard history, or Hall of Fame history.
 
-Both functions are `SECURITY DEFINER` because direct table mutation is revoked.
+The lobby permission matrix is intentionally small:
+
+- the owner is derived only from `lobbies.owner_id`,
+- the owner can approve/reject requests, remove admins or members, restore
+  removed users, and change the join policy,
+- an active lobby admin can approve/reject requests and remove only ordinary
+  active members,
+- admins cannot remove the owner, themselves, or another admin,
+- members can leave only their own membership.
+
+These mutation functions are `SECURITY DEFINER` because direct table mutation is revoked.
 They have an empty fixed `search_path`, schema-qualified relations, explicit
 authentication checks, and `EXECUTE` granted only to `authenticated`.
 
@@ -101,6 +123,28 @@ the scoring formulas:
 Scoring, `calculatePoints()`, leaderboard formulas, and lock times are
 unchanged.
 
+## Community read models
+
+The frontend does not build membership state from unrestricted table reads:
+
+- `get_lobby_community(lobby_id_param)` returns the current join policy,
+  viewer role, active member count, permitted member rows, and pending requests
+  in one call,
+- `get_user_membership_dashboard()` returns only the caller's pending/recent
+  request states, recent removed/left state, and manager request counts,
+- `get_lobby_hall_of_fame(lobby_id_param)` aggregates authoritative stored
+  points across completed lobby tournaments without requiring the scored
+  player to remain an active member.
+
+Rejected applicants can submit another approval request only after 42 hours.
+Pending requests are unique per lobby and applicant. Resolved approval or
+rejection notices remain on Home for at most seven days; `applicant_seen_at`
+is reserved for a future explicit acknowledgement flow.
+
+An active ordinary member receives only their own membership row from the
+community read model. Owner/admin member lists and pending requests are never
+exposed to pending, removed, left, or unrelated users.
+
 ## Controlled rollout
 
 Phase 010 uses a zero-downtime three-step cutover:
@@ -150,9 +194,35 @@ new schema and RPCs can remain in place. Database recovery should prefer a
 forward fix; reverting the migration would discard lifecycle state and is not a
 normal rollback.
 
+## Phase 012/013 rollout
+
+The two migrations are intentionally separate:
+
+1. apply `012_lobby_approval_and_member_management.sql`,
+2. verify constraints, RLS, RPC grants, fixed `search_path`, and open-lobby
+   backwards compatibility,
+3. apply `013_membership_dashboard_integration.sql`,
+4. verify the Home and Hall of Fame read-model grants and empty states,
+5. deploy the frontend community management cutover,
+6. run controlled open join, approval, rejection, leave, remove, and restore
+   acceptance tests and verify Home request states,
+7. compare predictions, points, memberships, leaderboard, and Hall of Fame
+   against the pre-deploy snapshot.
+
+Both migrations are additive or security-tightening and do not rewrite
+predictions or scoring data. If the frontend must be rolled back after Phase
+012, existing open lobbies remain compatible with the secure join RPC. Prefer
+a forward fix for request/lifecycle state instead of dropping the request
+table.
+
+Rollback-only and concurrency tests:
+
+- `supabase/tests/012_lobby_approval_and_member_management.sql`,
+- `supabase/tests/013_membership_dashboard_integration.sql`,
+- `supabase/tests/012_013_membership_concurrency.sh`.
+
 ## Deferred scope
 
-Approval requests, ownership transfer, public lobby discovery, Premium, and
-advanced member-management UX remain deferred. `pending` exists only as a
-schema-compatible non-member state for Phase 012; Phase 011 does not create or
-approve pending requests.
+Ownership transfer, public lobby discovery, Premium, role-assignment UX, and
+advanced moderation remain deferred. Phase 012 preserves existing lobby admins
+but does not add an RPC for promoting new admins.

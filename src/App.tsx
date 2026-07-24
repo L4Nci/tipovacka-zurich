@@ -11,7 +11,15 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { Player, Team, Match, Prediction, Lobby, type AuthStatus } from './types.ts';
+import {
+  Player,
+  Team,
+  Match,
+  Prediction,
+  Lobby,
+  type AuthStatus,
+  type MembershipHomeItem
+} from './types.ts';
 import { supabase } from './lib/supabase.ts';
 import { isDrawPrediction, isFootballKnockoutStage } from './lib/matchRules.ts';
 import { 
@@ -19,6 +27,8 @@ import {
   fetchCriticalAppData,
   fetchDeferredAppData,
   fetchHomeDashboard,
+  fetchHomeMembershipState,
+  fetchUserLobbies,
   loginUser, 
   registerUser, 
   logoutUser,
@@ -33,6 +43,8 @@ import {
   loadPlayerFromAuthUser,
   createLobby,
   joinLobbyByCode,
+  cancelLobbyJoinRequest,
+  LobbyJoinPendingError,
   calculatePoints
 } from './lib/db.ts';
 import AuthScreen from './components/AuthScreen.tsx';
@@ -1027,6 +1039,9 @@ export default function App() {
   const [homeDashboardSummaries, setHomeDashboardSummaries] = useState<HomeDashboardSummary[]>([]);
   const [homeDashboardLoading, setHomeDashboardLoading] = useState(false);
   const [homeDashboardError, setHomeDashboardError] = useState('');
+  const [homeMembershipItems, setHomeMembershipItems] = useState<MembershipHomeItem[]>([]);
+  const [homeMembershipLoading, setHomeMembershipLoading] = useState(false);
+  const [homeMembershipError, setHomeMembershipError] = useState('');
   const homeDashboardRequestRef = useRef(0);
   const lobbyNavigationRequestRef = useRef(0);
   const lobbyMutationInFlightRef = useRef(false);
@@ -1035,6 +1050,7 @@ export default function App() {
   const [newLobbyShortDescription, setNewLobbyShortDescription] = useState("");
   const [newLobbyLongDescription, setNewLobbyLongDescription] = useState("");
   const [newLobbyTournament, setNewLobbyTournament] = useState("fifa-world-cup-2026");
+  const [newLobbyJoinPolicy, setNewLobbyJoinPolicy] = useState<'open' | 'approval_required'>('open');
   const [joinCodeInput, setJoinCodeInput] = useState(() => {
     return new URLSearchParams(window.location.search).get("join") || "";
   });
@@ -1332,6 +1348,11 @@ export default function App() {
     setAllPredictions([]);
     setLobbies([]);
     setHomeDashboardSummaries([]);
+    setHomeMembershipItems([]);
+    setHomeDashboardError('');
+    setHomeMembershipError('');
+    setHomeDashboardLoading(false);
+    setHomeMembershipLoading(false);
     setPendingLobbyNavigation(null);
     setIsLobbyMutationSubmitting(false);
     setLoadedDataContext({ lobbyId: null, tournamentId: null });
@@ -1606,19 +1627,49 @@ export default function App() {
     homeDashboardRequestRef.current = requestId;
     setHomeDashboardLoading(true);
     setHomeDashboardError('');
+    setHomeMembershipLoading(true);
+    setHomeMembershipError('');
 
-    try {
-      const result = await fetchHomeDashboard(user.id, lobbies);
-      if (homeDashboardRequestRef.current !== requestId) return;
-      setHomeDashboardSummaries(result.summaries);
-    } catch (homeError: any) {
-      if (homeDashboardRequestRef.current !== requestId) return;
-      console.error('home dashboard load error:', homeError);
-      setHomeDashboardError(homeError?.message || 'Akční přehled se nepodařilo načíst.');
-    } finally {
-      if (homeDashboardRequestRef.current === requestId) {
-        setHomeDashboardLoading(false);
+    const [dashboardResult, membershipResult] = await Promise.allSettled([
+      fetchHomeDashboard(user.id, lobbies),
+      fetchHomeMembershipState()
+    ]);
+
+    if (homeDashboardRequestRef.current !== requestId) return;
+
+    if (dashboardResult.status === 'fulfilled') {
+      setHomeDashboardSummaries(dashboardResult.value.summaries);
+    } else {
+      console.error('home dashboard load error:', dashboardResult.reason);
+      setHomeDashboardError(dashboardResult.reason?.message || 'Akční přehled se nepodařilo načíst.');
+    }
+
+    if (membershipResult.status === 'fulfilled') {
+      setHomeMembershipItems(membershipResult.value);
+      const hasNewlyApprovedLobby = membershipResult.value.some(item => (
+        item.item_type === 'join_request' &&
+        item.request_status === 'approved' &&
+        !lobbies.some(lobby => lobby.id === item.lobby_id)
+      ));
+
+      if (hasNewlyApprovedLobby) {
+        try {
+          const refreshedLobbies = await fetchUserLobbies(user.id);
+          if (homeDashboardRequestRef.current === requestId) {
+            setLobbies(refreshedLobbies);
+          }
+        } catch (refreshError) {
+          console.error('approved lobby refresh error:', refreshError);
+        }
       }
+    } else {
+      console.error('membership dashboard load error:', membershipResult.reason);
+      setHomeMembershipError(membershipResult.reason?.message || 'Stav členství se nepodařilo načíst.');
+    }
+
+    if (homeDashboardRequestRef.current === requestId) {
+      setHomeDashboardLoading(false);
+      setHomeMembershipLoading(false);
     }
   }, [user, lobbies]);
 
@@ -1627,6 +1678,7 @@ export default function App() {
     if (activeLobbyId) {
       homeDashboardRequestRef.current += 1;
       setHomeDashboardLoading(false);
+      setHomeMembershipLoading(false);
       return;
     }
     void loadHomeDashboard();
@@ -1639,6 +1691,8 @@ export default function App() {
     setPendingLobbyNavigation(null);
     setHomeDashboardLoading(true);
     setHomeDashboardError('');
+    setHomeMembershipLoading(true);
+    setHomeMembershipError('');
     setEntryOrigin('normal-tournament-navigation');
     setMatchFilter('all');
     setActiveTournamentId(null);
@@ -1650,9 +1704,15 @@ export default function App() {
   const handleMembershipEnded = (lobbyId: string) => {
     setLobbies(prev => prev.filter(lobby => lobby.id !== lobbyId));
     setHomeDashboardSummaries(prev => prev.filter(summary => summary.lobby_id !== lobbyId));
+    setHomeMembershipItems(prev => prev.filter(item => item.lobby_id !== lobbyId));
     if (activeLobbyId === lobbyId) {
       goHome();
     }
+  };
+
+  const handleCancelHomeJoinRequest = async (requestId: string) => {
+    await cancelLobbyJoinRequest(requestId);
+    setHomeMembershipItems(prev => prev.filter(item => item.request_id !== requestId));
   };
 
   const openLobbyDetail = (lobby: Lobby) => {
@@ -1764,6 +1824,7 @@ export default function App() {
         setNewLobbyName('');
         setNewLobbyShortDescription('');
         setNewLobbyLongDescription('');
+        setNewLobbyJoinPolicy('open');
       } else {
         setLobbySuccess(`Úspěšně ses připojil k lobby "${result.hydratedLobby.name}"!`);
         setJoinCodeInput('');
@@ -1772,6 +1833,16 @@ export default function App() {
       return result.hydratedLobby;
     } catch (navigationError: any) {
       if (lobbyNavigationRequestRef.current !== requestId) return null;
+
+      if (action === 'join' && navigationError instanceof LobbyJoinPendingError) {
+        setPendingLobbyNavigation(null);
+        setLobbyFormActive('none');
+        setJoinCodeInput('');
+        setLobbySuccess(`Žádost o vstup do lobby "${navigationError.lobbyName}" čeká na schválení.`);
+        setHomeMembershipLoading(true);
+        void loadHomeDashboard();
+        return null;
+      }
 
       const message = navigationError?.message || (
         action === 'create'
@@ -2271,23 +2342,6 @@ export default function App() {
     return Math.min(0, (currentUserStats.total_points ?? 0) - leaderPoints);
   }, [currentUserStats, leaderboardWithStreaks]);
 
-  const hallOfFameEntries = useMemo(() => {
-    const completedTournamentCount = Object.values(tournamentStats as Record<string, { isCompleted?: boolean }>)
-      .filter(stats => stats.isCompleted)
-      .length;
-
-    if (completedTournamentCount === 0) return [];
-
-    return leaderboardWithStreaks.map(player => ({
-      player_id: player.id,
-      username: player.username,
-      avatar_emoji: player.avatar_emoji,
-      avatar_bg: player.avatar_bg,
-      total_points: player.total_points ?? 0,
-      completed_tournaments_count: completedTournamentCount
-    }));
-  }, [leaderboardWithStreaks, tournamentStats]);
-
   const officialWinnerTeam = useMemo(() => {
     return teams.find(tm => tm.is_final_winner === 1) || null;
   }, [teams]);
@@ -2479,8 +2533,12 @@ export default function App() {
             summaries={homeDashboardSummaries}
             summariesLoading={homeDashboardLoading}
             summariesError={homeDashboardError}
+            membershipItems={homeMembershipItems}
+            membershipLoading={homeMembershipLoading}
+            membershipError={homeMembershipError}
             addLobbyMode={lobbyFormActive}
             onRetrySummaries={() => void loadHomeDashboard()}
+            onCancelJoinRequest={handleCancelHomeJoinRequest}
             onOpenContext={openHomeContext}
             onOpenLobby={openLobbyDetail}
             onSetAddLobbyMode={mode => {
@@ -2513,7 +2571,8 @@ export default function App() {
                         newLobbyTournament,
                         'public',
                         newLobbyShortDescription,
-                        newLobbyLongDescription
+                        newLobbyLongDescription,
+                        newLobbyJoinPolicy
                       )
                     );
                   }} className="space-y-3">
@@ -2560,6 +2619,41 @@ export default function App() {
                         <option value="ms-hockey-2026">🏒 MS v hokeji 2026</option>
                       </select>
                     </div>
+                    <fieldset disabled={isLobbyMutationSubmitting}>
+                      <legend className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Způsob vstupu</legend>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <label className={`rounded-xl border p-3 ${newLobbyJoinPolicy === 'open' ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="join-policy"
+                              value="open"
+                              checked={newLobbyJoinPolicy === 'open'}
+                              onChange={() => setNewLobbyJoinPolicy('open')}
+                            />
+                            <span className="text-[10px] font-black uppercase text-slate-700">Okamžitý vstup</span>
+                          </span>
+                          <span className="mt-1 block text-[10px] font-medium leading-relaxed text-slate-500">
+                            Každý s kódem se připojí hned.
+                          </span>
+                        </label>
+                        <label className={`rounded-xl border p-3 ${newLobbyJoinPolicy === 'approval_required' ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+                          <span className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="join-policy"
+                              value="approval_required"
+                              checked={newLobbyJoinPolicy === 'approval_required'}
+                              onChange={() => setNewLobbyJoinPolicy('approval_required')}
+                            />
+                            <span className="text-[10px] font-black uppercase text-slate-700">Vstup po schválení</span>
+                          </span>
+                          <span className="mt-1 block text-[10px] font-medium leading-relaxed text-slate-500">
+                            Žádost musí potvrdit majitel nebo admin.
+                          </span>
+                        </label>
+                      </div>
+                    </fieldset>
                     <button
                       type="submit"
                       disabled={isLobbyMutationSubmitting}
@@ -2686,7 +2780,6 @@ export default function App() {
                 onMembershipEnded={handleMembershipEnded}
                 membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
                 tournamentStats={tournamentStats}
-                hallOfFameEntries={hallOfFameEntries}
               />
             </Suspense>
           </LazyScreenErrorBoundary>

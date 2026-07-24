@@ -102,6 +102,7 @@ export type Lobby = {
   short_description?: string | null;
   long_description?: string | null;
   join_code: string;
+  join_policy?: 'open' | 'approval_required';
   visibility: 'private' | 'public';
   created_at?: string;
   is_owner?: boolean;
@@ -117,11 +118,54 @@ export type LobbyMember = {
   username: string;
   role: 'player' | 'admin';
   lobby_role: 'owner' | 'admin' | 'member';
-  membership_status: 'pending' | 'active' | 'removed' | 'left';
+  membership_status: 'active' | 'removed' | 'left';
   avatar_emoji?: string | null;
   avatar_bg?: string | null;
   joined_at: string;
   ended_at?: string | null;
   ended_by?: string | null;
   tournament_winner_id?: string | null;
+};
+
+export type LobbyJoinRequest = {
+  id: string;
+  lobby_id: string;
+  user_id: string;
+  username: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  avatar_emoji?: string | null;
+  avatar_bg?: string | null;
+  created_at: string;
+};
+
+export type HallOfFameEntry = {
+  player_id: string;
+  username: string;
+  avatar_emoji?: string | null;
+  avatar_bg?: string | null;
+  total_points: number;
+  completed_tournaments_count: number;
+};
+
+export type LobbyCommunity = {
+  lobby_id: string;
+  join_policy: 'open' | 'approval_required';
+  viewer_role: 'owner' | 'admin' | 'member' | 'platform_admin';
+  active_member_count: number;
+  members: LobbyMember[];
+  pending_requests: LobbyJoinRequest[];
+  hall_of_fame: HallOfFameEntry[];
+};
+
+export type MembershipHomeItem = {
+  item_type: 'join_request' | 'membership' | 'management';
+  lobby_id: string;
+  lobby_name: string;
+  lobby_role: 'owner' | 'admin' | 'member' | null;
+  join_policy: 'open' | 'approval_required';
+  request_id: string | null;
+  request_status: 'pending' | 'approved' | 'rejected' | null;
+  membership_status: 'removed' | 'left' | null;
+  pending_request_count: number;
+  event_at: string;
 };
