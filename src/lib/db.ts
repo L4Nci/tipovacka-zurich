@@ -2,7 +2,18 @@ import { supabase } from "./supabase.ts";
 import type { User } from "@supabase/supabase-js";
 import { calculatePoints } from "./scoring.ts";
 import { isDrawPrediction, isFootballKnockoutStage } from "./matchRules.ts";
-import { Player, Team, Match, Prediction, Lobby, LobbyMember } from "../types.ts";
+import {
+  Player,
+  Team,
+  Match,
+  Prediction,
+  Lobby,
+  LobbyMember,
+  LobbyCommunity,
+  LobbyJoinRequest,
+  MembershipHomeItem,
+  HallOfFameEntry
+} from "../types.ts";
 import { getAuthRedirectUrl } from "./auth.ts";
 import { getSignupOutcome } from "./authLifecycle.ts";
 import {
@@ -244,6 +255,7 @@ export const fetchUserLobbies = async (userId: string) => {
           short_description,
           long_description,
           join_code,
+          join_policy,
           visibility,
           tournament:tournaments (
             name
@@ -281,6 +293,7 @@ export const fetchUserLobbies = async (userId: string) => {
           short_description,
           long_description,
           join_code,
+          join_policy,
           visibility,
           tournament:tournaments (
             name
@@ -317,6 +330,7 @@ export const fetchUserLobbies = async (userId: string) => {
         short_description: lob.short_description || null,
         long_description: lob.long_description || null,
         join_code: lob.join_code,
+        join_policy: lob.join_policy === 'approval_required' ? 'approval_required' : 'open',
         visibility: lob.visibility,
         tournament_name: lob.tournament?.name || "FIFA World Cup 2026",
         is_owner: lob.owner_id === userId,
@@ -472,7 +486,38 @@ export const fetchHomeDashboard = async (userId: string, lobbies: Lobby[]) => {
   };
 };
 
+export const fetchHomeMembershipState = async (): Promise<MembershipHomeItem[]> => {
+  const { data, error } = await supabase.rpc("get_user_membership_dashboard");
+  if (error) throw error;
+
+  return (data || []).map((row: any) => ({
+    item_type: row.item_type === 'management'
+      ? 'management'
+      : row.item_type === 'membership'
+        ? 'membership'
+        : 'join_request',
+    lobby_id: String(row.lobby_id),
+    lobby_name: String(row.lobby_name),
+    lobby_role: row.lobby_role === 'owner' || row.lobby_role === 'admin' || row.lobby_role === 'member'
+      ? row.lobby_role
+      : null,
+    join_policy: row.join_policy === 'approval_required' ? 'approval_required' : 'open',
+    request_id: row.request_id ? String(row.request_id) : null,
+    request_status: row.request_status === 'pending' ||
+      row.request_status === 'approved' ||
+      row.request_status === 'rejected'
+      ? row.request_status
+      : null,
+    membership_status: row.membership_status === 'removed' || row.membership_status === 'left'
+      ? row.membership_status
+      : null,
+    pending_request_count: Number(row.pending_request_count) || 0,
+    event_at: String(row.event_at)
+  }));
+};
+
 type LobbyRpcRow = {
+  membership_state?: 'joined' | 'rejoined' | 'already_member' | 'pending' | 'removed';
   id: string;
   name: string;
   owner_id: string;
@@ -480,6 +525,7 @@ type LobbyRpcRow = {
   short_description?: string | null;
   long_description?: string | null;
   join_code: string;
+  join_policy?: 'open' | 'approval_required';
   visibility: 'private' | 'public';
   created_at?: string;
   tournament_name?: string;
@@ -500,6 +546,7 @@ const lobbyFromRpcRow = (row: LobbyRpcRow): Lobby => ({
   short_description: row.short_description ?? null,
   long_description: row.long_description ?? null,
   join_code: row.join_code,
+  join_policy: row.join_policy === 'approval_required' ? 'approval_required' : 'open',
   visibility: row.visibility,
   created_at: row.created_at,
   tournament_name: row.tournament_name || "",
@@ -515,14 +562,16 @@ export const createLobby = async (
   tournamentId: string,
   visibility: 'private' | 'public' = 'public',
   shortDescription = "",
-  longDescription = ""
+  longDescription = "",
+  joinPolicy: 'open' | 'approval_required' = 'open'
 ) => {
   const { data, error } = await supabase.rpc("create_lobby_secure", {
     lobby_name_param: name,
     tournament_id_param: tournamentId,
     visibility_param: visibility,
     short_description_param: shortDescription,
-    long_description_param: longDescription
+    long_description_param: longDescription,
+    join_policy_param: joinPolicy
   });
 
   if (error) throw error;
@@ -553,6 +602,16 @@ export const addTournamentToLobby = async (lobbyId: string, tournamentId: string
   return { success: true };
 };
 
+export class LobbyJoinPendingError extends Error {
+  lobbyName: string;
+
+  constructor(lobbyName: string) {
+    super("Tvoje žádost o vstup čeká na schválení.");
+    this.name = "LobbyJoinPendingError";
+    this.lobbyName = lobbyName;
+  }
+}
+
 /**
  * Join a lobby atomically. The RPC accepts only the invitation code and derives
  * the caller identity and member role from auth.uid().
@@ -566,79 +625,87 @@ export const joinLobbyByCode = async (joinCode: string) => {
     if (error.code === "P0002") {
       throw new Error("Žádná lobby s tímto kódem neexistuje.");
     }
-    if (error.code === "42501" && error.message?.includes("restored")) {
-      throw new Error("Přístup do této lobby ti musí obnovit její majitel.");
-    }
-    if (error.code === "42501" && error.message?.includes("pending")) {
-      throw new Error("Tvoje žádost o vstup čeká na schválení.");
-    }
     throw error;
   }
 
-  return lobbyFromRpcRow(firstLobbyRpcRow(data as LobbyRpcRow[] | null));
+  const row = firstLobbyRpcRow(data as LobbyRpcRow[] | null);
+  if (row.membership_state === 'pending') {
+    throw new LobbyJoinPendingError(row.name);
+  }
+  if (row.membership_state === 'removed') {
+    throw new Error("Přístup do této lobby ti musí obnovit její majitel.");
+  }
+
+  return lobbyFromRpcRow(row);
 };
 
-export const fetchLobbyMembers = async (lobbyId: string): Promise<LobbyMember[]> => {
-  const { data, error } = await supabase
-    .from("lobby_members")
-    .select(`
-      id,
-      lobby_id,
-      user_id,
-      role,
-      membership_status,
-      joined_at,
-      ended_at,
-      ended_by,
-      profile:profiles!lobby_members_user_id_fkey (
-        username,
-        role,
-        avatar_emoji,
-        avatar_bg,
-        tournament_winner_id
-      ),
-      lobby:lobbies (
-        owner_id
-      )
-    `)
-    .eq("lobby_id", lobbyId);
+const normalizeCommunityMember = (row: any): LobbyMember => ({
+  id: String(row.id),
+  user_id: String(row.user_id),
+  username: String(row.username || "Tipující"),
+  role: 'player',
+  lobby_role: row.lobby_role === 'owner' || row.lobby_role === 'admin'
+    ? row.lobby_role
+    : 'member',
+  membership_status: row.membership_status === 'removed' || row.membership_status === 'left'
+    ? row.membership_status
+    : 'active',
+  avatar_emoji: row.avatar_emoji || "😀",
+  avatar_bg: row.avatar_bg || "#fee2e2",
+  joined_at: String(row.joined_at),
+  ended_at: row.ended_at ? String(row.ended_at) : null,
+  ended_by: row.ended_by ? String(row.ended_by) : null
+});
 
-  if (error) throw error;
+const normalizeJoinRequest = (row: any): LobbyJoinRequest => ({
+  id: String(row.id),
+  lobby_id: String(row.lobby_id),
+  user_id: String(row.user_id),
+  username: String(row.username || "Tipující"),
+  status: row.status === 'approved' || row.status === 'rejected' || row.status === 'cancelled'
+    ? row.status
+    : 'pending',
+  avatar_emoji: row.avatar_emoji || "😀",
+  avatar_bg: row.avatar_bg || "#fee2e2",
+  created_at: String(row.created_at)
+});
 
-  const statusOrder = { active: 0, pending: 1, removed: 2, left: 3 };
-  return (data || [])
-    .map((row: any) => {
-      const profile = Array.isArray(row.profile) ? row.profile[0] : row.profile;
-      const lobby = Array.isArray(row.lobby) ? row.lobby[0] : row.lobby;
-      const membershipStatus = (
-        row.membership_status === "pending" ||
-        row.membership_status === "removed" ||
-        row.membership_status === "left"
-      ) ? row.membership_status : "active";
+const normalizeHallOfFameEntry = (row: any): HallOfFameEntry => ({
+  player_id: String(row.player_id),
+  username: String(row.username || "Tipující"),
+  avatar_emoji: row.avatar_emoji || "😀",
+  avatar_bg: row.avatar_bg || "#fee2e2",
+  total_points: Number(row.total_points) || 0,
+  completed_tournaments_count: Number(row.completed_tournaments_count) || 0
+});
 
-      return {
-        id: row.id,
-        user_id: row.user_id,
-        username: profile?.username || "Tipující",
-        role: profile?.role === "admin" ? "admin" : "player",
-        lobby_role: lobby?.owner_id === row.user_id
-          ? "owner"
-          : (row.role === "admin" ? "admin" : "member"),
-        membership_status: membershipStatus,
-        avatar_emoji: profile?.avatar_emoji || "😀",
-        avatar_bg: profile?.avatar_bg || "#fee2e2",
-        joined_at: row.joined_at,
-        ended_at: row.ended_at,
-        ended_by: row.ended_by,
-        tournament_winner_id: profile?.tournament_winner_id || null
-      } as LobbyMember;
-    })
-    .sort((a, b) => {
-      if (a.lobby_role === "owner" && b.lobby_role !== "owner") return -1;
-      if (b.lobby_role === "owner" && a.lobby_role !== "owner") return 1;
-      return statusOrder[a.membership_status] - statusOrder[b.membership_status]
-        || a.username.localeCompare(b.username);
-    });
+export const fetchLobbyCommunity = async (lobbyId: string): Promise<LobbyCommunity> => {
+  const [communityResult, hallOfFameResult] = await Promise.all([
+    supabase.rpc("get_lobby_community", { lobby_id_param: lobbyId }),
+    supabase.rpc("get_lobby_hall_of_fame", { lobby_id_param: lobbyId })
+  ]);
+
+  if (communityResult.error) throw communityResult.error;
+  if (hallOfFameResult.error) throw hallOfFameResult.error;
+
+  const community = communityResult.data as any;
+  return {
+    lobby_id: String(community?.lobby_id || lobbyId),
+    join_policy: community?.join_policy === 'approval_required' ? 'approval_required' : 'open',
+    viewer_role: community?.viewer_role === 'owner' ||
+      community?.viewer_role === 'admin' ||
+      community?.viewer_role === 'platform_admin'
+      ? community.viewer_role
+      : 'member',
+    active_member_count: Number(community?.active_member_count) || 0,
+    members: Array.isArray(community?.members)
+      ? community.members.map(normalizeCommunityMember)
+      : [],
+    pending_requests: Array.isArray(community?.pending_requests)
+      ? community.pending_requests.map(normalizeJoinRequest)
+      : [],
+    hall_of_fame: (hallOfFameResult.data || []).map(normalizeHallOfFameEntry)
+  };
 };
 
 const runMembershipLifecycleRpc = async (
@@ -669,6 +736,38 @@ export const restoreLobbyMember = (lobbyId: string, memberId: string) => (
     member_id_param: memberId
   })
 );
+
+export const setLobbyJoinPolicy = async (
+  lobbyId: string,
+  joinPolicy: 'open' | 'approval_required'
+) => {
+  const { data, error } = await supabase.rpc("set_lobby_join_policy", {
+    lobby_id_param: lobbyId,
+    join_policy_param: joinPolicy
+  });
+  if (error) throw new Error(error.message || "Join policy update failed.");
+  return data === 'approval_required' ? 'approval_required' as const : 'open' as const;
+};
+
+export const resolveLobbyJoinRequest = async (
+  requestId: string,
+  decision: 'approved' | 'rejected'
+) => {
+  const { data, error } = await supabase.rpc("resolve_lobby_join_request", {
+    request_id_param: requestId,
+    decision_param: decision
+  });
+  if (error) throw new Error(error.message || "Join request update failed.");
+  return String(data || decision);
+};
+
+export const cancelLobbyJoinRequest = async (requestId: string) => {
+  const { data, error } = await supabase.rpc("cancel_lobby_join_request", {
+    request_id_param: requestId
+  });
+  if (error) throw new Error(error.message || "Join request cancellation failed.");
+  return String(data || "");
+};
 
 /**
  * Fetch matches, participants, and users predictions in a single dashboard query (FÁZE S9 & FÁZE S10)

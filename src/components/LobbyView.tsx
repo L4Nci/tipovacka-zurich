@@ -1,16 +1,25 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check, LogOut, RotateCcw, UserMinus } from 'lucide-react';
-import { Lobby, LobbyMember, Player as AppUser } from '../types';
+import { Lobby, LobbyMember, Player as AppUser, type HallOfFameEntry, type LobbyJoinRequest } from '../types';
 import {
   addTournamentToLobby,
   deleteLobby,
-  fetchLobbyMembers,
+  fetchLobbyCommunity,
   leaveLobby,
   removeLobbyMember,
+  resolveLobbyJoinRequest,
   restoreLobbyMember,
+  setLobbyJoinPolicy,
   updateLobbyDetails
 } from '../lib/db';
+import {
+  canChangeJoinPolicy,
+  canRemoveLobbyMember,
+  canResolveJoinRequests,
+  canRestoreLobbyMember,
+  type CommunityViewerRole
+} from '../lib/membership';
 
 const rulesStartMarkers = [
   'Pravidla',
@@ -65,14 +74,6 @@ interface LobbyViewProps {
     nextStart?: string | null;
     nextMatchLabel?: string | null;
   }>;
-  hallOfFameEntries?: {
-    player_id: string;
-    username: string;
-    avatar_emoji?: string | null;
-    avatar_bg?: string | null;
-    total_points: number;
-    completed_tournaments_count: number;
-  }[];
 }
 
 export function LobbyView({
@@ -84,8 +85,7 @@ export function LobbyView({
   onLobbyDeleted,
   onMembershipEnded,
   membersCount,
-  tournamentStats = {},
-  hallOfFameEntries = []
+  tournamentStats = {}
 }: LobbyViewProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
@@ -102,31 +102,42 @@ export function LobbyView({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRulesExpanded, setIsRulesExpanded] = useState(false);
   const [members, setMembers] = useState<LobbyMember[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<LobbyJoinRequest[]>([]);
+  const [hallOfFameEntries, setHallOfFameEntries] = useState<HallOfFameEntry[]>([]);
+  const [joinPolicy, setJoinPolicy] = useState<'open' | 'approval_required'>(lobby.join_policy || 'open');
+  const [viewerRole, setViewerRole] = useState<CommunityViewerRole>(
+    user.role === 'admin' ? 'platform_admin' : lobby.is_owner ? 'owner' : lobby.lobby_role === 'admin' ? 'admin' : 'member'
+  );
+  const [activeMemberCount, setActiveMemberCount] = useState<number | null>(membersCount ?? null);
   const [membersLoading, setMembersLoading] = useState(true);
   const [membershipError, setMembershipError] = useState('');
   const [membershipActionId, setMembershipActionId] = useState<string | null>(null);
 
   const canEditLobby = Boolean(lobby.is_owner || user.role === 'admin');
   const rulesText = getLobbyRulesText(lobby.long_description);
-  const activeMemberCount = members.filter(member => member.membership_status === 'active').length;
 
-  const loadMembers = useCallback(async () => {
+  const loadCommunity = useCallback(async () => {
     setMembersLoading(true);
     setMembershipError('');
     try {
-      const loadedMembers = await fetchLobbyMembers(lobby.id);
-      setMembers(loadedMembers);
-      return loadedMembers;
+      const community = await fetchLobbyCommunity(lobby.id);
+      setMembers(community.members);
+      setPendingRequests(community.pending_requests);
+      setHallOfFameEntries(community.hall_of_fame);
+      setJoinPolicy(community.join_policy);
+      setViewerRole(community.viewer_role);
+      setActiveMemberCount(community.active_member_count);
+      return community;
     } catch (err: any) {
-      setMembershipError(err?.message || (lang === 'cz' ? 'Členy se nepodařilo načíst.' : 'Members could not be loaded.'));
+      setMembershipError(err?.message || (lang === 'cz' ? 'Správu komunity se nepodařilo načíst.' : 'Community management could not be loaded.'));
     } finally {
       setMembersLoading(false);
     }
   }, [lang, lobby.id]);
 
   useEffect(() => {
-    void loadMembers();
-  }, [loadMembers]);
+    void loadCommunity();
+  }, [loadCommunity]);
 
   const handleLeaveLobby = async () => {
     if (!window.confirm(lang === 'cz'
@@ -158,9 +169,9 @@ export function LobbyView({
     setMembershipError('');
     try {
       await removeLobbyMember(lobby.id, member.user_id);
-      const loadedMembers = await loadMembers();
-      if (loadedMembers) {
-        onRefresh?.({ member_count: loadedMembers.filter(item => item.membership_status === 'active').length });
+      const community = await loadCommunity();
+      if (community) {
+        onRefresh?.({ member_count: community.active_member_count });
       }
     } catch (err: any) {
       setMembershipError(err?.message || (lang === 'cz' ? 'Člena se nepodařilo odebrat.' : 'Could not remove the member.'));
@@ -174,12 +185,47 @@ export function LobbyView({
     setMembershipError('');
     try {
       await restoreLobbyMember(lobby.id, member.user_id);
-      const loadedMembers = await loadMembers();
-      if (loadedMembers) {
-        onRefresh?.({ member_count: loadedMembers.filter(item => item.membership_status === 'active').length });
+      const community = await loadCommunity();
+      if (community) {
+        onRefresh?.({ member_count: community.active_member_count });
       }
     } catch (err: any) {
       setMembershipError(err?.message || (lang === 'cz' ? 'Přístup se nepodařilo obnovit.' : 'Could not restore access.'));
+    } finally {
+      setMembershipActionId(null);
+    }
+  };
+
+  const handleResolveRequest = async (request: LobbyJoinRequest, decision: 'approved' | 'rejected') => {
+    setMembershipActionId(request.id);
+    setMembershipError('');
+    try {
+      await resolveLobbyJoinRequest(request.id, decision);
+      const community = await loadCommunity();
+      if (community) {
+        onRefresh?.({ member_count: community.active_member_count });
+      }
+    } catch (err: any) {
+      setMembershipError(err?.message || (
+        decision === 'approved'
+          ? (lang === 'cz' ? 'Žádost se nepodařilo schválit.' : 'Could not approve the request.')
+          : (lang === 'cz' ? 'Žádost se nepodařilo zamítnout.' : 'Could not reject the request.')
+      ));
+    } finally {
+      setMembershipActionId(null);
+    }
+  };
+
+  const handleJoinPolicyChange = async (nextPolicy: 'open' | 'approval_required') => {
+    if (nextPolicy === joinPolicy) return;
+    setMembershipActionId('join-policy');
+    setMembershipError('');
+    try {
+      const savedPolicy = await setLobbyJoinPolicy(lobby.id, nextPolicy);
+      setJoinPolicy(savedPolicy);
+      onRefresh?.({ join_policy: savedPolicy });
+    } catch (err: any) {
+      setMembershipError(err?.message || (lang === 'cz' ? 'Způsob vstupu se nepodařilo změnit.' : 'Could not change join policy.'));
     } finally {
       setMembershipActionId(null);
     }
@@ -405,18 +451,18 @@ export function LobbyView({
           <div>
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
               <Users className="w-4 h-4" />
-              {lang === 'cz' ? 'Členství' : 'Membership'}
+              {lang === 'cz' ? 'Členové' : 'Members'}
             </h2>
             <p className="mt-1 text-[10px] font-medium text-slate-400">
               {membersLoading
                 ? (lang === 'cz' ? 'Načítám členy…' : 'Loading members…')
                 : membershipError
                   ? (lang === 'cz' ? 'Počet členů není dostupný' : 'Member count unavailable')
-                  : `${activeMemberCount} ${lang === 'cz' ? 'aktivních členů' : 'active members'}`}
+                  : `${activeMemberCount ?? 0} ${lang === 'cz' ? 'aktivních členů' : 'active members'}`}
             </p>
           </div>
 
-          {!lobby.is_owner && members.some(member => (
+          {viewerRole !== 'owner' && viewerRole !== 'platform_admin' && members.some(member => (
             member.user_id === user.id && member.membership_status === 'active'
           )) && (
             <button
@@ -434,24 +480,118 @@ export function LobbyView({
         {membershipError && (
           <div className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-red-50 p-3 text-[10px] font-bold text-red-600">
             <span>{membershipError}</span>
-            <button type="button" onClick={() => void loadMembers()} className="shrink-0 underline">
+            <button type="button" onClick={() => void loadCommunity()} className="shrink-0 underline">
               {lang === 'cz' ? 'Zkusit znovu' : 'Retry'}
             </button>
           </div>
         )}
 
-        {canEditLobby && !membersLoading && members.length > 0 && (
+        {canChangeJoinPolicy(viewerRole) && !membersLoading && (
+          <fieldset className="mt-4 border-t border-slate-100 pt-4" disabled={membershipActionId === 'join-policy'}>
+            <legend className="mb-2 text-[9px] font-black uppercase tracking-wider text-slate-400">
+              {lang === 'cz' ? 'Způsob vstupu' : 'Join policy'}
+            </legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <label className={`rounded-xl border p-3 ${joinPolicy === 'open' ? 'border-red-200 bg-red-50' : 'border-slate-100 bg-slate-50'}`}>
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name={`join-policy-${lobby.id}`}
+                    checked={joinPolicy === 'open'}
+                    onChange={() => void handleJoinPolicyChange('open')}
+                  />
+                  <span className="text-[10px] font-black uppercase text-slate-700">
+                    {lang === 'cz' ? 'Okamžitý vstup' : 'Immediate entry'}
+                  </span>
+                </span>
+                <span className="mt-1 block text-[10px] font-medium text-slate-500">
+                  {lang === 'cz' ? 'Každý s kódem se připojí ihned.' : 'Anyone with the code joins immediately.'}
+                </span>
+              </label>
+              <label className={`rounded-xl border p-3 ${joinPolicy === 'approval_required' ? 'border-red-200 bg-red-50' : 'border-slate-100 bg-slate-50'}`}>
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name={`join-policy-${lobby.id}`}
+                    checked={joinPolicy === 'approval_required'}
+                    onChange={() => void handleJoinPolicyChange('approval_required')}
+                  />
+                  <span className="text-[10px] font-black uppercase text-slate-700">
+                    {lang === 'cz' ? 'Vstup po schválení' : 'Approval required'}
+                  </span>
+                </span>
+                <span className="mt-1 block text-[10px] font-medium text-slate-500">
+                  {lang === 'cz' ? 'Žádost potvrdí majitel nebo admin.' : 'The owner or an admin approves each request.'}
+                </span>
+              </label>
+            </div>
+          </fieldset>
+        )}
+
+        {canResolveJoinRequests(viewerRole) && !membersLoading && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <h3 className="text-[9px] font-black uppercase tracking-wider text-slate-400">
+              {lang === 'cz' ? 'Žádosti' : 'Requests'}
+            </h3>
+            {pendingRequests.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                {pendingRequests.map(request => (
+                  <div key={request.id} className="flex items-center gap-3 rounded-2xl bg-amber-50 p-3">
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg"
+                      style={{ backgroundColor: request.avatar_bg || '#fee2e2' }}
+                    >
+                      {request.avatar_emoji || '😀'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-black text-slate-800">{request.username}</p>
+                      <p className="text-[9px] font-bold uppercase text-amber-600">
+                        {lang === 'cz' ? 'Čeká na schválení' : 'Awaiting approval'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleResolveRequest(request, 'approved')}
+                      disabled={membershipActionId === request.id}
+                      title={lang === 'cz' ? 'Schválit' : 'Approve'}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white disabled:opacity-50"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleResolveRequest(request, 'rejected')}
+                      disabled={membershipActionId === request.id}
+                      title={lang === 'cz' ? 'Zamítnout' : 'Reject'}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-red-500 disabled:opacity-50"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[10px] font-medium text-slate-400">
+                {lang === 'cz' ? 'Žádné čekající žádosti.' : 'No pending requests.'}
+              </p>
+            )}
+          </div>
+        )}
+
+        {!membersLoading && members.length > 0 && (
           <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
             {members.map(member => {
               const isOwner = member.lobby_role === 'owner';
-              const isActive = member.membership_status === 'active';
               const statusLabel = member.membership_status === 'active'
                 ? (lang === 'cz' ? 'Aktivní' : 'Active')
                 : member.membership_status === 'removed'
                   ? (lang === 'cz' ? 'Odebraný člen' : 'Removed')
-                  : member.membership_status === 'left'
-                    ? (lang === 'cz' ? 'Odešel' : 'Left')
-                    : (lang === 'cz' ? 'Čeká na schválení' : 'Pending');
+                  : (lang === 'cz' ? 'Odešel' : 'Left');
+              const roleLabel = isOwner
+                ? (lang === 'cz' ? 'Majitel' : 'Owner')
+                : member.lobby_role === 'admin'
+                  ? 'Admin'
+                  : (lang === 'cz' ? 'Člen' : 'Member');
 
               return (
                 <div key={member.id} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
@@ -464,11 +604,11 @@ export function LobbyView({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-black text-slate-800">{member.username}</p>
                     <p className="text-[9px] font-bold uppercase text-slate-400">
-                      {isOwner ? (lang === 'cz' ? 'Majitel' : 'Owner') : statusLabel}
+                      {roleLabel} · {statusLabel}
                     </p>
                   </div>
 
-                  {!isOwner && isActive && (
+                  {canRemoveLobbyMember(viewerRole, user.id, member) && (
                     <button
                       type="button"
                       onClick={() => void handleRemoveMember(member)}
@@ -480,7 +620,7 @@ export function LobbyView({
                     </button>
                   )}
 
-                  {!isOwner && member.membership_status === 'removed' && (
+                  {canRestoreLobbyMember(viewerRole, member) && (
                     <button
                       type="button"
                       onClick={() => void handleRestoreMember(member)}
