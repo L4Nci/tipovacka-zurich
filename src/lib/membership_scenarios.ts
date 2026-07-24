@@ -5,7 +5,8 @@ import {
   canResolveJoinRequests,
   canRestoreLobbyMember,
   getManagementRequestCount,
-  hasPendingMembershipRequest
+  hasPendingMembershipRequest,
+  shouldRefreshHomeMembership
 } from './membership.ts';
 import type { LobbyMember, MembershipHomeItem } from '../types.ts';
 
@@ -86,5 +87,44 @@ const homeItems: MembershipHomeItem[] = [
 assert.equal(hasPendingMembershipRequest(homeItems), true);
 assert.equal(getManagementRequestCount(homeItems, 'lobby-2'), 2);
 assert.equal(getManagementRequestCount(homeItems, 'lobby-missing'), 0);
+
+const homeRefreshContext = {
+  hasAuthenticatedUser: true,
+  loading: false,
+  refreshing: false,
+  activeLobbyId: null,
+  activeTab: 'matches',
+  visibilityState: 'visible' as DocumentVisibilityState
+};
+
+assert.equal(shouldRefreshHomeMembership({ ...homeRefreshContext, trigger: 'home-return' }), true);
+assert.equal(shouldRefreshHomeMembership({ ...homeRefreshContext, trigger: 'focus' }), true);
+assert.equal(shouldRefreshHomeMembership({ ...homeRefreshContext, trigger: 'visibility' }), true);
+assert.equal(shouldRefreshHomeMembership({ ...homeRefreshContext, trigger: 'local-mutation' }), true);
+assert.equal(shouldRefreshHomeMembership({
+  ...homeRefreshContext,
+  trigger: 'visibility',
+  visibilityState: 'hidden'
+}), false);
+assert.equal(shouldRefreshHomeMembership({
+  ...homeRefreshContext,
+  trigger: 'focus',
+  activeLobbyId: 'lobby-1'
+}), false);
+assert.equal(shouldRefreshHomeMembership({
+  ...homeRefreshContext,
+  trigger: 'home-return',
+  activeTab: 'profile'
+}), false);
+assert.equal(shouldRefreshHomeMembership({
+  ...homeRefreshContext,
+  trigger: 'focus',
+  hasAuthenticatedUser: false
+}), false);
+assert.equal(shouldRefreshHomeMembership({
+  ...homeRefreshContext,
+  trigger: 'focus',
+  refreshing: true
+}), false);
 
 console.log('Membership community scenarios passed.');

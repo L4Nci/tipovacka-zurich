@@ -1,6 +1,32 @@
 import type { LobbyMember, MembershipHomeItem } from '../types.ts';
 
 export type CommunityViewerRole = 'owner' | 'admin' | 'member' | 'platform_admin';
+export type HomeMembershipRefreshTrigger = 'home-return' | 'focus' | 'visibility' | 'local-mutation';
+
+export const shouldRefreshHomeMembership = ({
+  trigger,
+  hasAuthenticatedUser,
+  loading,
+  refreshing,
+  activeLobbyId,
+  activeTab,
+  visibilityState
+}: {
+  trigger: HomeMembershipRefreshTrigger;
+  hasAuthenticatedUser: boolean;
+  loading: boolean;
+  refreshing: boolean;
+  activeLobbyId: string | null;
+  activeTab: string;
+  visibilityState: DocumentVisibilityState;
+}) => {
+  if (!hasAuthenticatedUser || loading) return false;
+  if (trigger === 'local-mutation') return true;
+  if (activeLobbyId || activeTab !== 'matches') return false;
+  if (trigger === 'home-return') return true;
+  if (refreshing) return false;
+  return visibilityState === 'visible';
+};
 
 export const canResolveJoinRequests = (viewerRole: CommunityViewerRole) => (
   viewerRole === 'owner' ||

@@ -61,6 +61,7 @@ interface LobbyViewProps {
   onRefresh?: (updatedLobby?: Partial<Lobby>) => void;
   onLobbyDeleted?: () => void;
   onMembershipEnded?: (lobbyId: string) => void;
+  onMembershipMutation?: () => Promise<void> | void;
   membersCount?: number;
   tournamentStats?: Record<string, {
     total: number;
@@ -84,6 +85,7 @@ export function LobbyView({
   onRefresh,
   onLobbyDeleted,
   onMembershipEnded,
+  onMembershipMutation,
   membersCount,
   tournamentStats = {}
 }: LobbyViewProps) {
@@ -170,6 +172,7 @@ export function LobbyView({
     try {
       await removeLobbyMember(lobby.id, member.user_id);
       const community = await loadCommunity();
+      await onMembershipMutation?.();
       if (community) {
         onRefresh?.({ member_count: community.active_member_count });
       }
@@ -186,6 +189,7 @@ export function LobbyView({
     try {
       await restoreLobbyMember(lobby.id, member.user_id);
       const community = await loadCommunity();
+      await onMembershipMutation?.();
       if (community) {
         onRefresh?.({ member_count: community.active_member_count });
       }
@@ -202,6 +206,7 @@ export function LobbyView({
     try {
       await resolveLobbyJoinRequest(request.id, decision);
       const community = await loadCommunity();
+      await onMembershipMutation?.();
       if (community) {
         onRefresh?.({ member_count: community.active_member_count });
       }
@@ -223,6 +228,7 @@ export function LobbyView({
     try {
       const savedPolicy = await setLobbyJoinPolicy(lobby.id, nextPolicy);
       setJoinPolicy(savedPolicy);
+      await onMembershipMutation?.();
       onRefresh?.({ join_policy: savedPolicy });
     } catch (err: any) {
       setMembershipError(err?.message || (lang === 'cz' ? 'Způsob vstupu se nepodařilo změnit.' : 'Could not change join policy.'));
