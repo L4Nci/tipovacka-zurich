@@ -1045,6 +1045,7 @@ export default function App() {
   const [homeMembershipError, setHomeMembershipError] = useState('');
   const homeDashboardRequestRef = useRef(0);
   const homeExternalRefreshInFlightRef = useRef(false);
+  const skipNextHomeLoadAfterLobbyRefreshRef = useRef(false);
   const lobbyNavigationRequestRef = useRef(0);
   const lobbyMutationInFlightRef = useRef(false);
   const skipNextInitialDataLoadRef = useRef(false);
@@ -1622,7 +1623,11 @@ export default function App() {
     }
   };
 
-  const loadHomeDashboard = useCallback(async () => {
+  const loadHomeDashboard = useCallback(async ({
+    refreshLobbyCollection = false
+  }: {
+    refreshLobbyCollection?: boolean
+  } = {}) => {
     if (!user) return;
 
     const requestId = homeDashboardRequestRef.current + 1;
@@ -1632,9 +1637,12 @@ export default function App() {
     setHomeMembershipLoading(true);
     setHomeMembershipError('');
 
-    const [dashboardResult, membershipResult] = await Promise.allSettled([
+    const [dashboardResult, membershipResult, lobbyCollectionResult] = await Promise.allSettled([
       fetchHomeDashboard(user.id, lobbies),
-      fetchHomeMembershipState()
+      fetchHomeMembershipState(),
+      refreshLobbyCollection
+        ? fetchUserLobbies(user.id)
+        : Promise.resolve<Lobby[] | null>(null)
     ]);
 
     if (homeDashboardRequestRef.current !== requestId) return;
@@ -1654,7 +1662,7 @@ export default function App() {
         !lobbies.some(lobby => lobby.id === item.lobby_id)
       ));
 
-      if (hasNewlyApprovedLobby) {
+      if (hasNewlyApprovedLobby && !refreshLobbyCollection) {
         try {
           const refreshedLobbies = await fetchUserLobbies(user.id);
           if (homeDashboardRequestRef.current === requestId) {
@@ -1667,6 +1675,18 @@ export default function App() {
     } else {
       console.error('membership dashboard load error:', membershipResult.reason);
       setHomeMembershipError(membershipResult.reason?.message || 'Stav členství se nepodařilo načíst.');
+    }
+
+    if (lobbyCollectionResult.status === 'fulfilled') {
+      if (lobbyCollectionResult.value) {
+        skipNextHomeLoadAfterLobbyRefreshRef.current = true;
+        setLobbies(lobbyCollectionResult.value);
+      }
+    } else {
+      console.error('lobby collection refresh error:', lobbyCollectionResult.reason);
+      setHomeDashboardError(currentError => (
+        currentError || 'Seznam lobby se nepodařilo obnovit.'
+      ));
     }
 
     if (homeDashboardRequestRef.current === requestId) {
@@ -1686,7 +1706,7 @@ export default function App() {
       visibilityState: document.visibilityState
     })) return;
 
-    await loadHomeDashboard();
+    await loadHomeDashboard({ refreshLobbyCollection: true });
   }, [
     activeLobbyId,
     homeDashboardLoading,
@@ -1701,7 +1721,7 @@ export default function App() {
     if (homeExternalRefreshInFlightRef.current) return;
 
     homeExternalRefreshInFlightRef.current = true;
-    void loadHomeDashboard().finally(() => {
+    void loadHomeDashboard({ refreshLobbyCollection: true }).finally(() => {
       homeExternalRefreshInFlightRef.current = false;
     });
   }, [loadHomeDashboard]);
@@ -1712,6 +1732,10 @@ export default function App() {
       homeDashboardRequestRef.current += 1;
       setHomeDashboardLoading(false);
       setHomeMembershipLoading(false);
+      return;
+    }
+    if (skipNextHomeLoadAfterLobbyRefreshRef.current) {
+      skipNextHomeLoadAfterLobbyRefreshRef.current = false;
       return;
     }
     void loadHomeDashboard();
