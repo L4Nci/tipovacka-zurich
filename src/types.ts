@@ -169,3 +169,91 @@ export type MembershipHomeItem = {
   pending_request_count: number;
   event_at: string;
 };
+
+export type ProfileStats = {
+  predictions_total: number;
+  evaluated_predictions: number;
+  exact_predictions: number;
+  match_points: number;
+  longterm_predictions: number;
+  longterm_points: number;
+  completed_tournaments: number;
+};
+
+export type CommunityProfile = {
+  visible: boolean;
+  is_self?: boolean;
+  is_public?: boolean;
+  scope?: 'global' | 'lobby';
+  profile?: {
+    username: string;
+    avatar_emoji?: string | null;
+    avatar_bg?: string | null;
+    bio?: string | null;
+  };
+  stats?: ProfileStats | null;
+};
+
+export type UserBadge = {
+  id?: string;
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  tier: 'bronze' | 'silver' | 'gold' | 'special';
+  context_type: 'global' | 'lobby' | 'tournament' | 'lobby_tournament';
+  context_id: string;
+  awarded_at: string;
+  featured_position?: number | null;
+};
+
+export type AchievementProgress = {
+  key: string;
+  name: string;
+  description: string;
+  current_value: number;
+  target_value: number;
+  completed_at?: string | null;
+};
+
+export type BadgeOverview = {
+  badges: UserBadge[];
+  progress: AchievementProgress[];
+};
+
+export type LobbyTournamentCatalogItem = {
+  tournament_id: string;
+  tournament_name: string;
+  sport_id: string;
+  relation_status: 'active' | 'archived' | null;
+  is_linked: boolean;
+  is_completed: boolean;
+  match_count: number;
+};
+
+export type ProductFeatureFlag = {
+  enabled: boolean;
+  payload: Record<string, unknown>;
+};
+
+export type ProductFeatureFlags = Record<string, ProductFeatureFlag>;
+
+export type AdminOperationsSummary = {
+  users: number;
+  profiles: number;
+  lobbies: number;
+  active_memberships: number;
+  registrations_7d: number;
+  registrations_30d: number;
+  active_tournaments: number;
+  predictions_24h: number;
+  predictions_7d: number;
+  pending_join_requests: number;
+  unresolved_matches: number;
+  matches_without_participants: number;
+  locked_without_result: number;
+  orphan_memberships: number;
+  orphan_predictions: number;
+  duplicate_memberships: number;
+  last_match_update: string | null;
+};
