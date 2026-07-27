@@ -2,6 +2,7 @@ import React, { Dispatch, FormEvent, SetStateAction } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Flame, LogOut, Pencil, X } from 'lucide-react';
 import { Player } from '../types.ts';
+import ProfileCommunityPanel from './ProfileCommunityPanel.tsx';
 
 const avatarEmojis = [
   '😀', '😎', '🤖', '👑', '🦊', '🐺', '🦁', '🚀', '⚽', '🏒',
@@ -48,6 +49,8 @@ type ProfileScreenProps = {
   onLogout: () => Promise<void>;
   setLang: Dispatch<SetStateAction<'cz' | 'en'>>;
   UserAvatar: UserAvatarComponent;
+  communityEnabled: boolean;
+  badgesEnabled: boolean;
 };
 
 export default function ProfileScreen({
@@ -74,7 +77,9 @@ export default function ProfileScreen({
   onSaveAvatar,
   onLogout,
   setLang,
-  UserAvatar
+  UserAvatar,
+  communityEnabled,
+  badgesEnabled
 }: ProfileScreenProps) {
   return (
     <motion.div
@@ -171,6 +176,18 @@ export default function ProfileScreen({
         )}
       </AnimatePresence>
 
+      <ProfileCommunityPanel
+        userId={user.id}
+        lang={lang}
+        communityEnabled={communityEnabled}
+        badgesEnabled={badgesEnabled}
+      />
+
+      {!communityEnabled && currentUserRank !== null && (
+        <>
+          <p className="px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
+            {lang === 'cz' ? 'Aktuální soutěž' : 'Current competition'}
+          </p>
       <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 transition-colors">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">{lang === 'cz' ? 'Historie (posledních 10)' : 'History (last 10)'}</h3>
         <div className="grid grid-cols-10 gap-1">
@@ -241,6 +258,8 @@ export default function ProfileScreen({
           </div>
         </div>
       </div>
+        </>
+      )}
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">

@@ -12,6 +12,7 @@ type AuthScreenProps = {
   password: string;
   pendingEmail: string;
   error: string;
+  invitePending?: boolean;
   onChange: (field: 'email' | 'username' | 'password', value: string) => void;
   onSubmit: (event: FormEvent) => Promise<void>;
   onToggleRegistering: () => void;
@@ -31,6 +32,7 @@ export default function AuthScreen({
   password,
   pendingEmail,
   error,
+  invitePending = false,
   onChange,
   onSubmit,
   onToggleRegistering,
@@ -232,6 +234,14 @@ export default function AuthScreen({
 
   return (
     <AuthShell branded>
+      {invitePending && (
+        <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 p-3 text-center">
+          <p className="text-xs font-black text-red-700">Máš pozvánku do lobby</p>
+          <p className="mt-1 text-[10px] font-medium leading-relaxed text-red-600">
+            Přihlas se nebo si vytvoř účet. Potom tě vrátíme k připojení.
+          </p>
+        </div>
+      )}
       {(authProviderConfig.google || authProviderConfig.apple) && (
         <div className="space-y-2">
           {authProviderConfig.google && (

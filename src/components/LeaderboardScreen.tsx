@@ -1,7 +1,8 @@
-import React, { Dispatch, SetStateAction } from 'react';
+import React, { Dispatch, SetStateAction, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, ChevronDown, ChevronUp, Trophy, Trophy as TrophyIcon, X } from 'lucide-react';
 import { Player, Team } from '../types.ts';
+import PlayerProfileDialog from './PlayerProfileDialog.tsx';
 
 type TeamFlagComponent = React.ComponentType<{
   code: string | null | undefined;
@@ -34,6 +35,8 @@ type LeaderboardScreenProps = {
   DeferredLeaderboardSkeleton: React.ComponentType;
   TeamFlag: TeamFlagComponent;
   UserAvatar: UserAvatarComponent;
+  lobbyId: string;
+  communityProfilesEnabled: boolean;
 };
 
 export default function LeaderboardScreen({
@@ -50,8 +53,12 @@ export default function LeaderboardScreen({
   setShowScoringInfo,
   DeferredLeaderboardSkeleton,
   TeamFlag,
-  UserAvatar
+  UserAvatar,
+  lobbyId,
+  communityProfilesEnabled
 }: LeaderboardScreenProps) {
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+
   return (
     <motion.div
       key="leaderboard"
@@ -161,7 +168,15 @@ export default function LeaderboardScreen({
                 className={`bg-white rounded-2xl border shadow-sm p-4 transition-colors ${p.id === user.id ? 'border-red-200 bg-red-50/40' : 'border-slate-100'}`}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                  <button
+                    type="button"
+                    disabled={!communityProfilesEnabled}
+                    onClick={() => setSelectedPlayerId(p.id)}
+                    className="flex min-w-0 items-center gap-3 text-left disabled:cursor-default"
+                    aria-label={communityProfilesEnabled
+                      ? (lang === 'cz' ? `Otevřít profil ${p.username}` : `Open ${p.username}'s profile`)
+                      : undefined}
+                  >
                     <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black shadow-sm ${rankTone}`}>
                       {i + 1}
                     </div>
@@ -202,7 +217,7 @@ export default function LeaderboardScreen({
                         )}
                       </div>
                     </div>
-                  </div>
+                  </button>
                   <div className="text-right shrink-0">
                     <p className="text-2xl font-black text-slate-900 leading-none">{p.total_points ?? 0}</p>
                     <p className="text-[9px] font-black uppercase text-slate-400 mt-1">{t.pts}</p>
@@ -242,6 +257,15 @@ export default function LeaderboardScreen({
             );
           })}
         </div>
+      )}
+      {communityProfilesEnabled && selectedPlayerId && (
+        <PlayerProfileDialog
+          userId={selectedPlayerId}
+          lobbyId={lobbyId}
+          lang={lang}
+          onClose={() => setSelectedPlayerId(null)}
+          UserAvatar={UserAvatar}
+        />
       )}
     </motion.div>
   );

@@ -2,6 +2,7 @@ import React, { Dispatch, SetStateAction, useState } from 'react';
 import { motion } from 'motion/react';
 import { ShieldCheck } from 'lucide-react';
 import { Match, Team } from '../types.ts';
+import AdminOperationsPanel from './AdminOperationsPanel.tsx';
 
 type StageFilter = {
   id: string;
@@ -29,6 +30,8 @@ type AdminScreenProps = {
   championMsg: string;
   championError: string;
   TeamFlag: TeamFlagComponent;
+  lang: 'cz' | 'en';
+  operationsEnabled: boolean;
 };
 
 const AdminMatchCard: React.FC<{
@@ -129,7 +132,9 @@ export default function AdminScreen({
   onSetTournamentWinner,
   championMsg,
   championError,
-  TeamFlag
+  TeamFlag,
+  lang,
+  operationsEnabled
 }: AdminScreenProps) {
   return (
     <motion.div
@@ -141,6 +146,8 @@ export default function AdminScreen({
       <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
         <ShieldCheck className="w-4 h-4" /> {t.adminControls}
       </h2>
+
+      {operationsEnabled && <AdminOperationsPanel lang={lang} />}
 
       <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-xl transition-colors">
         <button

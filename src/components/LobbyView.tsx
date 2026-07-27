@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check, LogOut, RotateCcw, UserMinus } from 'lucide-react';
+import { Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check, LogOut, RotateCcw, UserMinus, Share2 } from 'lucide-react';
 import { Lobby, LobbyMember, Player as AppUser, type HallOfFameEntry, type LobbyJoinRequest } from '../types';
 import {
   addTournamentToLobby,
@@ -11,7 +11,6 @@ import {
   resolveLobbyJoinRequest,
   restoreLobbyMember,
   setLobbyJoinPolicy,
-  updateLobbyDetails
 } from '../lib/db';
 import {
   canChangeJoinPolicy,
@@ -20,6 +19,16 @@ import {
   canRestoreLobbyMember,
   type CommunityViewerRole
 } from '../lib/membership';
+import { updateLobbyFieldSecure } from '../lib/productFeatures.ts';
+import { ConfirmDialog } from './ProductFeedback.tsx';
+import InviteShareDialog from './InviteShareDialog.tsx';
+import LobbyTournamentManager from './LobbyTournamentManager.tsx';
+import PlayerProfileDialog from './PlayerProfileDialog.tsx';
+
+type UserAvatarComponent = React.ComponentType<{
+  player?: Pick<AppUser, 'username' | 'avatar_emoji' | 'avatar_bg'> | null;
+  size?: 'sm' | 'md' | 'lg';
+}>;
 
 const rulesStartMarkers = [
   'Pravidla',
@@ -63,6 +72,10 @@ interface LobbyViewProps {
   onMembershipEnded?: (lobbyId: string) => void;
   onMembershipMutation?: () => Promise<void> | void;
   membersCount?: number;
+  communityProfilesEnabled: boolean;
+  shareEnabled: boolean;
+  tournamentManagementEnabled: boolean;
+  UserAvatar: UserAvatarComponent;
   tournamentStats?: Record<string, {
     total: number;
     scheduled: number;
@@ -87,18 +100,20 @@ export function LobbyView({
   onMembershipEnded,
   onMembershipMutation,
   membersCount,
+  communityProfilesEnabled,
+  shareEnabled,
+  tournamentManagementEnabled,
+  UserAvatar,
   tournamentStats = {}
 }: LobbyViewProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [addError, setAddError] = useState('');
   const [addSuccess, setAddSuccess] = useState('');
   
-  // Owner controls state
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [editNameValue, setEditNameValue] = useState(lobby.name);
-  const [editShortDescription, setEditShortDescription] = useState(lobby.short_description || '');
-  const [editLongDescription, setEditLongDescription] = useState(lobby.long_description || '');
-  const [isUpdatingName, setIsUpdatingName] = useState(false);
+  const [editingField, setEditingField] = useState<'name' | 'short_description' | 'long_description' | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [isUpdatingField, setIsUpdatingField] = useState(false);
+  const [fieldMessage, setFieldMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -114,6 +129,13 @@ export function LobbyView({
   const [membersLoading, setMembersLoading] = useState(true);
   const [membershipError, setMembershipError] = useState('');
   const [membershipActionId, setMembershipActionId] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<
+    | { kind: 'leave' }
+    | { kind: 'remove'; member: LobbyMember }
+    | null
+  >(null);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
   const canEditLobby = Boolean(lobby.is_owner || user.role === 'admin');
   const rulesText = getLobbyRulesText(lobby.long_description);
@@ -142,16 +164,11 @@ export function LobbyView({
   }, [loadCommunity]);
 
   const handleLeaveLobby = async () => {
-    if (!window.confirm(lang === 'cz'
-      ? 'Opravdu chceš opustit tuto lobby? Tvoje historické tipy a body zůstanou zachované.'
-      : 'Leave this lobby? Your historical predictions and points will remain.')) {
-      return;
-    }
-
     setMembershipActionId(user.id);
     setMembershipError('');
     try {
       await leaveLobby(lobby.id);
+      setPendingConfirmation(null);
       onMembershipEnded?.(lobby.id);
     } catch (err: any) {
       setMembershipError(err?.message || (lang === 'cz' ? 'Lobby se nepodařilo opustit.' : 'Could not leave the lobby.'));
@@ -161,16 +178,11 @@ export function LobbyView({
   };
 
   const handleRemoveMember = async (member: LobbyMember) => {
-    if (!window.confirm(lang === 'cz'
-      ? `Odebrat uživatele ${member.username}? Historické tipy a body zůstanou zachované.`
-      : `Remove ${member.username}? Historical predictions and points will remain.`)) {
-      return;
-    }
-
     setMembershipActionId(member.user_id);
     setMembershipError('');
     try {
       await removeLobbyMember(lobby.id, member.user_id);
+      setPendingConfirmation(null);
       const community = await loadCommunity();
       await onMembershipMutation?.();
       if (community) {
@@ -237,33 +249,37 @@ export function LobbyView({
     }
   };
 
-  const handleUpdateName = async () => {
-    if (!editNameValue.trim()) {
-      setIsEditingName(false);
-      return;
-    }
-    setIsUpdatingName(true);
+  const startFieldEdit = (
+    field: 'name' | 'short_description' | 'long_description',
+    value: string
+  ) => {
+    setEditingField(field);
+    setEditValue(value);
+    setFieldMessage(null);
+  };
+
+  const handleUpdateField = async () => {
+    if (!editingField) return;
+    setIsUpdatingField(true);
+    setFieldMessage(null);
     try {
-      await updateLobbyDetails(
-        user.id,
-        lobby.id,
-        editNameValue.trim(),
-        editShortDescription.trim(),
-        editLongDescription.trim()
-      );
-      setIsEditingName(false);
-      if (onRefresh) {
-        onRefresh({
-          id: lobby.id,
-          name: editNameValue.trim(),
-          short_description: editShortDescription.trim() || null,
-          long_description: editLongDescription.trim() || null
-        });
-      }
+      const saved = await updateLobbyFieldSecure(lobby.id, editingField, editValue);
+      const updates = {
+        [editingField]: saved.value
+      } as Partial<Lobby>;
+      onRefresh?.(updates);
+      setEditingField(null);
+      setFieldMessage({
+        tone: 'success',
+        text: lang === 'cz' ? 'Změna byla uložena.' : 'Change saved.'
+      });
     } catch (err: any) {
-      alert(err.message || "Failed to update lobby name");
+      setFieldMessage({
+        tone: 'error',
+        text: err?.message || (lang === 'cz' ? 'Změnu se nepodařilo uložit.' : 'Change could not be saved.')
+      });
     } finally {
-      setIsUpdatingName(false);
+      setIsUpdatingField(false);
     }
   };
 
@@ -273,7 +289,7 @@ export function LobbyView({
       await deleteLobby(lobby.id);
       if (onLobbyDeleted) onLobbyDeleted();
     } catch (err: any) {
-      alert(err.message || "Failed to delete lobby");
+      setMembershipError(err?.message || (lang === 'cz' ? 'Lobby se nepodařilo smazat.' : 'Lobby could not be deleted.'));
       setIsDeleting(false);
     }
   };
@@ -349,56 +365,75 @@ export function LobbyView({
             {lang === 'cz' ? 'Tvoje Lobby' : 'Your Lobby'}
           </p>
           
-          {isEditingName ? (
-            <div className="space-y-2 max-w-sm mt-1">
+          {editingField === 'name' ? (
+            <div className="mt-1 max-w-sm space-y-2">
               <input
                 type="text"
-                value={editNameValue}
-                onChange={e => setEditNameValue(e.target.value)}
+                value={editValue}
+                onChange={event => setEditValue(event.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-black text-slate-900 focus:outline-none focus:ring-1 focus:ring-red-600"
                 autoFocus
-              />
-              <input
-                type="text"
-                value={editShortDescription}
-                onChange={e => setEditShortDescription(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-600"
-                placeholder={lang === 'cz' ? 'O lobby' : 'About lobby'}
-                maxLength={120}
-              />
-              <textarea
-                value={editLongDescription}
-                onChange={e => setEditLongDescription(e.target.value)}
-                className="w-full min-h-[96px] bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-600 resize-y"
-                placeholder={lang === 'cz' ? 'Informace o skupině, komunikaci a domluvě...' : 'Group information, communication and notes...'}
+                maxLength={80}
               />
               <div className="flex items-center gap-2">
-                <button disabled={isUpdatingName} onClick={handleUpdateName} className="p-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors">
+                <button type="button" disabled={isUpdatingField} onClick={() => void handleUpdateField()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white disabled:opacity-50" aria-label={lang === 'cz' ? 'Uložit název lobby' : 'Save lobby name'}>
                   <Check className="w-4 h-4" />
                 </button>
                 <button
-                  disabled={isUpdatingName}
-                  onClick={() => {
-                    setIsEditingName(false);
-                    setEditNameValue(lobby.name);
-                    setEditShortDescription(lobby.short_description || '');
-                    setEditLongDescription(lobby.long_description || '');
-                  }}
-                  className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors"
+                  type="button"
+                  disabled={isUpdatingField}
+                  onClick={() => setEditingField(null)}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-500 disabled:opacity-50"
+                  aria-label={lang === 'cz' ? 'Zrušit úpravu názvu' : 'Cancel name edit'}
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
           ) : (
-            <>
+            <div className="flex items-start gap-2">
               <h1 className="text-3xl font-black text-slate-900 uppercase break-words w-full">
                 {lobby.name}
               </h1>
-              {lobby.short_description && (
-                <p className="text-sm text-slate-500 font-semibold mt-2">{lobby.short_description}</p>
+              {canEditLobby && (
+                <button type="button" onClick={() => startFieldEdit('name', lobby.name)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500" aria-label={lang === 'cz' ? 'Upravit název lobby' : 'Edit lobby name'}>
+                  <Pencil className="h-4 w-4" />
+                </button>
               )}
-            </>
+            </div>
+          )}
+
+          {editingField === 'short_description' ? (
+            <div className="mt-2 max-w-sm space-y-2">
+              <input
+                type="text"
+                value={editValue}
+                onChange={event => setEditValue(event.target.value)}
+                maxLength={120}
+                autoFocus
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-red-600"
+                placeholder={lang === 'cz' ? 'Krátký popis lobby' : 'Short lobby description'}
+              />
+              <div className="flex gap-2">
+                <button type="button" disabled={isUpdatingField} onClick={() => void handleUpdateField()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white disabled:opacity-50" aria-label={lang === 'cz' ? 'Uložit krátký popis' : 'Save short description'}><Check className="h-4 w-4" /></button>
+                <button type="button" disabled={isUpdatingField} onClick={() => setEditingField(null)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-500" aria-label={lang === 'cz' ? 'Zrušit úpravu popisu' : 'Cancel description edit'}><X className="h-4 w-4" /></button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-start gap-2">
+              <p className={`min-w-0 flex-1 text-sm font-semibold ${lobby.short_description ? 'text-slate-500' : 'text-slate-300 italic'}`}>
+                {lobby.short_description || (lang === 'cz' ? 'Bez krátkého popisu' : 'No short description')}
+              </p>
+              {canEditLobby && (
+                <button type="button" onClick={() => startFieldEdit('short_description', lobby.short_description || '')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500" aria-label={lang === 'cz' ? 'Upravit krátký popis' : 'Edit short description'}><Pencil className="h-3.5 w-3.5" /></button>
+              )}
+            </div>
+          )}
+
+          {fieldMessage && (
+            <p role={fieldMessage.tone === 'error' ? 'alert' : 'status'} className={`mt-2 text-[10px] font-bold ${fieldMessage.tone === 'error' ? 'text-red-600' : 'text-emerald-600'}`}>
+              {fieldMessage.text}
+            </p>
           )}
           
           <div className="flex flex-wrap items-center gap-3 mt-3">
@@ -415,20 +450,13 @@ export function LobbyView({
 
         {/* OWNER CONTROLS */}
         {canEditLobby && (
-          <div className="flex sm:flex-col gap-2 shrink-0">
-            <button 
-              onClick={() => {
-                setEditNameValue(lobby.name);
-                setEditShortDescription(lobby.short_description || '');
-                setEditLongDescription(lobby.long_description || '');
-                setIsEditingName(true);
-              }}
-              className="px-3 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
-            >
-              <Pencil className="w-3 h-3" />
-              {lang === 'cz' ? 'Upravit' : 'Edit'}
-            </button>
-            
+          <div className="flex shrink-0 gap-2 sm:flex-col">
+            {shareEnabled && (
+              <button type="button" onClick={() => setShowInviteDialog(true)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 text-[10px] font-black uppercase text-white">
+                <Share2 className="h-4 w-4" />
+                {lang === 'cz' ? 'Pozvat' : 'Invite'}
+              </button>
+            )}
             {showDeleteConfirm ? (
                <div className="flex flex-col gap-2 bg-red-50 p-2 rounded-xl border border-red-100 max-w-[200px]">
                  <span className="text-[9px] font-bold text-red-600 text-center leading-tight">
@@ -473,7 +501,7 @@ export function LobbyView({
           )) && (
             <button
               type="button"
-              onClick={handleLeaveLobby}
+              onClick={() => setPendingConfirmation({ kind: 'leave' })}
               disabled={membershipActionId === user.id}
               className="inline-flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-[10px] font-black uppercase text-red-600 hover:bg-red-100 disabled:cursor-wait disabled:opacity-60"
             >
@@ -607,17 +635,25 @@ export function LobbyView({
                   >
                     {member.avatar_emoji || '😀'}
                   </div>
-                  <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    disabled={!communityProfilesEnabled}
+                    onClick={() => setSelectedPlayerId(member.user_id)}
+                    className="min-w-0 flex-1 text-left disabled:cursor-default"
+                    aria-label={communityProfilesEnabled
+                      ? (lang === 'cz' ? `Otevřít profil ${member.username}` : `Open ${member.username}'s profile`)
+                      : undefined}
+                  >
                     <p className="truncate text-sm font-black text-slate-800">{member.username}</p>
                     <p className="text-[9px] font-bold uppercase text-slate-400">
                       {roleLabel} · {statusLabel}
                     </p>
-                  </div>
+                  </button>
 
                   {canRemoveLobbyMember(viewerRole, user.id, member) && (
                     <button
                       type="button"
-                      onClick={() => void handleRemoveMember(member)}
+                      onClick={() => setPendingConfirmation({ kind: 'remove', member })}
                       disabled={membershipActionId === member.user_id}
                       title={lang === 'cz' ? 'Odebrat člena' : 'Remove member'}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-red-500 shadow-sm hover:bg-red-50 disabled:cursor-wait disabled:opacity-50"
@@ -724,7 +760,7 @@ export function LobbyView({
             </div>
 
             {/* ACTION: ADD TOURNAMENT TO LOBBY */}
-            {canEditLobby && availableToAdd.length > 0 && (
+            {canEditLobby && !tournamentManagementEnabled && availableToAdd.length > 0 && (
               <div className="mt-6 pt-4 border-t border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                   {lang === 'cz' ? 'Správa turnajů (Owner)' : 'Manage Tournaments (Owner)'}
@@ -748,7 +784,15 @@ export function LobbyView({
             )}
           </div>
 
-          {rulesText && (
+          {canEditLobby && tournamentManagementEnabled && (
+            <LobbyTournamentManager
+              lobbyId={lobby.id}
+              lang={lang}
+              onChanged={() => onRefresh?.()}
+            />
+          )}
+
+          {(rulesText || canEditLobby) && (
             <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
               <button
                 type="button"
@@ -766,13 +810,36 @@ export function LobbyView({
                 </span>
                 <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform md:hidden ${isRulesExpanded ? 'rotate-90' : ''}`} />
               </button>
-              <div className={`${isRulesExpanded ? 'mt-4 block' : 'hidden'} md:mt-4 md:block`}>
-                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
-                  <p className="text-xs font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
-                    {rulesText}
-                  </p>
+              {canEditLobby && editingField !== 'long_description' && (
+                <button type="button" onClick={() => startFieldEdit('long_description', lobby.long_description || '')} className="mt-3 flex min-h-10 items-center gap-2 rounded-xl bg-slate-50 px-3 text-[10px] font-black uppercase text-slate-600">
+                  <Pencil className="h-3.5 w-3.5" />
+                  {lang === 'cz' ? 'Upravit pravidla' : 'Edit rules'}
+                </button>
+              )}
+              {editingField === 'long_description' ? (
+                <div className="mt-4 space-y-2">
+                  <textarea
+                    value={editValue}
+                    onChange={event => setEditValue(event.target.value)}
+                    rows={8}
+                    maxLength={4000}
+                    autoFocus
+                    className="w-full resize-y rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-700 outline-none focus:ring-1 focus:ring-red-600"
+                  />
+                  <div className="flex gap-2">
+                    <button type="button" disabled={isUpdatingField} onClick={() => void handleUpdateField()} className="flex min-h-11 items-center gap-2 rounded-xl bg-slate-900 px-4 text-[10px] font-black uppercase text-white disabled:opacity-50"><Check className="h-4 w-4" /> {lang === 'cz' ? 'Uložit' : 'Save'}</button>
+                    <button type="button" disabled={isUpdatingField} onClick={() => setEditingField(null)} className="flex min-h-11 items-center gap-2 rounded-xl bg-slate-100 px-4 text-[10px] font-black uppercase text-slate-600"><X className="h-4 w-4" /> {lang === 'cz' ? 'Zrušit' : 'Cancel'}</button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className={`${isRulesExpanded ? 'mt-4 block' : 'hidden'} md:mt-4 md:block`}>
+                  <div className="rounded-2xl bg-slate-50 border border-slate-100 p-4">
+                    <p className="text-xs font-medium text-slate-600 leading-relaxed whitespace-pre-wrap">
+                      {rulesText || (lang === 'cz' ? 'Pravidla zatím nejsou vyplněná.' : 'Rules have not been added yet.')}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -861,7 +928,16 @@ export function LobbyView({
                      'bg-slate-100 text-slate-500';
 
                    return (
-                     <div key={entry.player_id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 border border-slate-100 p-3">
+                     <button
+                       key={entry.player_id}
+                       type="button"
+                       disabled={!communityProfilesEnabled}
+                       onClick={() => setSelectedPlayerId(entry.player_id)}
+                       className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-left disabled:cursor-default"
+                       aria-label={communityProfilesEnabled
+                         ? (lang === 'cz' ? `Otevřít profil ${entry.username}` : `Open ${entry.username}'s profile`)
+                         : undefined}
+                     >
                        <div className="flex items-center gap-3 min-w-0">
                          <div className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-[10px] font-black ${rankTone}`}>
                            {index + 1}
@@ -883,7 +959,7 @@ export function LobbyView({
                          <p className="text-lg font-black text-slate-900 leading-none">{entry.total_points}</p>
                          <p className="text-[8px] font-black uppercase text-slate-400">{lang === 'cz' ? 'bodů' : 'pts'}</p>
                        </div>
-                     </div>
+                     </button>
                    );
                  })}
                </div>
@@ -901,6 +977,53 @@ export function LobbyView({
            </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={Boolean(pendingConfirmation)}
+        title={pendingConfirmation?.kind === 'remove'
+          ? (lang === 'cz' ? 'Odebrat člena?' : 'Remove member?')
+          : (lang === 'cz' ? 'Opustit lobby?' : 'Leave lobby?')}
+        description={pendingConfirmation?.kind === 'remove'
+          ? (lang === 'cz'
+            ? `${pendingConfirmation.member.username} ztratí přístup do lobby. Historické tipy a body zůstanou zachované.`
+            : `${pendingConfirmation.member.username} will lose lobby access. Historical predictions and points remain.`)
+          : (lang === 'cz'
+            ? 'Ztratíš přístup do lobby. Tvoje historické tipy a body zůstanou zachované.'
+            : 'You will lose lobby access. Your historical predictions and points remain.')}
+        confirmLabel={pendingConfirmation?.kind === 'remove'
+          ? (lang === 'cz' ? 'Odebrat' : 'Remove')
+          : (lang === 'cz' ? 'Opustit' : 'Leave')}
+        cancelLabel={lang === 'cz' ? 'Zrušit' : 'Cancel'}
+        busy={membershipActionId === user.id || (
+          pendingConfirmation?.kind === 'remove'
+          && membershipActionId === pendingConfirmation.member.user_id
+        )}
+        destructive
+        onClose={() => setPendingConfirmation(null)}
+        onConfirm={() => {
+          if (pendingConfirmation?.kind === 'remove') {
+            void handleRemoveMember(pendingConfirmation.member);
+          } else if (pendingConfirmation?.kind === 'leave') {
+            void handleLeaveLobby();
+          }
+        }}
+      />
+      {showInviteDialog && (
+        <InviteShareDialog
+          lobbyName={lobby.name}
+          joinCode={lobby.join_code}
+          lang={lang}
+          onClose={() => setShowInviteDialog(false)}
+        />
+      )}
+      {communityProfilesEnabled && selectedPlayerId && (
+        <PlayerProfileDialog
+          userId={selectedPlayerId}
+          lobbyId={lobby.id}
+          lang={lang}
+          onClose={() => setSelectedPlayerId(null)}
+          UserAvatar={UserAvatar}
+        />
+      )}
     </motion.div>
   );
 }

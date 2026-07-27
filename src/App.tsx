@@ -18,7 +18,8 @@ import {
   Prediction,
   Lobby,
   type AuthStatus,
-  type MembershipHomeItem
+  type MembershipHomeItem,
+  type ProductFeatureFlags
 } from './types.ts';
 import { supabase } from './lib/supabase.ts';
 import { isDrawPrediction, isFootballKnockoutStage } from './lib/matchRules.ts';
@@ -67,6 +68,8 @@ import {
   runLobbyNavigationTransition,
   type LobbyNavigationAction
 } from './lib/lobbyNavigation.ts';
+import { fetchProductFeatureFlags, isProductFeatureEnabled } from './lib/productFeatures.ts';
+import { getInviteCodeFromLocation } from './lib/sharing.ts';
 
 const LazyAdminScreen = lazy(() => import('./components/AdminScreen.tsx'));
 const LazyLeaderboardScreen = lazy(() => import('./components/LeaderboardScreen.tsx'));
@@ -1043,10 +1046,12 @@ export default function App() {
   const [homeMembershipItems, setHomeMembershipItems] = useState<MembershipHomeItem[]>([]);
   const [homeMembershipLoading, setHomeMembershipLoading] = useState(false);
   const [homeMembershipError, setHomeMembershipError] = useState('');
+  const [productFeatureFlags, setProductFeatureFlags] = useState<ProductFeatureFlags>({});
   const homeDashboardRequestRef = useRef(0);
   const homeExternalRefreshInFlightRef = useRef(false);
   const skipNextHomeLoadAfterLobbyRefreshRef = useRef(false);
   const lobbyNavigationRequestRef = useRef(0);
+  const lobbyMetadataRequestRef = useRef(0);
   const lobbyMutationInFlightRef = useRef(false);
   const skipNextInitialDataLoadRef = useRef(false);
   const [newLobbyName, setNewLobbyName] = useState("");
@@ -1055,7 +1060,7 @@ export default function App() {
   const [newLobbyTournament, setNewLobbyTournament] = useState("fifa-world-cup-2026");
   const [newLobbyJoinPolicy, setNewLobbyJoinPolicy] = useState<'open' | 'approval_required'>('open');
   const [joinCodeInput, setJoinCodeInput] = useState(() => {
-    return new URLSearchParams(window.location.search).get("join") || "";
+    return getInviteCodeFromLocation(window.location.pathname, window.location.search);
   });
 
   const activeLobby = lobbies.find(l => l.id === activeLobbyId);
@@ -1132,7 +1137,7 @@ export default function App() {
   }, [authStatus, activeTournamentId, teams]);
 
   const [lobbyFormActive, setLobbyFormActive] = useState<AddLobbyMode>(() => {
-    if (new URLSearchParams(window.location.search).get("join")) return 'join';
+    if (getInviteCodeFromLocation(window.location.pathname, window.location.search)) return 'join';
     return 'none';
   });
   const [lobbyError, setLobbyError] = useState("");
@@ -1168,6 +1173,29 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('lang', lang);
   }, [lang]);
+
+  useEffect(() => {
+    let current = true;
+    if (authStatus !== 'authenticated') {
+      setProductFeatureFlags({});
+      return () => {
+        current = false;
+      };
+    }
+
+    void fetchProductFeatureFlags()
+      .then(flags => {
+        if (current) setProductFeatureFlags(flags);
+      })
+      .catch(error => {
+        console.warn('Product feature flags are unavailable; optional features stay disabled.', error);
+        if (current) setProductFeatureFlags({});
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [authStatus]);
 
   useEffect(() => {
     if (activeLobbyId) {
@@ -1352,6 +1380,7 @@ export default function App() {
     setLobbies([]);
     setHomeDashboardSummaries([]);
     setHomeMembershipItems([]);
+    setProductFeatureFlags({});
     setHomeDashboardError('');
     setHomeMembershipError('');
     setHomeDashboardLoading(false);
@@ -1623,6 +1652,14 @@ export default function App() {
     }
   };
 
+  const refreshLobbyMetadata = useCallback(async () => {
+    if (!user) return;
+    const requestId = ++lobbyMetadataRequestRef.current;
+    const nextLobbies = await fetchUserLobbies(user.id);
+    if (requestId !== lobbyMetadataRequestRef.current) return;
+    setLobbies(nextLobbies);
+  }, [user]);
+
   const loadHomeDashboard = useCallback(async ({
     refreshLobbyCollection = false
   }: {
@@ -1850,6 +1887,12 @@ export default function App() {
     window.scrollTo({ top: 0 });
   };
 
+  const clearInviteAddress = () => {
+    if (getInviteCodeFromLocation(window.location.pathname, window.location.search)) {
+      window.history.replaceState({}, '', '/');
+    }
+  };
+
   useEffect(() => {
     if (loading || entryOrigin !== 'normal-tournament-navigation' || !activeTournamentId) return;
     if (tournamentStats[activeTournamentId]?.isCompleted) {
@@ -1935,6 +1978,7 @@ export default function App() {
       } else {
         setLobbySuccess(`Úspěšně ses připojil k lobby "${result.hydratedLobby.name}"!`);
         setJoinCodeInput('');
+        clearInviteAddress();
       }
       window.scrollTo({ top: 0 });
       return result.hydratedLobby;
@@ -1945,6 +1989,7 @@ export default function App() {
         setPendingLobbyNavigation(null);
         setLobbyFormActive('none');
         setJoinCodeInput('');
+        clearInviteAddress();
         setLobbySuccess(`Žádost o vstup do lobby "${navigationError.lobbyName}" čeká na schválení.`);
         setHomeMembershipLoading(true);
         void loadHomeDashboard({ refreshLobbyCollection: true });
@@ -2480,6 +2525,7 @@ export default function App() {
         password={loginData.password}
         pendingEmail={pendingConfirmationEmail}
         error={error}
+        invitePending={Boolean(joinCodeInput)}
         onChange={(field, value) => setLoginData(previous => ({ ...previous, [field]: value }))}
         onSubmit={handleLogin}
         onToggleRegistering={() => {
@@ -2582,6 +2628,8 @@ export default function App() {
                 onLogout={handleLogout}
                 setLang={setLang}
                 UserAvatar={UserAvatar}
+                communityEnabled={isProductFeatureEnabled(productFeatureFlags, 'public_profiles_enabled')}
+                badgesEnabled={isProductFeatureEnabled(productFeatureFlags, 'badges_enabled')}
               />
             </Suspense>
           </LazyScreenErrorBoundary>
@@ -2876,18 +2924,23 @@ export default function App() {
                   if (updatedLobby) {
                     updateLocalLobby(activeLobby.id, updatedLobby);
                   } else {
-                    fetchAll();
+                    void refreshLobbyMetadata();
                   }
                 }}
                 onLobbyDeleted={() => {
+                  setLobbies(previous => previous.filter(lobby => lobby.id !== activeLobby.id));
+                  setHomeDashboardSummaries(previous => previous.filter(summary => summary.lobby_id !== activeLobby.id));
                   setActiveLobbyId(null);
                   setActiveTournamentId(null);
-                  fetchAll();
                 }}
                 onMembershipEnded={handleMembershipEnded}
                 onMembershipMutation={refreshHomeAfterMembershipMutation}
                 membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
                 tournamentStats={tournamentStats}
+                communityProfilesEnabled={isProductFeatureEnabled(productFeatureFlags, 'public_profiles_enabled')}
+                shareEnabled={isProductFeatureEnabled(productFeatureFlags, 'share_cards_enabled')}
+                tournamentManagementEnabled={isProductFeatureEnabled(productFeatureFlags, 'tournament_management_enabled')}
+                UserAvatar={UserAvatar}
               />
             </Suspense>
           </LazyScreenErrorBoundary>
@@ -2992,6 +3045,8 @@ export default function App() {
                   DeferredLeaderboardSkeleton={DeferredLeaderboardSkeleton}
                   TeamFlag={TeamFlag}
                   UserAvatar={UserAvatar}
+                  lobbyId={activeLobbyId || ''}
+                  communityProfilesEnabled={isProductFeatureEnabled(productFeatureFlags, 'public_profiles_enabled')}
                 />
               </Suspense>
             </LazyScreenErrorBoundary>
@@ -3028,6 +3083,8 @@ export default function App() {
                   championMsg={championMsg}
                   championError={championError}
                   TeamFlag={TeamFlag}
+                  lang={lang}
+                  operationsEnabled={isProductFeatureEnabled(productFeatureFlags, 'admin_operations_enabled')}
                 />
               </Suspense>
             </LazyScreenErrorBoundary>
