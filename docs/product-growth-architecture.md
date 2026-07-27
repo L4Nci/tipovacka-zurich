@@ -14,6 +14,35 @@ membership Phase 014. It does not replace `AGENTS.md`, `PROJECT_RULES.md`,
 
 Implemented does not imply deployed or enabled.
 
+## Production status (2026-07-27)
+
+The Product Sprint source was merged in PR #13 and deployed to Netlify.
+Migrations `015` through `019` were applied individually to the production
+Supabase project and verified against the pre-rollout sports and membership
+baseline.
+
+| Workstream | Deployed | Enabled | Acceptance state |
+| --- | --- | --- | --- |
+| Community profiles | Yes | Yes | Production acceptance passed; QA profile was returned to private |
+| Achievements and badges | Yes | Yes | QA-only awards verified; global backfill not run |
+| Invite links, QR and share cards | Yes | Yes | Deep link, secure join, QR and copy fallback passed |
+| Tournament management | Yes | Yes | Authorization and relation archive/restore passed; a second supported tournament was unavailable |
+| Entitlements | Yes | No active enforcement | Prepared only; zero active subscriptions and no free feature gates |
+| Admin operations | Yes | Yes | Platform-admin aggregate passed; player access remained denied |
+| Referral attribution | Foundation only | No | Deferred |
+| Maintenance banner | Foundation only | No | Deferred |
+
+The final production integrity snapshot remained at 104 matches, 1,032 match
+predictions, 1,667 match-prediction points, 10 long-term predictions, 30
+long-term points, 12 memberships and 1,697 Hall of Fame points. Orphan and
+duplicate membership/request checks returned zero.
+
+The exact idempotent `019_admin_operations_foundation.sql` SQL was submitted
+twice during the controlled rollout, producing two migration-ledger entries
+with the same name. `CREATE IF NOT EXISTS`, `CREATE OR REPLACE` and
+`ON CONFLICT DO NOTHING` kept schema and seed data singular; no ledger rewrite
+or destructive cleanup was attempted.
+
 ## Domain boundaries
 
 ### Community profiles
@@ -120,7 +149,8 @@ Flags hide incomplete UX but do not replace RLS or RPC authorization.
 
 ## Rollout order
 
-Apply exact files only; do not use a broad `supabase db push`.
+The production rollout completed in this order. Future environments should
+still apply exact files only and must not use a broad `supabase db push`.
 
 1. Snapshot production counts and invariants.
 2. Apply `015`; verify profile defaults, column grants and profile RPC privacy.
