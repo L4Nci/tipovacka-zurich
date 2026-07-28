@@ -286,7 +286,7 @@ export default function AuthScreen({
         )}
         {(localError || error) && <AuthError message={localError || error} />}
         <button type="submit" disabled={isBusy} className="min-h-12 w-full rounded-2xl bg-red-600 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-red-100 disabled:cursor-not-allowed disabled:opacity-60">
-          {isBusy ? (registering ? 'Registruji...' : 'Ověřuji...') : registering ? 'Registrovat se' : 'Přihlásit se'}
+          {isBusy ? (registering ? 'Vytvářím účet…' : 'Přihlašuji…') : registering ? 'Vytvořit účet' : 'Přihlásit se'}
         </button>
         {!registering && (
           <button type="button" onClick={() => setShowForgotPassword(true)} className="w-full text-xs font-bold text-slate-500">
@@ -303,7 +303,7 @@ export default function AuthScreen({
           }}
           className="w-full text-xs font-black uppercase tracking-wide text-red-600"
         >
-          {registering ? 'Máš účet? Přihlas se' : 'Nemáš účet? Zaregistrovat se'}
+          {registering ? 'Máš účet? Přihlas se' : 'Nemáš účet? Vytvořit účet'}
         </button>
       </form>
     </AuthShell>
@@ -320,7 +320,7 @@ function AuthShell({ children, branded = false }: { children: ReactNode; branded
               <Trophy className="h-9 w-9 text-white" />
             </div>
             <h1 className="text-2xl font-black uppercase italic leading-none tracking-tighter text-slate-900">Fan Tipovačka</h1>
-            <p className="mt-1 text-[9px] font-bold uppercase tracking-[0.2em] text-red-600">Unofficial fan predictor</p>
+            <p className="mt-2 text-xs font-bold text-red-600">Tipuj zápasy. Poraz kamarády.</p>
           </div>
         )}
         {children}

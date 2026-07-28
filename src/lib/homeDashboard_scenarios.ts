@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {
   classifyHomeDashboardSummary,
+  formatTipsterCount,
   getAttentionHomeDashboardSummaries,
   getLobbyCompetitionStatus,
+  getPrimaryHomeDashboardSummaryForLobby,
   isUntippedMatchForDisplay,
   summarizeHomeDashboardContext,
   type HomeDashboardContextInput,
@@ -67,6 +69,20 @@ const completed = summarizeHomeDashboardContext(
 );
 assert.equal(completed.is_completed, true);
 assert.equal(classifyHomeDashboardSummary(completed), 'completed');
+assert.equal(classifyHomeDashboardSummary({
+  ...actionable,
+  actionable_match_count: 0,
+  next_actionable_lock_time: null,
+  next_missing_lock_time: null,
+  all_known_unlocked_predicted: false,
+  requires_owner_attention: false,
+  schedule_state: 'ready'
+}), 'ready');
+assert.equal(formatTipsterCount(1, 'cz'), '1 tipér');
+assert.equal(formatTipsterCount(2, 'cz'), '2 tipéři');
+assert.equal(formatTipsterCount(4, 'cz'), '4 tipéři');
+assert.equal(formatTipsterCount(5, 'cz'), '5 tipérů');
+assert.equal(formatTipsterCount(11, 'cz'), '11 tipérů');
 assert.deepEqual(
   getLobbyCompetitionStatus(
     context.lobby_id,
@@ -87,6 +103,19 @@ assert.deepEqual(
   getAttentionHomeDashboardSummaries([actionable, sameTournamentOtherLobby]).map(item => item.lobby_id),
   ['lobby-pub', 'lobby-friends']
 );
+assert.equal(
+  getPrimaryHomeDashboardSummaryForLobby('lobby-friends', [completed, actionable])?.tournament_id,
+  actionable.tournament_id
+);
+assert.equal(
+  getPrimaryHomeDashboardSummaryForLobby('lobby-pub', [actionable, sameTournamentOtherLobby])?.lobby_id,
+  'lobby-pub'
+);
+assert.equal(
+  getPrimaryHomeDashboardSummaryForLobby('lobby-friends', [completed])?.schedule_state,
+  'completed'
+);
+assert.equal(getPrimaryHomeDashboardSummaryForLobby('unknown-lobby', [actionable]), null);
 
 assert.equal(isUntippedMatchForDisplay({
   status: 'scheduled',

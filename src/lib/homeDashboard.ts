@@ -67,6 +67,14 @@ export type HomeDashboardCardState =
   | 'completed'
   | 'inactive';
 
+export const formatTipsterCount = (count: number, lang: 'cz' | 'en') => {
+  const safeCount = Math.max(0, Math.trunc(count));
+  if (lang === 'en') return `${safeCount} ${safeCount === 1 ? 'tipster' : 'tipsters'}`;
+  if (safeCount === 1) return '1 tipér';
+  if (safeCount >= 2 && safeCount <= 4) return `${safeCount} tipéři`;
+  return `${safeCount} tipérů`;
+};
+
 export const isKnownParticipantId = (participantId: string | null | undefined) => {
   const normalized = String(participantId || '').trim().toLowerCase();
   return normalized.length > 0 && !/(^|-)tba($|-)/.test(normalized);
@@ -184,6 +192,23 @@ export const getAttentionHomeDashboardSummaries = (summaries: HomeDashboardSumma
         a.lobby_id.localeCompare(b.lobby_id);
     })
 );
+
+export const getPrimaryHomeDashboardSummaryForLobby = (
+  lobbyId: string,
+  summaries: HomeDashboardSummary[]
+) => {
+  const lobbySummaries = summaries.filter(summary => summary.lobby_id === lobbyId);
+  const activeSummary = sortHomeDashboardSummaries(lobbySummaries)[0];
+  if (activeSummary) return activeSummary;
+
+  return lobbySummaries
+    .filter(summary => summary.is_completed || summary.schedule_state === 'completed')
+    .slice()
+    .sort((a, b) => (
+      a.tournament_name.localeCompare(b.tournament_name) ||
+      a.tournament_id.localeCompare(b.tournament_id)
+    ))[0] || null;
+};
 
 export const sortHomeDashboardSummaries = (summaries: HomeDashboardSummary[]) => {
   const priority: Record<HomeDashboardCardState, number> = {

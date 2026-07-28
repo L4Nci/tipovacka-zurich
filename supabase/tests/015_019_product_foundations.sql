@@ -143,6 +143,39 @@ VALUES
     'active'
   );
 
+-- A completed tournament linked to a newly created lobby is not participation.
+INSERT INTO public.lobbies (
+  id,
+  name,
+  owner_id,
+  tournament_id,
+  join_code,
+  join_policy,
+  visibility
+)
+VALUES (
+  'product-empty-completed-lobby',
+  'Product Empty Completed Lobby',
+  '00000000-0000-4000-8000-000000000801',
+  'product-test-tournament',
+  'PRODUCTEMPTYCODE',
+  'open',
+  'private'
+);
+
+INSERT INTO public.lobby_tournaments (lobby_id, tournament_id, status)
+VALUES ('product-empty-completed-lobby', 'product-test-tournament', 'active');
+
+INSERT INTO public.lobby_members (
+  lobby_id, user_id, role, membership_status
+)
+VALUES (
+  'product-empty-completed-lobby',
+  '00000000-0000-4000-8000-000000000801',
+  'member',
+  'active'
+);
+
 INSERT INTO public.predictions (
   user_id,
   lobby_id,
@@ -264,6 +297,27 @@ SELECT set_config(
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-000000000801', true);
 SELECT public.reconcile_my_achievements();
 SELECT public.reconcile_my_achievements();
+
+DO $$
+DECLARE
+  reconciliation jsonb := public.reconcile_my_achievements();
+  badge_overview jsonb := public.get_user_badges(
+    '00000000-0000-4000-8000-000000000801'
+  );
+BEGIN
+  IF (reconciliation->>'completed_tournaments')::integer <> 1 THEN
+    RAISE EXCEPTION 'A linked completed tournament without predictions counted as participation.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(badge_overview->'badges') AS badge
+    WHERE badge->>'context_id' = 'product-empty-completed-lobby:product-test-tournament'
+  ) THEN
+    RAISE EXCEPTION 'A badge was awarded for a completed tournament without participation.';
+  END IF;
+END;
+$$;
 
 DO $$
 DECLARE

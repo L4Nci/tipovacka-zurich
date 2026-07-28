@@ -1,0 +1,214 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Check, Minus, Plus, Trophy } from 'lucide-react';
+import {
+  fetchOfficialEventDetail,
+  fetchOfficialEventLeaderboard,
+  saveOfficialEventPrediction
+} from '../lib/officialEvents.ts';
+import { getFirstPredictableOfficialEventMatch } from '../lib/officialEventsState.ts';
+import type {
+  OfficialEventDetail,
+  OfficialEventLeaderboard,
+  OfficialEventMatch
+} from '../types.ts';
+
+type OfficialEventViewProps = {
+  eventId: string;
+  onBack: () => void;
+  onCreateLobby: () => void;
+  onFirstPredictionSaved: () => Promise<void>;
+};
+
+export default function OfficialEventView({
+  eventId,
+  onBack,
+  onCreateLobby,
+  onFirstPredictionSaved
+}: OfficialEventViewProps) {
+  const [detail, setDetail] = useState<OfficialEventDetail | null>(null);
+  const [leaderboard, setLeaderboard] = useState<OfficialEventLeaderboard | null>(null);
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [scores, setScores] = useState<Record<string, { home: number; away: number }>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [savedMatchId, setSavedMatchId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [nextDetail, nextLeaderboard] = await Promise.all([
+        fetchOfficialEventDetail(eventId),
+        fetchOfficialEventLeaderboard(eventId)
+      ]);
+      setDetail(nextDetail);
+      setLeaderboard(nextLeaderboard);
+      if (nextDetail) {
+        const first = getFirstPredictableOfficialEventMatch(nextDetail.matches);
+        setSelectedMatchId(current => current || first?.id || nextDetail.matches[0]?.id || null);
+        setScores(Object.fromEntries(nextDetail.matches.map(match => [
+          match.id,
+          {
+            home: match.predicted_home_score ?? 0,
+            away: match.predicted_away_score ?? 0
+          }
+        ])));
+      }
+    } catch (loadError: any) {
+      setError(loadError?.message || 'Event se nepodařilo načíst.');
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const selectedMatch = useMemo(
+    () => detail?.matches.find(match => match.id === selectedMatchId) || null,
+    [detail, selectedMatchId]
+  );
+
+  const updateScore = (match: OfficialEventMatch, side: 'home' | 'away', delta: number) => {
+    if (!match.can_predict || saving) return;
+    setScores(previous => {
+      const current = previous[match.id] || { home: 0, away: 0 };
+      return {
+        ...previous,
+        [match.id]: {
+          ...current,
+          [side]: Math.max(0, current[side] + delta)
+        }
+      };
+    });
+  };
+
+  const save = async () => {
+    if (!selectedMatch?.can_predict) return;
+    const score = scores[selectedMatch.id] || { home: 0, away: 0 };
+    setSaving(true);
+    setError('');
+    try {
+      await saveOfficialEventPrediction({
+        eventId,
+        matchId: selectedMatch.id,
+        homeScore: score.home,
+        awayScore: score.away
+      });
+      try {
+        await onFirstPredictionSaved();
+      } catch (onboardingError) {
+        console.warn('Prediction saved but onboarding completion could not be recorded.', onboardingError);
+      }
+      setSavedMatchId(selectedMatch.id);
+      await load();
+    } catch (saveError: any) {
+      setError(saveError?.message || 'Tip se nepodařilo uložit.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading && !detail) {
+    return (
+      <main className="mx-auto min-h-screen max-w-lg bg-slate-50 p-5">
+        <div className="h-9 w-40 animate-pulse rounded-xl bg-slate-200" />
+        <div className="mt-6 h-72 animate-pulse rounded-2xl bg-white" />
+      </main>
+    );
+  }
+
+  return (
+    <div className="mx-auto min-h-screen max-w-lg bg-slate-50 pb-24">
+      <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-slate-100 bg-white p-4">
+        <button type="button" onClick={onBack} aria-label="Zpět na Home" className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700"><ArrowLeft className="h-4 w-4" /></button>
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-red-600">Oficiální event</p>
+          <h1 className="text-lg font-black text-slate-950">{detail?.name || 'Tipovačka Start'}</h1>
+        </div>
+      </header>
+
+      <main className="space-y-5 p-4">
+        {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</p>}
+
+        {selectedMatch && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Nejbližší otevřený zápas</p>
+            <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+              {(['home', 'away'] as const).map((side, index) => {
+                const name = side === 'home' ? selectedMatch.home_name : selectedMatch.away_name;
+                const score = scores[selectedMatch.id]?.[side] ?? 0;
+                return (
+                  <div key={side} className={index === 1 ? 'col-start-3' : ''}>
+                    <p className="min-h-8 text-center text-xs font-black text-slate-900">{name}</p>
+                    <div className="mt-3 flex items-center justify-center gap-2">
+                      <button type="button" aria-label={`Snížit skóre ${name}`} disabled={!selectedMatch.can_predict || saving} onClick={() => updateScore(selectedMatch, side, -1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 disabled:opacity-40"><Minus className="h-4 w-4" /></button>
+                      <span className="w-7 text-center text-3xl font-black tabular-nums">{score}</span>
+                      <button type="button" aria-label={`Zvýšit skóre ${name}`} disabled={!selectedMatch.can_predict || saving} onClick={() => updateScore(selectedMatch, side, 1)} className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 disabled:opacity-40"><Plus className="h-4 w-4" /></button>
+                    </div>
+                  </div>
+                );
+              })}
+              <span className="col-start-2 row-start-1 pt-9 text-xl font-black text-slate-300">:</span>
+            </div>
+            {selectedMatch.can_predict && (
+              <button type="button" disabled={saving} onClick={() => void save()} className="mt-6 min-h-12 w-full rounded-xl bg-red-600 px-4 text-[10px] font-black uppercase tracking-wider text-white disabled:opacity-50">
+                {saving ? 'Ukládám…' : 'Uložit tip'}
+              </button>
+            )}
+            {savedMatchId === selectedMatch.id && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-xs font-black text-emerald-700">
+                <Check className="h-4 w-4" /> První tip je doma.
+              </div>
+            )}
+          </section>
+        )}
+
+        {!selectedMatch && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
+            <Trophy className="mx-auto h-7 w-7 text-slate-400" />
+            <h2 className="mt-3 text-base font-black text-slate-900">Teď není otevřený žádný zápas</h2>
+            <p className="mt-2 text-xs font-medium text-slate-500">Jakmile se otevře další tip, najdeš ho tady.</p>
+          </section>
+        )}
+
+        {leaderboard && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Pořadí</p>
+                <h2 className="mt-1 text-lg font-black text-slate-950">
+                  {leaderboard.current_position
+                    ? `${leaderboard.current_position}. z ${leaderboard.participant_count} tipérů`
+                    : `${leaderboard.participant_count} tipérů`}
+                </h2>
+              </div>
+              {leaderboard.current_position && leaderboard.current_position > 1 && (
+                <p className="text-right text-[10px] font-bold text-slate-500">
+                  Na další místo<br />{leaderboard.points_to_next} b.
+                </p>
+              )}
+            </div>
+            <div className="mt-4 divide-y divide-slate-100">
+              {leaderboard.rows.map(row => (
+                <div key={`${row.position}-${row.username}`} className={`flex min-h-11 items-center gap-3 py-2 ${row.is_current_user ? 'font-black text-red-600' : 'font-semibold text-slate-700'}`}>
+                  <span className="w-7 text-xs tabular-nums">{row.position}.</span>
+                  <span className="min-w-0 flex-1 truncate text-xs">{row.username}</span>
+                  <span className="text-xs tabular-nums">{row.total_points} b.</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {savedMatchId && (
+          <button type="button" onClick={onCreateLobby} className="min-h-12 w-full rounded-xl border border-slate-300 bg-white text-[10px] font-black uppercase tracking-wider text-slate-800">
+            Založit vlastní lobby
+          </button>
+        )}
+      </main>
+    </div>
+  );
+}
