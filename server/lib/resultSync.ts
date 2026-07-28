@@ -64,6 +64,55 @@ type SyncRequest = {
   tournamentId?: string | null;
 };
 
+type LobbyPredictionForScoring = {
+  user_id: string;
+  lobby_id: string;
+  predicted_home_score: number;
+  predicted_away_score: number;
+};
+
+type OfficialEventPredictionForScoring = {
+  user_id: string;
+  event_id: string;
+  predicted_home_score: number;
+  predicted_away_score: number;
+};
+
+export const buildAuthoritativeMatchScorePayloads = ({
+  lobbyPredictions,
+  eventPredictions,
+  homeScore,
+  awayScore,
+  sport
+}: {
+  lobbyPredictions: LobbyPredictionForScoring[];
+  eventPredictions: OfficialEventPredictionForScoring[];
+  homeScore: number;
+  awayScore: number;
+  sport: "football" | "hockey";
+}) => ({
+  lobbyScores: lobbyPredictions.map(prediction => ({
+    ...prediction,
+    points_earned: calculatePoints(
+      prediction.predicted_home_score,
+      prediction.predicted_away_score,
+      homeScore,
+      awayScore,
+      sport
+    )
+  })),
+  eventScores: eventPredictions.map(prediction => ({
+    ...prediction,
+    points_earned: calculatePoints(
+      prediction.predicted_home_score,
+      prediction.predicted_away_score,
+      homeScore,
+      awayScore,
+      sport
+    )
+  }))
+});
+
 const utcDate = (date: Date) => date.toISOString().slice(0, 10);
 
 const resolveDateWindow = (request: SyncRequest) => {
@@ -331,9 +380,6 @@ export async function applyMatchResult({
   source?: string;
   actor?: string;
 }): Promise<{ statusCode: number; body: Record<string, unknown> }> {
-  void source;
-  void actor;
-
   const { data: match, error: mErr } = await supabaseAdmin
     .from("matches")
     .select("tournament_id")
@@ -350,142 +396,60 @@ export async function applyMatchResult({
     return { statusCode: 400, body: { error: "V hokeji neni remiza povolena. Vysledek po prodlouzeni nebo najezdech musi urcit viteze!" } };
   }
 
-  const { data: predictions, error: predsErr } = await supabaseAdmin
-    .from("predictions")
-    .select("*")
-    .eq("match_id", matchId);
-
-  if (predsErr) throw predsErr;
-
-  const previousPoints = new Map<string, number>();
-  for (const pred of predictions || []) {
-    previousPoints.set(`${pred.user_id}:${pred.lobby_id}`, pred.points_earned || 0);
-  }
-
-  const rollbackPredictionPoints = async () => {
-    for (const pred of predictions || []) {
-      const previous = previousPoints.get(`${pred.user_id}:${pred.lobby_id}`) || 0;
-      const { error: rollbackErr } = await supabaseAdmin
-        .from("predictions")
-        .update({ points_earned: previous })
-        .eq("user_id", pred.user_id)
-        .eq("lobby_id", pred.lobby_id)
-        .eq("match_id", matchId);
-
-      if (rollbackErr) {
-        console.error(`Rollback error for prediction user: ${pred.user_id}`, rollbackErr);
-      }
-    }
-  };
-
-  const recalculationFailures: Array<{ user_id: string; lobby_id: string; message: string }> = [];
-  let updatedPredictionsCount = 0;
-
-  for (const pred of predictions || []) {
-    const points = calculatePoints(
-      pred.predicted_home_score,
-      pred.predicted_away_score,
-      homeScore,
-      awayScore,
-      sport
-    );
-
-    const { data: updatedPredictionRows, error: updatePredErr } = await supabaseAdmin
+  const [lobbyPredictionResult, eventPredictionResult] = await Promise.all([
+    supabaseAdmin
       .from("predictions")
-      .update({ points_earned: points })
-      .eq("user_id", pred.user_id)
-      .eq("lobby_id", pred.lobby_id)
+      .select("user_id,lobby_id,predicted_home_score,predicted_away_score")
+      .eq("match_id", matchId),
+    supabaseAdmin
+      .from("official_event_predictions")
+      .select("user_id,event_id,predicted_home_score,predicted_away_score")
       .eq("match_id", matchId)
-      .select("user_id,lobby_id,match_id,points_earned");
+  ]);
 
-    if (updatePredErr || !updatedPredictionRows || updatedPredictionRows.length !== 1) {
-      recalculationFailures.push({
-        user_id: pred.user_id,
-        lobby_id: pred.lobby_id,
-        message: updatePredErr?.message || `Expected 1 updated row, got ${updatedPredictionRows?.length ?? 0}`
-      });
-    } else {
-      updatedPredictionsCount += 1;
-    }
-  }
+  if (lobbyPredictionResult.error) throw lobbyPredictionResult.error;
+  if (eventPredictionResult.error) throw eventPredictionResult.error;
 
-  if (recalculationFailures.length > 0) {
-    console.error("Prediction recalculation failures:", recalculationFailures);
-    await rollbackPredictionPoints();
-    return {
-      statusCode: 500,
-      body: {
-        error: "Nepodarilo se prepocitat vsechny tipy, vysledek zapasu nebyl ulozen.",
-        match_id: matchId,
-        updated_predictions_count: updatedPredictionsCount,
-        expected_predictions_count: predictions?.length || 0,
-        result: { home_score: homeScore, away_score: awayScore },
-        status: "not_saved",
-        failures: recalculationFailures
-      }
-    };
-  }
-
-  const { data: verifiedPredictions, error: verifyErr } = await supabaseAdmin
-    .from("predictions")
-    .select("user_id,lobby_id,predicted_home_score,predicted_away_score,points_earned")
-    .eq("match_id", matchId);
-
-  if (verifyErr) throw verifyErr;
-
-  const stalePredictions = (verifiedPredictions || []).filter(pred => {
-    const expectedPoints = calculatePoints(
-      pred.predicted_home_score,
-      pred.predicted_away_score,
-      homeScore,
-      awayScore,
-      sport
-    );
-    return pred.points_earned !== expectedPoints;
+  const { lobbyScores, eventScores } = buildAuthoritativeMatchScorePayloads({
+    lobbyPredictions: (lobbyPredictionResult.data || []) as LobbyPredictionForScoring[],
+    eventPredictions: (eventPredictionResult.data || []) as OfficialEventPredictionForScoring[],
+    homeScore,
+    awayScore,
+    sport
   });
 
-  if (stalePredictions.length > 0) {
-    console.error("Stale points detected after recalculation:", stalePredictions);
-    await rollbackPredictionPoints();
+  const { data: appliedResult, error: applyError } = await supabaseAdmin.rpc(
+    "apply_match_result_atomic",
+    {
+      match_id_param: matchId,
+      home_score_param: homeScore,
+      away_score_param: awayScore,
+      lobby_scores_param: lobbyScores,
+      event_scores_param: eventScores,
+      source_param: source || null,
+      actor_param: actor || null
+    }
+  );
+
+  if (applyError) {
+    console.error("Atomic match result application failed:", {
+      matchId,
+      code: applyError.code,
+      message: applyError.message
+    });
     return {
-      statusCode: 500,
+      statusCode: applyError.code === "P0002" ? 404 : 500,
       body: {
-        error: "Po prepoctu zustaly nesedici body u nekterych tipu, vysledek zapasu nebyl ulozen.",
+        error: "Nepodarilo se atomicky prepocitat vsechny tipy. Vysledek zapasu nebyl ulozen.",
         match_id: matchId,
-        updated_predictions_count: updatedPredictionsCount,
-        expected_predictions_count: predictions?.length || 0,
+        updated_predictions_count: 0,
+        expected_predictions_count: lobbyScores.length,
+        updated_event_predictions_count: 0,
+        expected_event_predictions_count: eventScores.length,
         result: { home_score: homeScore, away_score: awayScore },
-        status: "not_saved",
-        stale_predictions_count: stalePredictions.length,
-        stale_predictions: stalePredictions.map(pred => ({
-          user_id: pred.user_id,
-          lobby_id: pred.lobby_id,
-          points_earned: pred.points_earned,
-          expected_points: calculatePoints(
-            pred.predicted_home_score,
-            pred.predicted_away_score,
-            homeScore,
-            awayScore,
-            sport
-          )
-        }))
+        status: "not_saved"
       }
     };
-  }
-
-  const { error: matchUpdateErr } = await supabaseAdmin
-    .from("matches")
-    .update({
-      home_score: homeScore,
-      away_score: awayScore,
-      status: "finished",
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", matchId);
-
-  if (matchUpdateErr) {
-    await rollbackPredictionPoints();
-    throw matchUpdateErr;
   }
 
   return {
@@ -493,8 +457,14 @@ export async function applyMatchResult({
     body: {
       success: true,
       match_id: matchId,
-      updated_predictions_count: updatedPredictionsCount,
-      expected_predictions_count: predictions?.length || 0,
+      updated_predictions_count: Number(
+        appliedResult?.lobby_predictions_updated ?? lobbyScores.length
+      ),
+      expected_predictions_count: lobbyScores.length,
+      updated_event_predictions_count: Number(
+        appliedResult?.event_predictions_updated ?? eventScores.length
+      ),
+      expected_event_predictions_count: eventScores.length,
       result: { home_score: homeScore, away_score: awayScore },
       status: "finished"
     }

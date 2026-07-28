@@ -257,3 +257,81 @@ export type AdminOperationsSummary = {
   duplicate_memberships: number;
   last_match_update: string | null;
 };
+
+export type OnboardingState = {
+  onboarding_version: number;
+  status: 'not_started' | 'started' | 'skipped' | 'completed';
+  variant_key: string;
+  completion_path: 'invite' | 'own_lobby' | 'start_event' | null;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type OfficialEventCard = {
+  event_id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  cover_key: string | null;
+  status: 'scheduled' | 'active' | 'completed';
+  featured: boolean;
+  onboarding_eligible: boolean;
+  is_participating: boolean;
+  participation_status: 'active' | 'left' | null;
+  actionable_match_count: number;
+  open_match_count: number;
+  next_match: {
+    id: string;
+    lock_time_utc: string;
+    home_name: string;
+    away_name: string;
+  } | null;
+};
+
+export type OfficialEventMatch = {
+  id: string;
+  start_time_utc: string;
+  lock_time_utc: string;
+  status: 'scheduled' | 'live' | 'finished';
+  home_score: number | null;
+  away_score: number | null;
+  home_name: string;
+  home_short_name: string | null;
+  home_flag: string | null;
+  away_name: string;
+  away_short_name: string | null;
+  away_flag: string | null;
+  predicted_home_score: number | null;
+  predicted_away_score: number | null;
+  points_earned: number;
+  can_predict: boolean;
+};
+
+export type OfficialEventDetail = {
+  event_id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  cover_key: string | null;
+  status: 'scheduled' | 'active' | 'completed' | 'archived';
+  participation_status: 'active' | 'left';
+  matches: OfficialEventMatch[];
+};
+
+export type OfficialEventLeaderboardRow = {
+  position: number;
+  username: string;
+  avatar_emoji: string | null;
+  avatar_bg: string | null;
+  total_points: number;
+  exact_hits: number;
+  is_current_user: boolean;
+  featured_badges: Array<{ name: string; icon: string }>;
+};
+
+export type OfficialEventLeaderboard = {
+  participant_count: number;
+  current_position: number | null;
+  points_to_next: number;
+  rows: OfficialEventLeaderboardRow[];
+};

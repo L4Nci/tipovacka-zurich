@@ -6,7 +6,7 @@ import {
   Plus,
   Trophy
 } from 'lucide-react';
-import type { Lobby, MembershipHomeItem } from '../types.ts';
+import type { Lobby, MembershipHomeItem, OfficialEventCard as OfficialEventCardType } from '../types.ts';
 import {
   classifyHomeDashboardSummary,
   formatTipsterCount,
@@ -15,6 +15,8 @@ import {
   type HomeDashboardSummary
 } from '../lib/homeDashboard.ts';
 import { getLatestMembershipHomeItems } from '../lib/membership.ts';
+import { shouldPromoteOfficialEventCard } from '../lib/officialEventsState.ts';
+import { OfficialEventCard } from './OfficialEventCard.tsx';
 
 export type AddLobbyMode = 'none' | 'menu' | 'create' | 'join';
 
@@ -27,6 +29,8 @@ type HomeDashboardProps = {
   membershipItems: MembershipHomeItem[];
   membershipLoading: boolean;
   membershipError: string;
+  officialEvent: OfficialEventCardType | null;
+  officialEventBusy: boolean;
   addLobbyMode: AddLobbyMode;
   addLobbyPanel?: ReactNode;
   onRetrySummaries: () => void;
@@ -37,6 +41,8 @@ type HomeDashboardProps = {
     destination?: 'matches' | 'results'
   ) => void;
   onOpenLobby: (lobby: Lobby) => void;
+  onOpenOfficialEvent: (event: OfficialEventCardType) => void;
+  onHideOfficialEvent: (eventId: string) => void;
   onSetAddLobbyMode: (mode: AddLobbyMode) => void;
 };
 
@@ -463,12 +469,16 @@ export function HomeDashboard({
   membershipItems,
   membershipLoading,
   membershipError,
+  officialEvent,
+  officialEventBusy,
   addLobbyMode,
   addLobbyPanel,
   onRetrySummaries,
   onCancelJoinRequest,
   onOpenContext,
   onOpenLobby,
+  onOpenOfficialEvent,
+  onHideOfficialEvent,
   onSetAddLobbyMode
 }: HomeDashboardProps) {
   const membershipNotices = (
@@ -488,6 +498,15 @@ export function HomeDashboard({
     return (
       <main className="flex flex-1 flex-col p-6">
         {membershipNotices}
+        {officialEvent && (
+          <OfficialEventCard
+            event={officialEvent}
+            prominent={shouldPromoteOfficialEventCard(officialEvent, lobbies)}
+            busy={officialEventBusy}
+            onOpen={onOpenOfficialEvent}
+            onHide={onHideOfficialEvent}
+          />
+        )}
         <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-600">
             <Trophy className="h-8 w-8" />
@@ -541,6 +560,18 @@ export function HomeDashboard({
           })}
         </div>
       </section>
+
+      {officialEvent && (
+        <section className="mt-6" aria-label="Oficiální event">
+          <OfficialEventCard
+            event={officialEvent}
+            prominent={false}
+            busy={officialEventBusy}
+            onOpen={onOpenOfficialEvent}
+            onHide={onHideOfficialEvent}
+          />
+        </section>
+      )}
 
       <section className="mt-6">
         <button

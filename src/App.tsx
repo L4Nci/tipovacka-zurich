@@ -19,6 +19,8 @@ import {
   Lobby,
   type AuthStatus,
   type MembershipHomeItem,
+  type OfficialEventCard,
+  type OnboardingState,
   type ProductFeatureFlags
 } from './types.ts';
 import { supabase } from './lib/supabase.ts';
@@ -70,11 +72,21 @@ import {
 } from './lib/lobbyNavigation.ts';
 import { fetchProductFeatureFlags, isProductFeatureEnabled } from './lib/productFeatures.ts';
 import { getInviteCodeFromLocation } from './lib/sharing.ts';
+import {
+  fetchMyOnboardingState,
+  fetchOfficialEventHomeCard,
+  hideOfficialEvent,
+  joinOfficialEvent,
+  updateMyOnboardingState
+} from './lib/officialEvents.ts';
+import { shouldShowFirstTipOnboarding } from './lib/officialEventsState.ts';
+import { FirstTipOnboarding } from './components/FirstTipOnboarding.tsx';
 
 const LazyAdminScreen = lazy(() => import('./components/AdminScreen.tsx'));
 const LazyLeaderboardScreen = lazy(() => import('./components/LeaderboardScreen.tsx'));
 const LazyLobbyView = lazy(() => import('./components/LobbyView.tsx').then(module => ({ default: module.LobbyView })));
 const LazyProfileScreen = lazy(() => import('./components/ProfileScreen.tsx'));
+const LazyOfficialEventView = lazy(() => import('./components/OfficialEventView.tsx'));
 
 const translations = {
   cz: {
@@ -1057,6 +1069,13 @@ export default function App() {
   const [homeMembershipLoading, setHomeMembershipLoading] = useState(false);
   const [homeMembershipError, setHomeMembershipError] = useState('');
   const [productFeatureFlags, setProductFeatureFlags] = useState<ProductFeatureFlags>({});
+  const [onboardingState, setOnboardingState] = useState<OnboardingState | null>(null);
+  const [officialEventCard, setOfficialEventCard] = useState<OfficialEventCard | null>(null);
+  const [activeOfficialEventId, setActiveOfficialEventId] = useState<string | null>(null);
+  const [officialProductLoading, setOfficialProductLoading] = useState(false);
+  const [officialProductError, setOfficialProductError] = useState('');
+  const [productFeatureFlagsReady, setProductFeatureFlagsReady] = useState(false);
+  const officialProductRequestRef = useRef(0);
   const homeDashboardRequestRef = useRef(0);
   const homeExternalRefreshInFlightRef = useRef(false);
   const skipNextHomeLoadAfterLobbyRefreshRef = useRef(false);
@@ -1188,11 +1207,13 @@ export default function App() {
     let current = true;
     if (authStatus !== 'authenticated') {
       setProductFeatureFlags({});
+      setProductFeatureFlagsReady(false);
       return () => {
         current = false;
       };
     }
 
+    setProductFeatureFlagsReady(false);
     void fetchProductFeatureFlags()
       .then(flags => {
         if (current) setProductFeatureFlags(flags);
@@ -1200,12 +1221,68 @@ export default function App() {
       .catch(error => {
         console.warn('Product feature flags are unavailable; optional features stay disabled.', error);
         if (current) setProductFeatureFlags({});
+      })
+      .finally(() => {
+        if (current) setProductFeatureFlagsReady(true);
       });
 
     return () => {
       current = false;
     };
   }, [authStatus]);
+
+  const loadOfficialProductContext = useCallback(async () => {
+    const onboardingEnabled = isProductFeatureEnabled(
+      productFeatureFlags,
+      'onboarding_first_tip_enabled'
+    );
+    const officialEventsEnabled = isProductFeatureEnabled(
+      productFeatureFlags,
+      'official_events_enabled'
+    );
+
+    if (
+      authStatus !== 'authenticated' ||
+      !user?.id ||
+      (!onboardingEnabled && !officialEventsEnabled)
+    ) {
+      officialProductRequestRef.current += 1;
+      setOnboardingState(null);
+      setOfficialEventCard(null);
+      setOfficialProductLoading(false);
+      setOfficialProductError('');
+      return;
+    }
+
+    const requestId = officialProductRequestRef.current + 1;
+    officialProductRequestRef.current = requestId;
+    setOfficialProductLoading(true);
+    setOfficialProductError('');
+
+    try {
+      const [nextOnboardingState, nextEventCard] = await Promise.all([
+        onboardingEnabled ? fetchMyOnboardingState() : Promise.resolve(null),
+        officialEventsEnabled ? fetchOfficialEventHomeCard() : Promise.resolve(null)
+      ]);
+      if (officialProductRequestRef.current !== requestId) return;
+      setOnboardingState(nextOnboardingState);
+      setOfficialEventCard(nextEventCard);
+    } catch (contextError: any) {
+      if (officialProductRequestRef.current !== requestId) return;
+      setOfficialProductError(
+        contextError?.message || 'Oficiální event se nepodařilo načíst.'
+      );
+      setOfficialEventCard(null);
+    } finally {
+      if (officialProductRequestRef.current === requestId) {
+        setOfficialProductLoading(false);
+      }
+    }
+  }, [authStatus, productFeatureFlags, user?.id]);
+
+  useEffect(() => {
+    void loadOfficialProductContext();
+  }, [loadOfficialProductContext]);
 
   useEffect(() => {
     if (activeLobbyId) {
@@ -1394,6 +1471,12 @@ export default function App() {
     setHomeDashboardSummaries([]);
     setHomeMembershipItems([]);
     setProductFeatureFlags({});
+    setOnboardingState(null);
+    setOfficialEventCard(null);
+    setActiveOfficialEventId(null);
+    setOfficialProductLoading(false);
+    setOfficialProductError('');
+    officialProductRequestRef.current += 1;
     setHomeDashboardError('');
     setHomeMembershipError('');
     setHomeDashboardLoading(false);
@@ -1910,6 +1993,98 @@ export default function App() {
     }
   };
 
+  const persistOnboardingState = async (
+    status: OnboardingState['status'],
+    completionPath: OnboardingState['completion_path'] = null
+  ) => {
+    if (!isProductFeatureEnabled(productFeatureFlags, 'onboarding_first_tip_enabled')) {
+      return null;
+    }
+    const nextState = await updateMyOnboardingState({
+      version: onboardingState?.onboarding_version || 1,
+      status,
+      variantKey: onboardingState?.variant_key || 'control',
+      completionPath
+    });
+    setOnboardingState(nextState);
+    return nextState;
+  };
+
+  const completeOnboardingAfterLobbyPath = async (
+    path: 'invite' | 'own_lobby'
+  ) => {
+    if (onboardingState?.status === 'completed') return;
+    try {
+      await persistOnboardingState('completed', path);
+    } catch (onboardingError) {
+      console.warn('Lobby succeeded but onboarding completion could not be recorded.', onboardingError);
+    }
+  };
+
+  const handleOnboardingSkip = async () => {
+    setOfficialProductLoading(true);
+    setOfficialProductError('');
+    try {
+      await persistOnboardingState('skipped');
+    } catch (onboardingError: any) {
+      setOfficialProductError(onboardingError?.message || 'Onboarding se nepodařilo přeskočit.');
+    } finally {
+      setOfficialProductLoading(false);
+    }
+  };
+
+  const handleOnboardingLobbyChoice = async (mode: 'join' | 'create') => {
+    setOfficialProductLoading(true);
+    setOfficialProductError('');
+    try {
+      await persistOnboardingState('skipped');
+      setLobbyFormActive(mode);
+      setLobbyError('');
+      setLobbySuccess('');
+      window.scrollTo({ top: 0 });
+    } catch (onboardingError: any) {
+      setOfficialProductError(onboardingError?.message || 'Onboarding se nepodařilo dokončit.');
+    } finally {
+      setOfficialProductLoading(false);
+    }
+  };
+
+  const handleOpenOfficialEvent = async (event: OfficialEventCard) => {
+    if (officialProductLoading) return;
+    setOfficialProductLoading(true);
+    setOfficialProductError('');
+    try {
+      if (!event.is_participating) {
+        await joinOfficialEvent(event.event_id);
+      }
+      setActiveOfficialEventId(event.event_id);
+      setOfficialEventCard(previous => previous ? {
+        ...previous,
+        is_participating: true,
+        participation_status: 'active'
+      } : previous);
+      window.scrollTo({ top: 0 });
+    } catch (eventError: any) {
+      setOfficialProductError(eventError?.message || 'Do eventu se nepodařilo vstoupit.');
+    } finally {
+      setOfficialProductLoading(false);
+    }
+  };
+
+  const handleHideOfficialEvent = async (eventId: string) => {
+    if (officialProductLoading) return;
+    setOfficialProductLoading(true);
+    setOfficialProductError('');
+    try {
+      await hideOfficialEvent(eventId);
+      setOfficialEventCard(null);
+    } catch (eventError: any) {
+      setOfficialProductError(eventError?.message || 'Event se nepodařilo skrýt.');
+    } finally {
+      setOfficialProductLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (loading || entryOrigin !== 'normal-tournament-navigation' || !activeTournamentId) return;
     if (tournamentStats[activeTournamentId]?.isCompleted) {
@@ -1997,6 +2172,7 @@ export default function App() {
         setJoinCodeInput('');
         clearInviteAddress();
       }
+      await completeOnboardingAfterLobbyPath(action === 'create' ? 'own_lobby' : 'invite');
       window.scrollTo({ top: 0 });
       return result.hydratedLobby;
     } catch (navigationError: any) {
@@ -2010,6 +2186,7 @@ export default function App() {
         setLobbySuccess(`Žádost o vstup do lobby "${navigationError.lobbyName}" čeká na schválení.`);
         setHomeMembershipLoading(true);
         void loadHomeDashboard({ refreshLobbyCollection: true });
+        await completeOnboardingAfterLobbyPath('invite');
         return null;
       }
 
@@ -2531,6 +2708,12 @@ export default function App() {
     activeTournamentId,
     pendingLobbyId: pendingLobbyNavigation?.targetLobby.id ?? null
   });
+  const showFirstTipOnboarding = shouldShowFirstTipOnboarding({
+    enabled: isProductFeatureEnabled(productFeatureFlags, 'onboarding_first_tip_enabled'),
+    hasInvite: Boolean(joinCodeInput),
+    lobbies,
+    state: onboardingState
+  });
 
   if (authStatus !== 'authenticated' || !user) {
     return (
@@ -2590,6 +2773,84 @@ export default function App() {
         onRetry={retryPendingLobbyNavigation}
         onHome={recoverLobbyNavigationToHome}
       />
+    );
+  }
+
+  const isOnboardingContextPending = Boolean(
+    lobbies.length === 0
+    && !joinCodeInput
+    && (
+      !productFeatureFlagsReady
+      || (
+        isProductFeatureEnabled(productFeatureFlags, 'onboarding_first_tip_enabled')
+        && onboardingState === null
+      )
+    )
+  );
+
+  if (isOnboardingContextPending) {
+    return (
+      <AuthenticatedAppSkeleton
+        t={t}
+        error={officialProductError}
+        onRetry={() => void loadOfficialProductContext()}
+      />
+    );
+  }
+
+  if (showFirstTipOnboarding) {
+    return (
+      <FirstTipOnboarding
+        event={officialEventCard}
+        busy={officialProductLoading}
+        error={officialProductError}
+        onStart={async () => {
+          setOfficialProductLoading(true);
+          setOfficialProductError('');
+          try {
+            await persistOnboardingState('started');
+          } catch (onboardingError: any) {
+            setOfficialProductError(
+              onboardingError?.message || 'Onboarding se nepodařilo zahájit.'
+            );
+            throw onboardingError;
+          } finally {
+            setOfficialProductLoading(false);
+          }
+        }}
+        onSkip={handleOnboardingSkip}
+        onInvite={() => handleOnboardingLobbyChoice('join')}
+        onCreateLobby={() => handleOnboardingLobbyChoice('create')}
+        onStartEvent={async eventId => {
+          const event = officialEventCard;
+          if (!event || event.event_id !== eventId) return;
+          await handleOpenOfficialEvent(event);
+        }}
+      />
+    );
+  }
+
+  if (activeOfficialEventId) {
+    return (
+      <Suspense fallback={<AuthenticatedAppSkeleton t={t} error="" onRetry={() => undefined} />}>
+        <LazyOfficialEventView
+          eventId={activeOfficialEventId}
+          onBack={() => {
+            setActiveOfficialEventId(null);
+            void loadOfficialProductContext();
+            window.scrollTo({ top: 0 });
+          }}
+          onCreateLobby={() => {
+            setActiveOfficialEventId(null);
+            goHome();
+            setLobbyFormActive('create');
+          }}
+          onFirstPredictionSaved={async () => {
+            if (onboardingState?.status === 'completed') return;
+            await persistOnboardingState('completed', 'start_event');
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -2708,11 +2969,15 @@ export default function App() {
             membershipItems={homeMembershipItems}
             membershipLoading={homeMembershipLoading}
             membershipError={homeMembershipError}
+            officialEvent={officialEventCard}
+            officialEventBusy={officialProductLoading}
             addLobbyMode={lobbyFormActive}
             onRetrySummaries={() => void loadHomeDashboard()}
             onCancelJoinRequest={handleCancelHomeJoinRequest}
             onOpenContext={openHomeContext}
             onOpenLobby={openLobbyDetail}
+            onOpenOfficialEvent={event => void handleOpenOfficialEvent(event)}
+            onHideOfficialEvent={eventId => void handleHideOfficialEvent(eventId)}
             onSetAddLobbyMode={mode => {
               setLobbyFormActive(mode);
               setLobbyError('');
