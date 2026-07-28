@@ -86,6 +86,7 @@ Current source-of-truth documents:
 * Authentication security and OAuth setup: [docs/auth-security.md](docs/auth-security.md) and [docs/oauth-setup.md](docs/oauth-setup.md)
 * Lobby membership security: [docs/membership-security.md](docs/membership-security.md)
 * Product, community, badges, sharing, entitlements and rollout boundaries: [docs/product-growth-architecture.md](docs/product-growth-architecture.md)
+* Public-beta polish decisions and deferred identity/onboarding foundations: [docs/beta-polish-sprint-01.md](docs/beta-polish-sprint-01.md)
 * Result sync and TheSportsDB provider behavior: [docs/thesportsdb-dry-run.md](docs/thesportsdb-dry-run.md)
 * Fixture/TBA sync cron setup: [docs/fixture-sync-cron.md](docs/fixture-sync-cron.md)
 

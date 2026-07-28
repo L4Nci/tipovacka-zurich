@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Award, EyeOff, X } from 'lucide-react';
 import type { BadgeOverview, CommunityProfile, Player } from '../types.ts';
+import { getFeaturedBadges } from '../lib/betaPolish.ts';
 import { fetchCommunityProfile, fetchUserBadges } from '../lib/productFeatures.ts';
 
 type UserAvatarComponent = React.ComponentType<{
@@ -25,16 +26,21 @@ export default function PlayerProfileDialog({
   const [badges, setBadges] = useState<BadgeOverview>({ badges: [], progress: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const featuredBadges = useMemo(() => getFeaturedBadges(badges.badges), [badges.badges]);
 
   useEffect(() => {
     let current = true;
     setLoading(true);
+    setError('');
+    setProfile(null);
+    setBadges({ badges: [], progress: [] });
     void fetchCommunityProfile(userId, lobbyId)
       .then(async nextProfile => {
         if (!current) return;
         setProfile(nextProfile);
         if (nextProfile?.is_public) {
-          setBadges(await fetchUserBadges(userId));
+          const nextBadges = await fetchUserBadges(userId);
+          if (current) setBadges(nextBadges);
         }
       })
       .catch((reason: any) => {
@@ -89,11 +95,11 @@ export default function PlayerProfileDialog({
                 ))}
               </div>
             )}
-            {badges.badges.length > 0 && (
+            {featuredBadges.length > 0 && (
               <div className="mt-5">
-                <h4 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400"><Award className="h-4 w-4" /> {lang === 'cz' ? 'Odznaky' : 'Badges'}</h4>
+                <h4 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400"><Award className="h-4 w-4" /> {lang === 'cz' ? 'Vybrané odznaky' : 'Featured badges'}</h4>
                 <div className="mt-3 grid grid-cols-3 gap-2">
-                  {badges.badges.filter(badge => badge.featured_position).slice(0, 3).map(badge => (
+                  {featuredBadges.map(badge => (
                     <div key={`${badge.key}:${badge.context_id}`} className="rounded-2xl bg-amber-50 p-3 text-center">
                       <span className="text-2xl">{badge.icon}</span>
                       <p className="mt-1 text-[10px] font-black text-slate-800">{badge.name}</p>

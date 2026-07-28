@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Archive, Plus, RefreshCcw, Trophy } from 'lucide-react';
 import type { LobbyTournamentCatalogItem } from '../types.ts';
 import {
@@ -21,22 +21,28 @@ export default function LobbyTournamentManager({
   const [actionId, setActionId] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const loadRequestId = useRef(0);
 
-  const load = async () => {
+  const load = useCallback(async (clearMessage = true) => {
+    const requestId = ++loadRequestId.current;
     setLoading(true);
     setError('');
+    if (clearMessage) setMessage('');
     try {
-      setItems(await fetchLobbyTournamentCatalog(lobbyId));
+      const nextItems = await fetchLobbyTournamentCatalog(lobbyId);
+      if (requestId === loadRequestId.current) setItems(nextItems);
     } catch (reason: any) {
-      setError(reason?.message || (lang === 'cz' ? 'Turnaje se nepodařilo načíst.' : 'Tournaments could not be loaded.'));
+      if (requestId === loadRequestId.current) {
+        setError(reason?.message || (lang === 'cz' ? 'Turnaje se nepodařilo načíst.' : 'Tournaments could not be loaded.'));
+      }
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestId.current) setLoading(false);
     }
-  };
+  }, [lang, lobbyId]);
 
   useEffect(() => {
     void load();
-  }, [lobbyId]);
+  }, [load]);
 
   const mutate = async (
     item: LobbyTournamentCatalogItem,
@@ -51,9 +57,14 @@ export default function LobbyTournamentManager({
       } else {
         await setLobbyTournamentStatus(lobbyId, item.tournament_id, action === 'archive' ? 'archived' : 'active');
       }
-      await load();
+      await load(false);
       onChanged();
-      setMessage(lang === 'cz' ? 'Turnaje byly aktualizovány.' : 'Tournaments updated.');
+      const copy = action === 'add'
+        ? (lang === 'cz' ? 'Turnaj byl přidán.' : 'Tournament added.')
+        : action === 'archive'
+          ? (lang === 'cz' ? 'Turnaj byl archivován.' : 'Tournament archived.')
+          : (lang === 'cz' ? 'Turnaj byl aktivován.' : 'Tournament activated.');
+      setMessage(copy);
     } catch (reason: any) {
       setError(reason?.message || (lang === 'cz' ? 'Změnu se nepodařilo uložit.' : 'Change could not be saved.'));
     } finally {
