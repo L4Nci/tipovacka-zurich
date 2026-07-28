@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check, LockKeyhole, Share2 } from 'lucide-react';
+import { CalendarClock, Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check, LockKeyhole, Settings2, Share2 } from 'lucide-react';
 import { Lobby, LobbyMember, Player as AppUser, type HallOfFameEntry, type LobbyJoinRequest } from '../types';
 import {
   addTournamentToLobby,
@@ -113,6 +113,7 @@ export function LobbyView({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRulesExpanded, setIsRulesExpanded] = useState(false);
+  const [isAdminExpanded, setIsAdminExpanded] = useState(false);
   const [members, setMembers] = useState<LobbyMember[]>([]);
   const [pendingRequests, setPendingRequests] = useState<LobbyJoinRequest[]>([]);
   const [hallOfFameEntries, setHallOfFameEntries] = useState<HallOfFameEntry[]>([]);
@@ -337,15 +338,21 @@ export function LobbyView({
     setAddSuccess('');
     try {
       await addTournamentToLobby(lobby.id, tournamentId);
-      setAddSuccess(lang === 'cz' ? 'Turnaj úspěšně přidán!' : 'Tournament added successfully!');
+      setAddSuccess(lang === 'cz' ? 'Turnaj byl přidán.' : 'Tournament added.');
       if (onRefresh) {
         onRefresh();
       }
     } catch (err: any) {
-      setAddError(err.message || 'Chyba při přidávání turnaje.');
+      setAddError(err.message || (lang === 'cz' ? 'Turnaj se nepodařilo přidat.' : 'Tournament could not be added.'));
     } finally {
       setIsAdding(false);
     }
+  };
+  const openAdminSection = () => {
+    setIsAdminExpanded(true);
+    window.requestAnimationFrame(() => {
+      document.getElementById('lobby-admin')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   return (
@@ -358,7 +365,7 @@ export function LobbyView({
       <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors">
         <div className="flex-1 w-full">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-            {lang === 'cz' ? 'Tvoje Lobby' : 'Your Lobby'}
+            {lang === 'cz' ? 'Tvoje lobby' : 'Your lobby'}
           </p>
           
           {editingField === 'name' ? (
@@ -444,73 +451,17 @@ export function LobbyView({
           </div>
         </div>
 
-        {/* OWNER CONTROLS */}
-        {canEditLobby && (
-          <div className="flex shrink-0 gap-2 sm:flex-col">
-            {shareEnabled && (
-              <button type="button" onClick={() => setShowInviteDialog(true)} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 text-[10px] font-black uppercase text-white">
-                <Share2 className="h-4 w-4" />
-                {lang === 'cz' ? 'Pozvat' : 'Invite'}
-              </button>
-            )}
-            {showDeleteConfirm ? (
-               <div className="flex flex-col gap-2 bg-red-50 p-2 rounded-xl border border-red-100 max-w-[200px]">
-                 <span className="text-[9px] font-bold text-red-600 text-center leading-tight">
-                   {lang === 'cz' ? 'Opravdu chceš smazat tuto lobby? Tato akce smaže členství a tipy v této lobby.' : 'Really delete?'}
-                 </span>
-                 <div className="flex gap-1.5 mt-1">
-                   <button disabled={isDeleting} onClick={handleDelete} className="flex-1 bg-red-600 text-white rounded-lg py-1 text-[10px] font-bold uppercase hover:bg-red-700">Ano</button>
-                   <button disabled={isDeleting} onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-white text-slate-500 rounded-lg py-1 text-[10px] font-bold uppercase border border-slate-200 hover:bg-slate-50">Ne</button>
-                 </div>
-               </div>
-            ) : (
-              <button 
-                onClick={() => setShowDeleteConfirm(true)}
-                className="px-3 py-2 bg-slate-50 hover:bg-red-50 text-red-500 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-2"
-              >
-                <Trash2 className="w-3 h-3" />
-                {lang === 'cz' ? 'Smazat' : 'Delete'}
-              </button>
-            )}
-          </div>
+        {canEditLobby && shareEnabled && (
+          <button
+            type="button"
+            onClick={() => setShowInviteDialog(true)}
+            className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-[10px] font-black uppercase text-white transition-transform duration-150 active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none"
+          >
+            <Share2 className="h-4 w-4" />
+            {lang === 'cz' ? 'Pozvat' : 'Invite'}
+          </button>
         )}
       </div>
-
-      <button
-        type="button"
-        onClick={() => setShowMembersDialog(true)}
-        className="flex min-h-16 w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left shadow-sm"
-      >
-        <span className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-            <Users className="h-4 w-4" />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-xs font-black uppercase text-slate-700">
-              {lang === 'cz' ? 'Členové' : 'Members'}
-            </span>
-            <span className="mt-1 block text-[10px] font-semibold text-slate-400">
-              {membersLoading
-                ? (lang === 'cz' ? 'Načítám členy…' : 'Loading members…')
-                : membershipError
-                  ? (lang === 'cz' ? 'Správa členů není dostupná' : 'Member management unavailable')
-                  : pendingRequests.length > 0
-                    ? `${pendingRequests.length} ${lang === 'cz' ? 'čeká na vyřízení' : 'awaiting review'}`
-                    : viewerRole === 'owner' || viewerRole === 'admin' || viewerRole === 'platform_admin'
-                      ? (lang === 'cz' ? 'Správa přístupu a žádostí' : 'Access and request management')
-                      : (lang === 'cz' ? 'Zobrazit seznam' : 'View list')}
-            </span>
-          </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          {pendingRequests.length > 0 && (
-            <span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-black text-amber-700">
-              {pendingRequests.length}
-            </span>
-          )}
-          <ChevronRight className="h-4 w-4 text-slate-300" />
-        </span>
-      </button>
 
       <div className="grid grid-cols-1 gap-6">
         {/* LEFT COLUMN */}
@@ -518,7 +469,7 @@ export function LobbyView({
           {/* 2. AKTIVNÍ SOUTĚŽE */}
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
               {lang === 'cz' ? 'Aktivní soutěže' : 'Active Tournaments'}
             </h2>
             <div className="space-y-3">
@@ -585,14 +536,41 @@ export function LobbyView({
                   </button>
                 );
               }) : (
-                <p className="text-xs text-slate-400 italic text-center py-4">
-                  {lang === 'cz' ? 'Žádné aktivní soutěže' : 'No active tournaments'}
-                </p>
+                <div className="px-2 py-4 text-center">
+                  <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-50 text-slate-300">
+                    <CalendarClock className="h-6 w-6" />
+                  </span>
+                  <h3 className="mt-3 text-sm font-black text-slate-800">
+                    {lang === 'cz' ? 'Teď se netipuje' : 'Nothing to predict right now'}
+                  </h3>
+                  <p className="mx-auto mt-1 max-w-[300px] text-xs font-medium leading-relaxed text-slate-500">
+                    {canEditLobby
+                      ? (lang === 'cz' ? 'Vyber další podporovaný turnaj ve Správě lobby.' : 'Choose the next supported tournament in lobby management.')
+                      : (lang === 'cz' ? 'Jakmile správce spustí další turnaj, objeví se tady.' : 'The next tournament will appear here when an admin starts it.')}
+                  </p>
+                  {canEditLobby ? (
+                    <button
+                      type="button"
+                      onClick={openAdminSection}
+                      className="mt-4 min-h-10 rounded-xl bg-slate-900 px-4 text-[10px] font-black uppercase tracking-wider text-white transition-transform duration-150 active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none"
+                    >
+                      {lang === 'cz' ? 'Vybrat turnaj' : 'Choose tournament'}
+                    </button>
+                  ) : completedTournaments.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById('lobby-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                      className="mt-4 min-h-10 rounded-xl bg-white px-4 text-[10px] font-black uppercase tracking-wider text-slate-600 shadow-sm"
+                    >
+                      {lang === 'cz' ? 'Prohlédnout historii' : 'View history'}
+                    </button>
+                  ) : null}
+                </div>
               )}
             </div>
 
             {/* ACTION: ADD TOURNAMENT TO LOBBY */}
-            {canEditLobby && !tournamentManagementEnabled && availableToAdd.length > 0 && (
+            {canEditLobby && isAdminExpanded && !tournamentManagementEnabled && availableToAdd.length > 0 && (
               <div className="mt-6 pt-4 border-t border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                   {lang === 'cz' ? 'Správa turnajů (Owner)' : 'Manage Tournaments (Owner)'}
@@ -616,12 +594,104 @@ export function LobbyView({
             )}
           </div>
 
-          {canEditLobby && tournamentManagementEnabled && (
-            <LobbyTournamentManager
-              lobbyId={lobby.id}
-              lang={lang}
-              onChanged={() => onRefresh?.()}
-            />
+          <button
+            type="button"
+            onClick={() => setShowMembersDialog(true)}
+            className="flex min-h-16 w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left shadow-sm transition-transform duration-150 active:scale-[0.99] motion-reduce:transform-none motion-reduce:transition-none"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                <Users className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-black uppercase text-slate-700">
+                  {lang === 'cz' ? 'Členové' : 'Members'}
+                </span>
+                <span className="mt-1 block text-[11px] font-semibold text-slate-500">
+                  {membersLoading
+                    ? (lang === 'cz' ? 'Načítám členy…' : 'Loading members…')
+                    : membershipError
+                      ? (lang === 'cz' ? 'Správa členů není dostupná' : 'Member management unavailable')
+                      : pendingRequests.length > 0
+                        ? `${pendingRequests.length} ${lang === 'cz' ? 'čeká na vyřízení' : 'awaiting review'}`
+                        : (lang === 'cz' ? 'Seznam a přístup do lobby' : 'Lobby list and access')}
+                </span>
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              {pendingRequests.length > 0 && (
+                <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-700">
+                  {pendingRequests.length}
+                </span>
+              )}
+              <ChevronRight className="h-4 w-4 text-slate-300" />
+            </span>
+          </button>
+
+          {canEditLobby && (
+            <section id="lobby-admin" className="scroll-mt-24">
+              <button
+                type="button"
+                onClick={() => setIsAdminExpanded(expanded => !expanded)}
+                className="flex min-h-16 w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 text-left shadow-sm"
+                aria-expanded={isAdminExpanded}
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                    <Settings2 className="h-4 w-4" />
+                  </span>
+                  <span>
+                    <span className="block text-xs font-black uppercase text-slate-700">
+                      {lang === 'cz' ? 'Správa lobby' : 'Lobby management'}
+                    </span>
+                    <span className="mt-1 block text-[11px] font-semibold text-slate-500">
+                      {lang === 'cz' ? 'Turnaje a nastavení vlastníka' : 'Tournaments and owner settings'}
+                    </span>
+                  </span>
+                </span>
+                <ChevronRight className={`h-4 w-4 text-slate-300 transition-transform duration-200 motion-reduce:transition-none ${isAdminExpanded ? 'rotate-90' : ''}`} />
+              </button>
+
+              {isAdminExpanded && (
+                <div className="mt-3 space-y-3">
+                  {tournamentManagementEnabled && (
+                    <LobbyTournamentManager
+                      lobbyId={lobby.id}
+                      lang={lang}
+                      onChanged={() => onRefresh?.()}
+                    />
+                  )}
+                  <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
+                    {showDeleteConfirm ? (
+                      <>
+                        <p className="text-xs font-bold leading-relaxed text-red-700">
+                          {lang === 'cz'
+                            ? 'Smazání lobby odstraní členství i tipy v této lobby. Tuto akci nelze vrátit.'
+                            : 'Deleting the lobby removes its memberships and predictions. This cannot be undone.'}
+                        </p>
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <button disabled={isDeleting} onClick={() => setShowDeleteConfirm(false)} className="min-h-10 rounded-xl bg-white text-[10px] font-black uppercase text-slate-600">
+                            {lang === 'cz' ? 'Zrušit' : 'Cancel'}
+                          </button>
+                          <button disabled={isDeleting} onClick={handleDelete} className="min-h-10 rounded-xl bg-red-600 text-[10px] font-black uppercase text-white disabled:opacity-50">
+                            {isDeleting ? (lang === 'cz' ? 'Mažu…' : 'Deleting…') : (lang === 'cz' ? 'Smazat lobby' : 'Delete lobby')}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-white px-3 text-[10px] font-black uppercase text-red-600"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {lang === 'cz' ? 'Smazat lobby' : 'Delete lobby'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
           )}
 
           {(rulesText || canEditLobby) && (
@@ -636,7 +706,7 @@ export function LobbyView({
                   <h2 className="block text-xs font-bold text-slate-400 uppercase tracking-widest">
                     {lang === 'cz' ? 'Pravidla' : 'Rules'}
                   </h2>
-                  <span className="mt-1 block text-[10px] font-semibold text-slate-400">
+                  <span className="mt-1 block text-[11px] font-semibold text-slate-500">
                     {lang === 'cz' ? 'Pravidla hry a pravidla turnaje' : 'Game rules and tournament rules'}
                   </span>
                 </span>
@@ -647,7 +717,7 @@ export function LobbyView({
               </button>
               <div className={`${isRulesExpanded ? 'mt-4 block' : 'hidden'} space-y-4 md:mt-4 md:block`}>
                 <div>
-                  <h3 className="text-[9px] font-black uppercase text-slate-400">
+                  <h3 className="text-[10px] font-black uppercase text-slate-500">
                     {lang === 'cz' ? 'Pravidla hry' : 'Game rules'}
                   </h3>
                   <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">
@@ -657,7 +727,7 @@ export function LobbyView({
                   </p>
                 </div>
                 <div className="border-t border-slate-100 pt-4">
-                  <h3 className="text-[9px] font-black uppercase text-slate-400">
+                  <h3 className="text-[10px] font-black uppercase text-slate-500">
                     {lang === 'cz' ? 'Pravidla turnaje' : 'Tournament rules'}
                   </h3>
                   <div className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 p-4">
@@ -671,7 +741,7 @@ export function LobbyView({
           )}
 
           {/* 3. HISTORIE */}
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 opacity-80">
+          <div id="lobby-history" className="scroll-mt-24 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 opacity-80">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
               <History className="w-3.5 h-3.5" />
               {lang === 'cz' ? 'Historie soutěží' : 'Past Tournaments'}
@@ -793,11 +863,11 @@ export function LobbyView({
              ) : (
                <div className="flex flex-col items-center justify-center p-6 text-center border-t border-slate-50">
                  <Trophy className="w-8 h-8 text-slate-200 mb-2" />
-                 <p className="text-sm font-bold text-slate-400 mb-1">
-                   {lang === 'cz' ? 'Zatím žádné záznamy' : 'No records yet'}
+                 <p className="text-sm font-bold text-slate-600 mb-1">
+                   {lang === 'cz' ? 'Síň slávy čeká na první turnaj' : 'The Hall of Fame awaits its first tournament'}
                  </p>
                  <p className="text-[10px] items-center text-slate-400 max-w-[180px]">
-                   {lang === 'cz' ? 'Hall of Fame bude dostupná po dokončení prvního turnaje.' : 'Hall of Fame will be available after the first tournament ends.'}
+                   {lang === 'cz' ? 'Po dokončení turnaje se tu objeví historické pořadí hráčů.' : 'Historical player standings will appear after a tournament is completed.'}
                  </p>
                </div>
              )}

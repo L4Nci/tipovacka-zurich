@@ -41,6 +41,34 @@ The durable model should be:
 This sprint does not implement that migration because it changes the public
 identity contract and needs its own data audit and rollout.
 
+## Living product hierarchy
+
+The follow-up polish keeps the same read models and routes while making each
+screen lead with the next useful action:
+
+- Home is a single list of living lobby cards. Each lobby selects exactly one
+  dominant tournament state and one contextual action; there is no separate
+  dashboard or duplicated tournament list.
+- Lobby cards use a bundled system cover with a strong readability overlay.
+  Cover selection is presentation-only and can later accept sport-specific or
+  custom assets without changing the current data contract.
+- Home shows only the community-facing tipster count. Tournament progress stays
+  hidden because the current read model does not expose finished/total match
+  counts for honest in-progress percentages; completed cards use the single
+  `Turnaj ukončen` state without repeating completion as a progress bar.
+- A completed-only lobby points directly to results. A lobby without an active
+  tournament explains that it is waiting for the next one.
+- Lobby detail leads with the active tournament state. Member access follows,
+  while owner-only tournament and destructive controls stay collapsed under
+  `Správa lobby`.
+- Match and result empty states explain what is happening and offer an existing
+  next action where one is available.
+
+Motion remains functional: short tap-scale feedback, existing page
+fade/slide transitions, inline success checks, and motion-safe skeletons.
+Persistent decorative animation and full-screen success effects are avoided,
+and `prefers-reduced-motion` removes non-essential transforms and pulses.
+
 ## Onboarding proposal
 
 Use a skippable, versioned three-step overlay shown only after the first

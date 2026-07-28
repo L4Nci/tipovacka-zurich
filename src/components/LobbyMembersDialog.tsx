@@ -181,7 +181,7 @@ export default function LobbyMembersDialog({
               </div>
             ) : (
               <p className="mt-2 text-[10px] font-medium text-slate-400">
-                {lang === 'cz' ? 'Žádné čekající žádosti.' : 'No pending requests.'}
+                {lang === 'cz' ? 'Hotovo. Žádná žádost nečeká na vyřízení.' : 'All clear. No requests are waiting.'}
               </p>
             )}
           </div>

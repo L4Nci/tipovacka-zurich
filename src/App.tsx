@@ -88,14 +88,15 @@ const translations = {
     finished: "Odehrané zápasy",
     pts: "body",
     exact: "přesné",
+    exactHit: "Přesně!",
     goalDiff: "rozdíl",
     winner: "vítěz",
     draw: "remíza",
     saveTip: "Uložit tip",
     updateTip: "Aktualizovat tip",
     yourPrediction: "Tvůj tip",
-    noUpcoming: "Žádné nadcházející zápasy.",
-    noResults: "Žádné výsledky.",
+    noUpcoming: "Teď není co tipovat.",
+    noResults: "Výsledky se objeví po prvním odehraném zápase.",
     globalStandings: "Celkové pořadí",
     pos: "Poz",
     player: "Hráč",
@@ -139,8 +140,8 @@ const translations = {
     playoffNoDraws: "V play-off nelze tipovat remízu.",
     playoffWinnerRequired: "V play-off musíš vybrat vítěze.",
     pickMatchWinner: "Vyber vítěze zápasu",
-    tipSaved: "Tip uložen! ✅",
-    notTipped: "Nenatipoval jsi :(",
+    tipSaved: "Tip je uložen",
+    notTipped: "Bez tipu",
     locksIn: "Zamyká se za",
     locksAt: "Zamyká se",
     changePass: "Změnit heslo",
@@ -160,6 +161,7 @@ const translations = {
     finished: "Finished Matches",
     pts: "pts",
     exact: "exact",
+    exactHit: "Exact!",
     goalDiff: "diff",
     winner: "winner",
     draw: "draw",
@@ -627,7 +629,10 @@ const MatchCard: React.FC<MatchCardProps> = ({
               ) : isLocked ? (
                 t.locked
               ) : showSuccess ? (
-                t.tipSaved
+                <>
+                  <CheckCircle2 className="h-5 w-5" />
+                  {t.tipSaved}
+                </>
               ) : isFootballKnockout && drawPredictionSelected ? (
                 t.pickMatchWinner
               ) : (
@@ -651,6 +656,11 @@ const MatchCard: React.FC<MatchCardProps> = ({
                  <span className={`text-lg font-black leading-tight ${match.predicted_home_score === null ? 'text-slate-400 italic text-sm' : 'text-slate-900'}`}>
                     {match.predicted_home_score !== null ? `${match.predicted_home_score} : ${match.predicted_away_score}` : t.notTipped}
                  </span>
+                 {points === 5 && (
+                   <span className="mt-1 text-[10px] font-black uppercase text-indigo-700">
+                     {t.exactHit}
+                   </span>
+                 )}
                </div>
                {points !== null && (
                  <div className={`flex items-center gap-1 font-black ${points > 0 ? 'text-indigo-700' : 'text-slate-400'}`}>
@@ -1344,6 +1354,9 @@ export default function App() {
       }
     };
   }, [activeLobby, activeTournamentId, matches, teams]);
+  const activeTournamentIsCompleted = Boolean(
+    activeTournamentId && tournamentStats[activeTournamentId]?.isCompleted
+  );
 
   useEffect(() => {
     if (!matchFilters.some(filter => filter.id === matchFilter)) {
@@ -1873,7 +1886,11 @@ export default function App() {
     window.scrollTo({ top: 0 });
   };
 
-  const openHomeContext = (summary: HomeDashboardSummary, showOnlyMissing: boolean) => {
+  const openHomeContext = (
+    summary: HomeDashboardSummary,
+    showOnlyMissing: boolean,
+    destination: 'matches' | 'results' = 'matches'
+  ) => {
     lobbyNavigationRequestRef.current += 1;
     lobbyMutationInFlightRef.current = false;
     setIsLobbyMutationSubmitting(false);
@@ -1883,7 +1900,7 @@ export default function App() {
     setActiveLobbyName(summary.lobby_name);
     setActiveTournamentId(summary.tournament_id);
     setMatchFilter(showOnlyMissing ? 'untipped' : 'all');
-    setTab('matches');
+    setTab(destination);
     window.scrollTo({ top: 0 });
   };
 
@@ -2738,7 +2755,7 @@ export default function App() {
                         type="text" required value={newLobbyName} onChange={e => setNewLobbyName(e.target.value)}
                         disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
-                        placeholder="e.g. Kolegové z práce"
+                        placeholder="Třeba Kolegové z práce"
                       />
                     </div>
                     <div>
@@ -2749,7 +2766,7 @@ export default function App() {
                         onChange={e => setNewLobbyShortDescription(e.target.value)}
                         disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
-                        placeholder="Friends League Brno"
+                        placeholder="Krátce: kdo spolu tipuje?"
                         maxLength={120}
                       />
                     </div>
@@ -2760,7 +2777,7 @@ export default function App() {
                         onChange={e => setNewLobbyLongDescription(e.target.value)}
                         disabled={isLobbyMutationSubmitting}
                         className="w-full min-h-[88px] p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-medium resize-y"
-                        placeholder="Entry fee 200 CZK. Payment deadline 10.6.2026. Winner takes all."
+                        placeholder="Volitelné informace pro členy lobby."
                       />
                     </div>
                     <div>
@@ -2814,7 +2831,7 @@ export default function App() {
                       disabled={isLobbyMutationSubmitting}
                       className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-wait text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer"
                     >
-                      {isLobbyMutationSubmitting ? 'Vytvářím lobby...' : 'Potvrdit a vytvořit'}
+                      {isLobbyMutationSubmitting ? 'Zakládám lobby…' : 'Založit lobby'}
                     </button>
                   </form>
                 ) : (
@@ -2823,7 +2840,7 @@ export default function App() {
                     setLobbyError(""); setLobbySuccess("");
                     if (lobbyMutationInFlightRef.current) return;
                     if (!joinCodeInput.trim()) {
-                      setLobbyError("Prosím zadejte kód.");
+                      setLobbyError("Zadej pozvánkový kód.");
                       return;
                     }
                     await navigateAfterLobbyMutation(
@@ -2838,7 +2855,7 @@ export default function App() {
                         type="text" required value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value)}
                         disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-600 uppercase"
-                        placeholder="e.g. LOB-C2F8"
+                        placeholder="NAPŘ. 9YE6GWMR"
                       />
                     </div>
                     <button
@@ -2846,7 +2863,7 @@ export default function App() {
                       disabled={isLobbyMutationSubmitting}
                       className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-wait text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer"
                     >
-                      {isLobbyMutationSubmitting ? 'Připojuji...' : 'Odeslat kód a připojit'}
+                      {isLobbyMutationSubmitting ? 'Připojuji…' : 'Připojit se'}
                     </button>
                   </form>
                 )}
@@ -2991,9 +3008,44 @@ export default function App() {
                    matchPredictionsLoading={deferredLoading && !predictionsByMatchId.has(m.id)}
                    isHockey={isHockey}
                  />
-               ))}
+              ))}
               {scheduledMatchesForView.length === 0 && (
-                <div className="text-center py-12 text-slate-400">{t.noUpcoming}</div>
+                <div className="rounded-3xl border border-slate-100 bg-white px-5 py-10 text-center shadow-sm">
+                  <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400">
+                    {matchFilter === 'untipped' ? <CheckCircle2 className="h-6 w-6 text-emerald-500" /> : <Calendar className="h-6 w-6" />}
+                  </span>
+                  <h3 className="mt-4 text-base font-black text-slate-900">
+                    {activeTournamentIsCompleted
+                      ? (lang === 'cz' ? 'Turnaj je ukončen' : 'Tournament completed')
+                      : matchFilter === 'untipped'
+                        ? (lang === 'cz' ? 'Hotovo' : 'All done')
+                        : t.noUpcoming}
+                  </h3>
+                  <p className="mx-auto mt-2 max-w-[290px] text-sm font-medium leading-relaxed text-slate-500">
+                    {activeTournamentIsCompleted
+                      ? (lang === 'cz' ? 'Všechny zápasy už mají výsledek. Podívej se, jak turnaj dopadl.' : 'All matches have results. See how the tournament finished.')
+                      : matchFilter === 'untipped'
+                        ? (lang === 'cz' ? 'Všechny otevřené zápasy máš tipnuté.' : 'You have predicted every open match.')
+                        : (lang === 'cz' ? 'Jakmile bude připravený další zápas, objeví se tady.' : 'The next match will appear here as soon as it is ready.')}
+                  </p>
+                  {(activeTournamentIsCompleted || matchFilter === 'untipped') && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeTournamentIsCompleted) {
+                          setTab('results');
+                        } else {
+                          setMatchFilter('all');
+                        }
+                      }}
+                      className="mt-5 min-h-11 rounded-xl bg-slate-900 px-4 text-[10px] font-black uppercase tracking-wider text-white transition-transform duration-150 active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none"
+                    >
+                      {activeTournamentIsCompleted
+                        ? (lang === 'cz' ? 'Zobrazit výsledky' : 'View results')
+                        : (lang === 'cz' ? 'Zobrazit všechny zápasy' : 'View all matches')}
+                    </button>
+                  )}
+                </div>
               )}
             </motion.div>
           )}
@@ -3022,7 +3074,13 @@ export default function App() {
                  />
                ))}
                {finishedMatchesForView.length === 0 && (
-                <div className="text-center py-12 text-slate-400">{t.noResults}</div>
+                <div className="rounded-3xl border border-slate-100 bg-white px-5 py-10 text-center shadow-sm">
+                  <CheckCircle2 className="mx-auto h-10 w-10 text-slate-200" />
+                  <h3 className="mt-4 text-base font-black text-slate-900">
+                    {lang === 'cz' ? 'Na první výsledek se čeká' : 'Waiting for the first result'}
+                  </h3>
+                  <p className="mx-auto mt-2 max-w-[290px] text-sm font-medium leading-relaxed text-slate-500">{t.noResults}</p>
+                </div>
               )}
             </motion.div>
           )}

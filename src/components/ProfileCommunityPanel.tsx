@@ -177,7 +177,7 @@ export default function ProfileCommunityPanel({
             </div>
           ) : badges.badges.length === 0 ? (
             <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-5 text-center text-xs font-semibold text-slate-500">
-              {lang === 'cz' ? 'První odznak získáš při hraní.' : 'Your first badge comes from playing.'}
+              {lang === 'cz' ? 'Začni tipovat. První odznak přijde s prvním krokem.' : 'Start predicting. Your first badge follows your first step.'}
             </p>
           ) : (
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">

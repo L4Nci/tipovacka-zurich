@@ -3,18 +3,14 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
-  Clock3,
   Plus,
-  RotateCw,
-  Trophy,
-  Users
+  Trophy
 } from 'lucide-react';
 import type { Lobby, MembershipHomeItem } from '../types.ts';
 import {
   classifyHomeDashboardSummary,
-  getAttentionHomeDashboardSummaries,
-  getLobbyCompetitionStatus,
-  sortHomeDashboardSummaries,
+  formatTipsterCount,
+  getPrimaryHomeDashboardSummaryForLobby,
   type HomeDashboardCardState,
   type HomeDashboardSummary
 } from '../lib/homeDashboard.ts';
@@ -35,7 +31,11 @@ type HomeDashboardProps = {
   addLobbyPanel?: ReactNode;
   onRetrySummaries: () => void;
   onCancelJoinRequest: (requestId: string) => Promise<void>;
-  onOpenContext: (summary: HomeDashboardSummary, showOnlyMissing: boolean) => void;
+  onOpenContext: (
+    summary: HomeDashboardSummary,
+    showOnlyMissing: boolean,
+    destination?: 'matches' | 'results'
+  ) => void;
   onOpenLobby: (lobby: Lobby) => void;
   onSetAddLobbyMode: (mode: AddLobbyMode) => void;
 };
@@ -261,76 +261,194 @@ const getCardCopy = (summary: HomeDashboardSummary, lang: 'cz' | 'en') => {
 
 const DashboardSkeleton = ({ compact = false }: { compact?: boolean }) => (
   <div className={`rounded-2xl border border-slate-100 bg-white ${compact ? 'p-4' : 'p-5'} shadow-sm`} aria-hidden="true">
-    <div className="h-2.5 w-2/3 rounded bg-slate-100" />
-    <div className="mt-2 h-2 w-1/2 rounded bg-slate-100" />
-    <div className="mt-5 h-10 w-full rounded-xl bg-slate-100" />
+    <div className="h-2.5 w-2/3 rounded bg-slate-100 motion-safe:animate-pulse motion-reduce:animate-none" />
+    <div className="mt-2 h-2 w-1/2 rounded bg-slate-100 motion-safe:animate-pulse motion-reduce:animate-none" />
+    <div className="mt-5 h-10 w-full rounded-xl bg-slate-100 motion-safe:animate-pulse motion-reduce:animate-none" />
   </div>
 );
 
-const ContextCard = ({
+const getSystemLobbyCover = (lobby: Lobby, summary: HomeDashboardSummary | null) => {
+  const hash = Array.from(lobby.id).reduce((total, character) => total + character.charCodeAt(0), 0);
+  const tournament = (lobby.tournaments || []).find(item => item.tournament_id === summary?.tournament_id)?.tournament;
+  const sportId = String(tournament?.sport_id || '').toLowerCase();
+  const src = sportId === 'hockey'
+    ? '/lobby-covers/ice-community.jpg'
+    : sportId === 'football'
+      ? '/lobby-covers/stadium-community.jpg'
+      : '/lobby-covers/community-clubhouse.jpg';
+
+  return {
+    src,
+    position: ['center 48%', 'left 48%', 'right 48%'][hash % 3]
+  };
+};
+
+const getCompletedLobbySummary = (lobby: Lobby): HomeDashboardSummary | null => {
+  const relation = (lobby.tournaments || [])
+    .filter(item => item.status === 'archived' || item.tournament?.status === 'finished')
+    .slice()
+    .sort((a, b) => (
+      String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')) ||
+      a.tournament_id.localeCompare(b.tournament_id)
+    ))[0];
+
+  if (!relation) return null;
+
+  return {
+    lobby_id: lobby.id,
+    lobby_name: lobby.name,
+    lobby_role: lobby.is_owner ? 'owner' : lobby.lobby_role || 'member',
+    member_count: lobby.member_count || 0,
+    tournament_id: relation.tournament_id,
+    tournament_name: relation.tournament?.name || lobby.tournament_name || (relation.tournament_id === lobby.tournament_id ? lobby.tournament_name : null) || '',
+    tournament_status: 'archived',
+    is_completed: true,
+    actionable_match_count: 0,
+    next_actionable_lock_time: null,
+    next_missing_lock_time: null,
+    all_known_unlocked_predicted: false,
+    schedule_state: 'completed',
+    requires_owner_attention: false
+  };
+};
+
+const LobbyWorldCard = ({
+  lobby,
   summary,
   lang,
-  attention = false,
+  loading,
+  error,
+  eagerCover,
+  onRetry,
   onOpenContext,
   onOpenLobby
 }: {
   key?: string;
-  summary: HomeDashboardSummary;
+  lobby: Lobby;
+  summary: HomeDashboardSummary | null;
   lang: 'cz' | 'en';
-  attention?: boolean;
-  onOpenContext: (summary: HomeDashboardSummary, showOnlyMissing: boolean) => void;
-  onOpenLobby: (summary: HomeDashboardSummary) => void;
+  loading: boolean;
+  error: string;
+  eagerCover: boolean;
+  onRetry: () => void;
+  onOpenContext: (
+    summary: HomeDashboardSummary,
+    showOnlyMissing: boolean,
+    destination?: 'matches' | 'results'
+  ) => void;
+  onOpenLobby: (lobby: Lobby) => void;
 }) => {
-  const copy = getCardCopy(summary, lang);
-  const relevantLock = copy.state === 'actionable'
-    ? summary.next_actionable_lock_time
-    : summary.next_missing_lock_time;
-  const timeLabel = formatLockTime(relevantLock, lang);
+  const [coverLoaded, setCoverLoaded] = useState(false);
+  const copy = summary ? getCardCopy(summary, lang) : null;
+  const state = copy?.state;
+  const cover = getSystemLobbyCover(lobby, summary);
+  const relevantLock = state === 'actionable'
+    ? summary?.next_actionable_lock_time
+    : summary?.next_missing_lock_time;
+  const timeLabel = formatLockTime(relevantLock || null, lang);
+  const isActionable = state === 'actionable';
+  const isCompleted = state === 'completed';
+  const isQuietLobbyAction = !summary || state === 'owner_attention' || state === 'inactive';
+  const tipsterLabel = formatTipsterCount(lobby.member_count || 0, lang);
+  const tournamentLabel = summary?.tournament_name || (
+    lang === 'cz' ? 'Bez aktivního turnaje' : 'No active tournament'
+  );
+  const statusLabel = loading
+    ? null
+    : error
+      ? (lang === 'cz' ? 'Dění teď nejde načíst' : 'Live status is unavailable')
+      : copy?.status || (
+        lang === 'cz' ? 'Další turnaj zatím není vypsán' : 'The next tournament is not scheduled yet'
+      );
+  const ctaLabel = error
+    ? (lang === 'cz' ? 'Zkusit znovu' : 'Retry')
+    : copy?.cta || (lang === 'cz' ? 'Otevřít lobby' : 'Open lobby');
+  const cardHeight = isCompleted ? 'min-h-[236px]' : 'min-h-[264px]';
+  const ctaStyle = isActionable
+    ? 'border border-red-600 bg-red-600 text-white shadow-sm hover:bg-red-700'
+    : isCompleted
+      ? 'border border-slate-300 bg-white/75 text-slate-900 shadow-none backdrop-blur-sm hover:bg-white'
+      : isQuietLobbyAction
+        ? 'border border-slate-300 bg-white/65 text-slate-800 shadow-none backdrop-blur-sm hover:bg-white'
+        : 'border border-slate-950 bg-slate-950 text-white shadow-sm hover:bg-slate-800';
+
+  const handlePrimaryAction = () => {
+    if (error) {
+      onRetry();
+      return;
+    }
+    if (!summary || state === 'owner_attention' || state === 'inactive') {
+      onOpenLobby(lobby);
+      return;
+    }
+    onOpenContext(summary, Boolean(copy?.missing), isCompleted ? 'results' : 'matches');
+  };
 
   return (
-    <article className={`rounded-2xl border bg-white shadow-sm ${attention ? 'border-red-100 p-5 shadow-red-100/60' : 'border-slate-100 p-4'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-[10px] font-black uppercase text-red-600">{summary.tournament_name}</p>
-          <h3 className="mt-1 truncate text-base font-black uppercase text-slate-900">{summary.lobby_name}</h3>
+    <article className={`group relative ${cardHeight} overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-[transform,box-shadow] duration-150 ease-out hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none`}>
+      <img
+        src={cover.src}
+        alt=""
+        aria-hidden="true"
+        loading={eagerCover ? 'eager' : 'lazy'}
+        onLoad={() => setCoverLoaded(true)}
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 motion-reduce:transition-none ${
+          coverLoaded ? 'opacity-[0.32]' : 'opacity-0'
+        }`}
+        style={{ objectPosition: cover.position }}
+      />
+      <div className="absolute inset-0 bg-white/10" aria-hidden="true" />
+      <div className="absolute inset-0 bg-gradient-to-r from-white via-white/85 to-white/30" aria-hidden="true" />
+      <button
+        type="button"
+        onClick={() => onOpenLobby(lobby)}
+        aria-label={lang === 'cz' ? `Otevřít lobby ${lobby.name}` : `Open lobby ${lobby.name}`}
+        className="absolute inset-0 z-10 cursor-pointer rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500"
+      />
+
+      <div className={`pointer-events-none relative z-20 flex ${cardHeight} flex-col p-5`}>
+        <div className="min-w-0 max-w-[88%]">
+          <h3 className="break-words text-xl font-black uppercase leading-tight text-slate-950">{lobby.name}</h3>
+          <p className="mt-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-500">
+            {tipsterLabel}
+          </p>
         </div>
-        {attention ? (
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
-            <Clock3 className="h-4 w-4" />
-          </span>
-        ) : (
-          <Trophy className="h-4 w-4 shrink-0 text-slate-300" />
-        )}
-      </div>
 
-      <p className={`mt-4 font-black ${copy.state === 'actionable' ? 'text-red-600' : 'text-slate-700'} ${attention ? 'text-lg' : 'text-sm'}`}>
-        {copy.status}
-      </p>
-      {timeLabel && <p className="mt-1 text-[11px] font-semibold text-slate-400">{timeLabel}</p>}
+        <div className="mt-4 flex max-w-[88%] items-start gap-2 text-xs font-bold leading-snug text-slate-600">
+          <Trophy className="h-4 w-4 shrink-0 text-slate-400" />
+          <span className="break-words">{tournamentLabel}</span>
+        </div>
 
-      <div className={`mt-4 flex items-center gap-2 ${attention ? '' : 'justify-between'}`}>
-        <button
-          type="button"
-          onClick={() => {
-            if (copy.state === 'owner_attention' || copy.state === 'inactive') {
-              onOpenLobby(summary);
-              return;
-            }
-            onOpenContext(summary, copy.missing);
-          }}
-          className={`${attention ? 'flex-1 bg-red-600 text-white shadow-md shadow-red-100' : 'bg-slate-900 text-white'} min-h-11 rounded-xl px-4 text-[10px] font-black uppercase tracking-wider active:scale-[0.98]`}
-        >
-          {copy.cta}
-        </button>
-        {attention && (
+        <div className="mt-auto pt-6">
+          {loading ? (
+            <div aria-label={lang === 'cz' ? 'Načítání dění v lobby' : 'Loading lobby activity'}>
+              <div className="h-5 w-3/5 rounded bg-slate-200/80 motion-safe:animate-pulse motion-reduce:animate-none" />
+              <div className="mt-2 h-3 w-2/5 rounded bg-slate-200/70 motion-safe:animate-pulse motion-reduce:animate-none" />
+            </div>
+          ) : (
+            <>
+              <p className={`text-base font-black ${isActionable ? 'text-red-600' : 'text-slate-900'}`}>
+                {statusLabel}
+              </p>
+              {timeLabel && <p className="mt-1 text-xs font-semibold text-slate-500">{timeLabel}</p>}
+            </>
+          )}
+
           <button
             type="button"
-            onClick={() => onOpenLobby(summary)}
-            className="min-h-11 rounded-xl px-3 text-[10px] font-black uppercase text-slate-500"
+            onClick={event => {
+              event.stopPropagation();
+              handlePrimaryAction();
+            }}
+            disabled={loading}
+            aria-label={`${ctaLabel}: ${lobby.name}`}
+            className={`pointer-events-auto mt-5 inline-flex min-h-11 max-w-full items-center justify-center gap-2 self-start rounded-xl px-4 text-[10px] font-black uppercase tracking-wider transition-[transform,background-color,border-color] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none ${ctaStyle}`}
           >
-            {lang === 'cz' ? 'Detail lobby' : 'Lobby detail'}
+            {isCompleted && <CheckCircle2 className="h-4 w-4" />}
+            {loading ? (lang === 'cz' ? 'Načítám' : 'Loading') : ctaLabel}
+            {!loading && !isCompleted && <ChevronRight className="h-4 w-4" />}
           </button>
-        )}
+        </div>
       </div>
     </article>
   );
@@ -353,31 +471,6 @@ export function HomeDashboard({
   onOpenLobby,
   onSetAddLobbyMode
 }: HomeDashboardProps) {
-  const attention = getAttentionHomeDashboardSummaries(summaries);
-  const activeContexts = sortHomeDashboardSummaries(summaries);
-  const allContextsComplete = activeContexts.length > 0 && activeContexts.every(summary => (
-    classifyHomeDashboardSummary(summary) === 'all_predicted'
-  ));
-  const openLobbyFromSummary = (summary: HomeDashboardSummary) => {
-    const lobby = lobbies.find(item => item.id === summary.lobby_id);
-    if (lobby) onOpenLobby(lobby);
-  };
-  const getLobbyStatusLabel = (lobby: Lobby) => {
-    const status = getLobbyCompetitionStatus(lobby.id, summaries, lobby.tournaments || []);
-    if (status.activeCount > 0) {
-      if (lang === 'en') return `${status.activeCount} active ${status.activeCount === 1 ? 'tournament' : 'tournaments'}`;
-      if (status.activeCount === 1) return '1 aktivní turnaj';
-      if (status.activeCount >= 2 && status.activeCount <= 4) return `${status.activeCount} aktivní turnaje`;
-      return `${status.activeCount} aktivních turnajů`;
-    }
-    if (status.completedCount > 0) {
-      if (lang === 'en') return `${status.completedCount} completed ${status.completedCount === 1 ? 'tournament' : 'tournaments'}`;
-      if (status.completedCount === 1) return '1 dokončený turnaj';
-      if (status.completedCount >= 2 && status.completedCount <= 4) return `${status.completedCount} dokončené turnaje`;
-      return `${status.completedCount} dokončených turnajů`;
-    }
-    return lang === 'cz' ? 'Čeká na nový turnaj' : 'Waiting for a new tournament';
-  };
   const membershipNotices = (
     <MembershipNotices
       lang={lang}
@@ -421,101 +514,31 @@ export function HomeDashboard({
 
   return (
     <main className="flex flex-1 flex-col p-4 sm:p-6">
-      {membershipNotices}
-      {(summariesLoading || attention.length > 0 || allContextsComplete) && (
-        <section>
-          <h2 className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-            {lang === 'cz' ? 'Potřebuje tvoji pozornost' : 'Needs your attention'}
-          </h2>
-          <div className="space-y-3">
-            {summariesLoading ? (
-              <DashboardSkeleton />
-            ) : attention.length > 0 ? (
-              attention.map(summary => (
-                <ContextCard
-                  key={`${summary.lobby_id}:${summary.tournament_id}:attention`}
-                  summary={summary}
-                  lang={lang}
-                  attention
-                  onOpenContext={onOpenContext}
-                  onOpenLobby={openLobbyFromSummary}
-                />
-              ))
-            ) : (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-emerald-700">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <p className="text-xs font-black">{lang === 'cz' ? 'Vše máš tipnuto' : 'All predictions complete'}</p>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {(summariesLoading || summariesError || activeContexts.length > 0) && (
-      <section className="mt-7">
-        <h2 className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-          {lang === 'cz' ? 'Tvoje tipovačky' : 'Your competitions'}
+      <section aria-labelledby="home-lobbies-title">
+        <h2 className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
+          <span id="home-lobbies-title">{lang === 'cz' ? 'Tvoje lobby' : 'Your lobbies'}</span>
         </h2>
-        {summariesLoading ? (
-          <div className="space-y-3"><DashboardSkeleton compact /><DashboardSkeleton compact /></div>
-        ) : summariesError ? (
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-              <div>
-                <p className="text-xs font-black text-amber-800">{lang === 'cz' ? 'Akční přehled se nepodařilo načíst.' : 'The action overview could not be loaded.'}</p>
-                <p className="mt-1 text-[10px] font-semibold text-amber-700">{lang === 'cz' ? 'Tvoje lobby zůstávají dostupné níže.' : 'Your lobbies remain available below.'}</p>
-              </div>
-            </div>
-            <button type="button" onClick={onRetrySummaries} className="mt-3 flex min-h-10 items-center gap-2 rounded-xl bg-white px-3 text-[10px] font-black uppercase text-amber-700">
-              <RotateCw className="h-3.5 w-3.5" /> {lang === 'cz' ? 'Zkusit znovu' : 'Retry'}
-            </button>
-          </div>
-        ) : activeContexts.length > 0 ? (
-          <div className="space-y-3">
-            {activeContexts.map(summary => (
-              <ContextCard
-                key={`${summary.lobby_id}:${summary.tournament_id}`}
+        {membershipNotices}
+        <div className="space-y-4">
+          {lobbies.map((lobby, index) => {
+            const summary = getPrimaryHomeDashboardSummaryForLobby(lobby.id, summaries) ||
+              getCompletedLobbySummary(lobby);
+
+            return (
+              <LobbyWorldCard
+                key={lobby.id}
+                lobby={lobby}
                 summary={summary}
                 lang={lang}
+                loading={summariesLoading}
+                error={summariesError}
+                eagerCover={index === 0}
+                onRetry={onRetrySummaries}
                 onOpenContext={onOpenContext}
-                onOpenLobby={openLobbyFromSummary}
+                onOpenLobby={onOpenLobby}
               />
-            ))}
-          </div>
-        ) : null}
-      </section>
-      )}
-
-      <section className="mt-7">
-        <h2 className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-          {lang === 'cz' ? 'Tvoje lobby' : 'Your lobbies'}
-        </h2>
-        <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-          {lobbies.map((lobby, index) => (
-            <button
-              key={lobby.id}
-              type="button"
-              onClick={() => onOpenLobby(lobby)}
-              className={`flex min-h-16 w-full items-center justify-between gap-3 px-4 py-3 text-left ${index > 0 ? 'border-t border-slate-100' : ''}`}
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-black uppercase text-slate-800">{lobby.name}</p>
-                <div className="mt-1 flex items-center gap-2 text-[9px] font-bold uppercase text-slate-400">
-                  <span>{lobby.is_owner ? 'Owner' : lobby.lobby_role === 'admin' ? 'Admin' : (lang === 'cz' ? 'Člen' : 'Member')}</span>
-                  {lobby.member_count !== null && lobby.member_count !== undefined && (
-                    <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {lobby.member_count}</span>
-                  )}
-                </div>
-                {!summariesLoading && !summariesError && (
-                  <p className="mt-1 truncate text-[9px] font-semibold text-slate-400">
-                    {getLobbyStatusLabel(lobby)}
-                  </p>
-                )}
-              </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
-            </button>
-          ))}
+            );
+          })}
         </div>
       </section>
 

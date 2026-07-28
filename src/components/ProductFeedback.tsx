@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 
 export function InlineNotice({
   tone,
@@ -15,10 +15,18 @@ export function InlineNotice({
     : tone === 'error'
       ? 'border-red-100 bg-red-50 text-red-700'
       : 'border-slate-200 bg-slate-50 text-slate-600';
+  const ToneIcon = tone === 'success'
+    ? CheckCircle2
+    : tone === 'error'
+      ? AlertCircle
+      : Info;
 
   return (
     <div role={tone === 'error' ? 'alert' : 'status'} className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-xs font-semibold ${toneClass}`}>
-      <span>{children}</span>
+      <span className="flex min-w-0 items-center gap-2">
+        <ToneIcon className="h-4 w-4 shrink-0" />
+        <span>{children}</span>
+      </span>
       {action}
     </div>
   );
