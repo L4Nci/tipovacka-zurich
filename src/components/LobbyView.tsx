@@ -1,3 +1,4 @@
+import { formatMatchKickoff } from '../lib/matchTime.ts';
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { CalendarClock, Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check, LockKeyhole, Settings2, Share2 } from 'lucide-react';
@@ -18,6 +19,7 @@ import { ConfirmDialog } from './ProductFeedback.tsx';
 import InviteShareDialog from './InviteShareDialog.tsx';
 import LobbyMembersDialog from './LobbyMembersDialog.tsx';
 import LobbyTournamentManager from './LobbyTournamentManager.tsx';
+import { LobbyPrizePanel } from './LobbyPrizePanel.tsx';
 import PlayerProfileDialog from './PlayerProfileDialog.tsx';
 
 type UserAvatarComponent = React.ComponentType<{
@@ -70,6 +72,7 @@ interface LobbyViewProps {
   communityProfilesEnabled: boolean;
   shareEnabled: boolean;
   tournamentManagementEnabled: boolean;
+  privateLobbyPrizesEnabled: boolean;
   UserAvatar: UserAvatarComponent;
   tournamentStats?: Record<string, {
     total: number;
@@ -98,6 +101,7 @@ export function LobbyView({
   communityProfilesEnabled,
   shareEnabled,
   tournamentManagementEnabled,
+  privateLobbyPrizesEnabled,
   UserAvatar,
   tournamentStats = {}
 }: LobbyViewProps) {
@@ -463,6 +467,22 @@ export function LobbyView({
         )}
       </div>
 
+      {privateLobbyPrizesEnabled && (
+        <LobbyPrizePanel
+          lobbyId={lobby.id}
+          enabled={Boolean(lobby.prizes_enabled)}
+          entries={lobby.prize_entries || []}
+          canEdit={Boolean(lobby.is_owner)}
+          lang={lang}
+          onSaved={(prizesEnabled, prizeEntries) => {
+            onRefresh?.({
+              prizes_enabled: prizesEnabled,
+              prize_entries: prizeEntries
+            });
+          }}
+        />
+      )}
+
       <div className="grid grid-cols-1 gap-6">
         {/* LEFT COLUMN */}
         <div className="space-y-6">
@@ -480,7 +500,7 @@ export function LobbyView({
                 const statusLabel = isCompleted
                   ? (lang === 'cz' ? 'Ukončeno' : 'Completed')
                   : stats.nextStart
-                  ? new Date(stats.nextStart).toLocaleDateString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                  ? formatMatchKickoff(stats.nextStart, lang)
                   : (lang === 'cz' ? 'Čeká na rozpis' : 'Schedule pending');
                 const statusDetail = isCompleted
                   ? (stats.championShortName || stats.championName || null)

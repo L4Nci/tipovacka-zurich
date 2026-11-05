@@ -1,6 +1,6 @@
 # AGENTS.md — Tipovačka Agent Guide
 
-Tipovačka is a live/beta production app. Real users can have real predictions, match scores, and leaderboard data in the database. Treat every change touching data, scoring, auth, sync, roles, or deployment as production-sensitive.
+Tipovačka is currently being rebuilt and tested in the existing Supabase project. The owner confirmed on 4–5 November 2026 that there is no active live competition and this is a development space. Historical predictions and results remain useful reference data. Do not describe the current project as live production or repeat the obsolete production warning.
 
 ## Product Context
 
@@ -34,7 +34,7 @@ Do not invent product direction that is not documented in the repository or a Gi
 - Local backend: [server.ts](server.ts), used by `npm run dev` and the bundled server build.
 - Production backend endpoints: Netlify Functions in [netlify/functions](netlify/functions), wired through [netlify.toml](netlify.toml).
 - Database/Auth: Supabase client in [src/lib/supabase.ts](src/lib/supabase.ts), service-role helper in [server/lib/supabaseAdmin.ts](server/lib/supabaseAdmin.ts), schema in [supabase/migrations](supabase/migrations), seed data in [supabase/seed](supabase/seed).
-- Sports data providers: TheSportsDB is the current result/fixture sync provider. API-Football dry-run docs/code may still exist as historical/provider context.
+- Sports data providers: historical competitions use TheSportsDB. The active Champions League 2026/27 catalog is imported from football-data.org and linked to Testovací rodeo; the owner chose ongoing full-season testing without a three-round limit (knockout import/rules are still pending); its protected sync endpoint is implemented locally and in Netlify source, awaiting deployment/scheduling. See [docs/football-data-cron.md](docs/football-data-cron.md). API-Football dry-run docs/code may still exist as historical/provider context.
 - Important docs: [PROJECT_RULES.md](PROJECT_RULES.md), [docs/ISSUE_WORKFLOW.md](docs/ISSUE_WORKFLOW.md), [docs/ROADMAP.md](docs/ROADMAP.md), [docs/thesportsdb-dry-run.md](docs/thesportsdb-dry-run.md), [docs/fixture-sync-cron.md](docs/fixture-sync-cron.md).
 
 Useful commands:
@@ -45,15 +45,17 @@ Useful commands:
 - `npm run build:netlify` — Netlify-style static frontend build.
 - `git diff --check` — whitespace/conflict marker check.
 
-There is no dedicated `test` script in `package.json` at the time of writing. If an Issue needs automated tests, add the smallest relevant test approach within that Issue scope.
+Focused test commands include `npm run test:env`, `npm run test:clerk` and `npm run test:football-data`. Transactional DB suites are in `supabase/tests`. Add the smallest relevant test approach within the task scope.
 
-## Critical Restrictions
+## Current Authorization and Restrictions — 2026-11-05
 
-Before risky work, use this canonical production warning:
+The owner has authorized rebuilding/cleaning the single existing database, Clerk integration, profiles, schema/RLS work, transactional tests, the agreed pilot implementation and the Champions League import with a protected sync endpoint. Continue this work without requesting the same approval again. Inspect dependencies, make appropriate backups, verify changes, and report results. A backup or rollback test does not by itself require another approval. Do not create a second beta database or environment.
 
-> Jsme v ostrém provozu. Tipy v DB jsou reálné. Neprováděj žádné zápisy do predictions, matches ani profiles bez výslovného schválení. Neprováděj destruktivní změny. Nejdřív udělej audit, napiš rizika, navrhni plán a počkej na potvrzení.
+The earlier live-production warning is historical and superseded by this authorization. See [PROJECT_RULES.md](PROJECT_RULES.md) and [the implementation scope](docs/beta-implementation-scope.md). Reassess operating rules when real live play resumes; do not automatically reinstate the old warning during the current rebuild.
 
-Without explicit owner approval, an agent must not:
+Release authorization, 5 November: the owner explicitly requested push and publication of the current working version at `https://tipovacka-fotbal.netlify.app` and authorized Netlify CLI access. The necessary merge into `main`, configuration of that existing site and deployment of this package are authorized. Paid services and deferred Official Events/prize activation remain outside this release.
+
+Outside the owner's already authorized scope, an agent must not:
 
 - change production data,
 - mutate production `matches`, `predictions`, `points_earned`, `profiles`, lobby members, or roles,

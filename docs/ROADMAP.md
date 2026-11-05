@@ -6,6 +6,108 @@ This document is the long-term product source of truth for Tipovacka after the f
 
 It is not a feature backlog, TODO list, sprint plan, GitHub Issue list, technical audit, or marketing plan. Concrete work belongs in GitHub Issues. This document describes the product direction, product boundaries, completed foundations, and durable product areas.
 
+## Planning update — 2026-11-03
+
+**Owner clarification — 2026-11-05:** this is currently a development/rebuild space,
+not active live production. The old production warning is superseded in AGENTS.md;
+do not repeatedly request approval for the agreed implementation. The Champions
+League catalog is imported and activated in the existing database, linked to the owner’s Testovací rodeo lobby. The owner subsequently chose to test the whole season, removing the three-matchday limit. Normal evaluation and newer provider corrections must be automatic across lobbies; manual operation is not a prerequisite.
+See the [sync runbook](football-data-cron.md) for its current implementation and
+deployment status. The pilot has not started.
+
+**Owner update — 2026-11-04:** build the product in the single existing Supabase project `hkhkbtzdyjbdeeoiurvw`, using ordinary local `.env` configuration and Netlify environment variables for deployment. No separate beta environment or second database. The owner confirmed there is no current live operation and approved database restructuring/cleanup and transactional RLS tests. The Clerk identity migration has been applied, preserving history so far; real registration, profile creation and two Clerk players joining one lobby are verified. The working Netlify site still uses historical Supabase Auth until a reviewed deployment of the new client. See the [current implementation scope](beta-implementation-scope.md).
+
+The owner confirmed private groups and communities as the primary audience;
+company use is secondary. The historical hockey and football competitions are
+complete. The owner restored Supabase for the review and the historical app is
+accessible again; a new live pilot has not started. Historical data remains
+protected by the existing production rules.
+
+The intended next version keeps Supabase as the data foundation and uses Clerk
+as the planned identity/account layer. A complete multilingual core flow,
+profile revision, UI refresh and gradual expansion to more competitions are
+the direction. Netlify is suitable for initial testing and later deployment of the same application.
+Implementation is underway as described above; a new deployment has not been performed.
+
+Cosmetic customization and visible supporter identity are the intended
+monetization area to validate. Pricing, payment implementation and exact
+Free/Premium boundaries remain undecided; payment must not affect sporting
+scores or the ability to win. Expansion order is football, hockey, then MMA;
+UFC is a candidate to investigate. F1 remains an optional later direction.
+
+The owner chose to archive the old version and start the pilot with new
+accounts and a fresh scoring period. The owner identified “Fotbaloví experti”
+as the only real historical lobby and allowed its data to inform the review
+and validation. Historical points do not carry into the new pilot ranking.
+The owner explicitly chose to archive and hide the two test lobbies in the
+historical application while preserving data. The current application only
+archives tournaments within a lobby; full lobby archival needs a separate
+implementation. See [the audited archival plan](archive-test-lobbies-plan.md).
+Archival has not yet been implemented. The later Clerk identity migration is recorded in the implementation scope.
+
+The owner selected UEFA Champions League 2026/27 first, followed by Premier League.
+The owner accepted the persistent organizer-lobby model (B) after the
+[theoretical comparison](lobby-model-research-2026-11-03.md). The model choice is
+closed. The owner’s 5 November update replaces the three-matchday pilot with ongoing
+testing through the whole 2026/27 season, using new predictions and no scored
+season-winner pick. The league phase is available now; knockout import and
+extra-time/shootout rules still need implementation. Predictions
+remain independent in each lobby. The owner requested the complete final score
+and prefers scoring the shootout score, such as 5:4, when a match is decided on
+penalties. Official goal scores and shootouts remain distinct sports facts;
+that game preference needs its complete contract before implementation. The
+owner wants configurable competition rules. The later 5 November update allows
+rule changes during development with a visible version, impact preview and explicit
+rescore scope. The small regulation/final-score example is implemented; persistent
+configuration and rescore controls are still pending.
+Exact fixtures, dates and operational edge cases will be verified
+before launch. Building prototypes is not authorized at this stage; the current
+task is to record the accepted logic and continue planning. No monetization
+package has been approved.
+See [the active plan and checklist](product-restart-plan.md).
+That pilot precedes the longer-term commercial milestones below. Implementation
+tasks will move into Issues once their scope is settled.
+
+## Accepted organizer model — 2026-11-03
+
+**One persistent organizer lobby contains one or more prediction competitions.
+Each competition has its own participation, scoring period and leaderboard.
+Invitations lead directly to a specific competition in that lobby.**
+
+The same model covers a group of friends, a recurring pub community such as
+Kobra, and a one-off sponsored competition. A one-off organizer simply runs
+one competition; further competitions are optional. There is no parallel
+event-only product model to build.
+
+Player identity and profile persist across competitions. Lobby membership and
+history persist when the organizer starts the next competition; participation
+in that competition is a distinct concept. A new event does not silently enroll
+all lobby members or carry historical points into its new leaderboard. Exact
+entry permissions and account contracts must be specified before implementation.
+
+Sports schedules and results are shared facts. Lobby participation, predictions
+and standings retain their competition context. The owner explicitly chose
+independent player predictions in each lobby, including the same match played
+in multiple groups.
+
+Game evaluation is derived from sports facts using a competition-specific
+rules version. Changes during development must have an identifiable version and a visible
+rescore scope; new variants must not rewrite official scores or silently rescore
+ongoing or historical competitions.
+
+Personal cosmetics belong to the player; organizer identity belongs to the
+lobby; a partner and declared prizes belong to a specific competition. Sponsor
+branding does not grant administrative access. Public competitions, prize
+operations and company branding remain later work; they do not expand the first
+private pilot or approve pricing, payments, a partner portal or an enterprise
+product. Paid customization cannot change sporting scores or locking rules.
+
+The existing local Official Events implementation still has separate tables
+and flows. Those describe the current code, not the accepted target model.
+Reuse, deferral or conversion requires its own audit and implementation scope.
+Existing migration dependencies, result safeguards and historical data must be
+preserved until an explicit replacement plan is verified.
+
 ## Product Stage
 
 Tipovacka is no longer an MVP.

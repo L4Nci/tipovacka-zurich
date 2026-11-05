@@ -4,6 +4,11 @@
   functions = "netlify/functions"
 
 [[redirects]]
+  from = "/api/admin/sync-football-data"
+  to = "/.netlify/functions/sync-football-data"
+  status = 200
+
+[[redirects]]
   from = "/api/admin/sync-results-dry-run"
   to = "/.netlify/functions/sync-results-dry-run"
   status = 200

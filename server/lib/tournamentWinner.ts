@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isAuthoritativePlatformAdmin } from "./platformAuthorization.ts";
+import { authorizeClerkPlatformAdmin, clerkAuthorizationErrorResponse } from "./clerkAuthorization.ts";
 
 const DEFAULT_TOURNAMENT_ID = "fifa-world-cup-2026";
 const TOURNAMENT_WINNER_POINTS = 10;
@@ -25,33 +25,14 @@ const isTbaParticipantId = (participantId: string) =>
 
 const isValidParticipantId = (participantId: string) => /^[a-z0-9-]+$/i.test(participantId);
 
-const bearerTokenFromHeader = (authorizationHeader?: string | null) => {
-  const header = authorizationHeader || "";
-  return header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : null;
-};
-
 export const authorizeTournamentWinnerAdmin = async (
   supabaseAdmin: SupabaseClient,
   authorizationHeader?: string | null
-) => {
-  const bearerToken = bearerTokenFromHeader(authorizationHeader);
-
-  if (!bearerToken) {
-    throw httpError("Chybí přihlášení administrátora.", 401);
-  }
-
-  const { data, error } = await supabaseAdmin.auth.getUser(bearerToken);
-  if (error || !data.user?.id) {
-    throw httpError("Neplatné přihlášení administrátora.", 401);
-  }
-
-  const adminUserId = data.user.id;
-  if (!await isAuthoritativePlatformAdmin(supabaseAdmin, adminUserId)) {
-    throw httpError("Pouze administrátor může vyhlásit celkového vítěze.", 403);
-  }
-
-  return adminUserId;
-};
+) => authorizeClerkPlatformAdmin(
+  supabaseAdmin,
+  authorizationHeader,
+  "Pouze administrátor může vyhlásit celkového vítěze.",
+);
 
 const loadValidatedChampion = async (
   supabaseAdmin: SupabaseClient,
@@ -305,11 +286,15 @@ export const executeTournamentWinnerConfirmation = async (
   };
 };
 
-export const tournamentWinnerErrorResponse = (err: any) => ({
-  statusCode: err?.statusCode || 500,
-  body: {
-    success: false,
-    wrote_to_db: false,
-    error: err?.message || "Chyba při nastavení vítěze turnaje."
-  }
-});
+export const tournamentWinnerErrorResponse = (err: any) => {
+  const authError = clerkAuthorizationErrorResponse(err);
+  const statusCode = authError?.statusCode || err?.statusCode || 500;
+  return {
+    statusCode,
+    body: {
+      success: false,
+      wrote_to_db: false,
+      error: authError?.error || (statusCode < 500 ? err?.message : null) || "Chyba při nastavení vítěze turnaje."
+    }
+  };
+};

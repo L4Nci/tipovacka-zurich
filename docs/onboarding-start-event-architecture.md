@@ -1,4 +1,14 @@
-# Onboarding to First Tip and Tipovačka Start
+# Onboarding to First Tip and Official Tournaments
+
+> **Architecture status — 2026-11-03:** The owner accepted one persistent
+> organizer lobby containing competitions with their own participation and
+> standings, with event-specific invitations. See the [accepted product model](ROADMAP.md#accepted-organizer-model--2026-11-03)
+> and [active plan](product-restart-plan.md). The separate Official Events domain
+> below describes the existing local implementation and its historical decisions,
+> not the target product architecture. The historical “Variant B” in this document
+> is a different label from the newly accepted product model B. Existing `020`/`021`
+> dependencies and rollout gates remain valid while the current backend is retained;
+> this decision does not authorize removing migrations, tables, safeguards or data.
 
 Status: local foundation implemented and integration-tested. Migrations `020`
 and `021`, frontend flags, and all Official Events features remain unapplied and
@@ -6,7 +16,9 @@ disabled in production.
 
 This document defines both a first-run funnel and a reusable Official Events
 platform for periodic public PvP competitions. An event can be an onboarding
-destination, but it is not a permanent tutorial lobby.
+destination, but it is not a permanent tutorial lobby. Commercial metadata,
+prizes, eligibility and season-result decisions are documented in
+[official-public-tournaments.md](official-public-tournaments.md).
 
 ## Product objective
 
@@ -83,7 +95,7 @@ Auth
   -> choose playing context
      -> enter invite
      -> create lobby
-     -> Tipovačka Start
+     -> active official tournament
   -> first real prediction
   -> confirmation and one next action
 ```
@@ -144,7 +156,7 @@ Choices:
 
 - `Mám pozvánku`
 - `Založit vlastní lobby`
-- `Nejdřív si to vyzkoušet`
+- `Zapojit se do oficiálního turnaje`
 
 The third choice is displayed only when an active official event has at least one
 predictable match. Otherwise it is replaced with a short neutral message and the

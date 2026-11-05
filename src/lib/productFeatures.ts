@@ -3,6 +3,7 @@ import type {
   AdminOperationsSummary,
   BadgeOverview,
   CommunityProfile,
+  LobbyPrizeEntry,
   LobbyTournamentCatalogItem,
   ProductFeatureFlags
 } from '../types.ts';
@@ -141,6 +142,20 @@ export const updateLobbyFieldSecure = async (
   });
   if (error) throw error;
   return data as { field: string; value: string | null };
+};
+
+export const setLobbyPrizesSecure = async (
+  lobbyId: string,
+  enabled: boolean,
+  entries: LobbyPrizeEntry[]
+) => {
+  const { data, error } = await supabase.rpc('set_lobby_prizes_secure', {
+    lobby_id_param: lobbyId,
+    enabled_param: enabled,
+    entries_param: entries
+  });
+  if (error) throw error;
+  return data as { enabled: boolean; entries: LobbyPrizeEntry[] };
 };
 
 export const fetchAdminOperationsSummary = async (): Promise<AdminOperationsSummary | null> => {

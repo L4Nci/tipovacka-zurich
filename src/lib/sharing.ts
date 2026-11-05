@@ -5,6 +5,7 @@ export type ShareCardType =
   | 'round_result'
   | 'player_profile'
   | 'badge'
+  | 'official_event_result'
   | 'tournament_winner'
   | 'hall_of_fame';
 
@@ -15,9 +16,22 @@ export type ShareCardInput = {
   identity?: string;
   stats?: Array<{ label: string; value: string }>;
   context?: string;
+  accentColor?: string;
+  partnerName?: string;
 };
 
 const JOIN_PATH_PREFIX = '/join/';
+const SHARE_CARD_LABELS: Record<ShareCardType, string> = {
+  lobby_invitation: 'Pozvánka do lobby',
+  leaderboard_top_three: 'Nejlepší tipéři',
+  player_rank: 'Pořadí hráče',
+  round_result: 'Výsledek kola',
+  player_profile: 'Profil hráče',
+  badge: 'Odznak',
+  official_event_result: 'Výsledek oficiálního turnaje',
+  tournament_winner: 'Vítěz turnaje',
+  hall_of_fame: 'Síň slávy'
+};
 
 export const normalizeInviteCode = (value: string) => value.trim().toUpperCase();
 
@@ -86,15 +100,18 @@ export const renderShareCard = async (input: ShareCardInput) => {
 
   context.fillStyle = '#f8fafc';
   context.fillRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = '#dc2626';
+  const accentColor = input.accentColor && /^#[0-9A-Fa-f]{6}$/.test(input.accentColor)
+    ? input.accentColor
+    : '#dc2626';
+  context.fillStyle = accentColor;
   context.fillRect(0, 0, canvas.width, 22);
 
   context.fillStyle = '#0f172a';
   context.font = '900 42px system-ui';
   context.fillText('TIPOVAČKA', 80, 110);
-  context.fillStyle = '#dc2626';
+  context.fillStyle = accentColor;
   context.font = '800 24px system-ui';
-  context.fillText(input.type.replaceAll('_', ' ').toUpperCase(), 80, 158);
+  context.fillText(SHARE_CARD_LABELS[input.type].toUpperCase(), 80, 158);
 
   context.fillStyle = '#0f172a';
   context.font = '900 72px system-ui';
@@ -107,7 +124,7 @@ export const renderShareCard = async (input: ShareCardInput) => {
   }
 
   if (input.identity) {
-    context.fillStyle = '#dc2626';
+    context.fillStyle = accentColor;
     context.font = '800 38px system-ui';
     context.fillText(input.identity, 80, 650);
   }
@@ -130,6 +147,14 @@ export const renderShareCard = async (input: ShareCardInput) => {
     context.fillStyle = '#64748b';
     context.font = '600 25px system-ui';
     drawWrappedText(context, input.context, 80, 1240, 920, 34);
+  }
+
+  if (input.partnerName) {
+    context.fillStyle = '#475569';
+    context.font = '700 22px system-ui';
+    context.textAlign = 'right';
+    context.fillText(`S partnerem ${input.partnerName}`, 1000, 1300);
+    context.textAlign = 'left';
   }
 
   return new Promise<Blob>((resolve, reject) => {

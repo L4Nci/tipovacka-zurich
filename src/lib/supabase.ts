@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { createClient } from "@supabase/supabase-js";
+import { createClerkSupabaseClient, getClerkAccessToken } from "./clerkSupabase.ts";
 
 let supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -23,4 +23,5 @@ try {
   // Ignore
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Data modules share one client; stored Supabase Auth sessions are never a fallback.
+export const supabase = createClerkSupabaseClient(supabaseUrl, supabaseAnonKey, getClerkAccessToken);

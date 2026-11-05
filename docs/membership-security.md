@@ -8,7 +8,10 @@ authoritative deployment record.
 
 ## Authoritative model
 
-- `auth.uid()` is the only caller identity accepted by membership RPCs.
+- `public.current_player_id()` is the caller identity accepted by membership RPCs
+  after the Clerk identity migration. It resolves a trusted Clerk session to an
+  internal UUID; signed historical Supabase identities retain explicit compatibility.
+  A client-supplied player ID or role is never authoritative.
 - `lobbies.owner_id` is the only source of truth for lobby ownership.
 - `lobby_members.role` values are only `admin` or `member`.
 - Legacy `owner` membership rows are normalized to `member`; ownership remains
@@ -24,14 +27,14 @@ authoritative deployment record.
 
 `create_lobby_secure(...)` performs one atomic database operation:
 
-1. derives the owner from `auth.uid()`,
+1. derives the owner from `public.current_player_id()`,
 2. generates a cryptographically random lobby ID and join code,
 3. inserts the lobby,
 4. inserts the `lobby_tournaments` relation,
 5. inserts the owner as a plain membership `member`.
 
 `join_lobby_secure(join_code_param)` accepts only the join code. It derives the
-user from `auth.uid()` and never accepts a role or user ID. Open lobbies
+user from `public.current_player_id()` and never accepts a role or user ID. Open lobbies
 activate a new or previously-left member on the single existing membership
 row. Approval-required lobbies create at most one pending
 `lobby_join_requests` row and do not create a membership until approval.
@@ -104,6 +107,18 @@ and additionally require:
 - the caller owns the prediction row,
 - the caller is a lobby member,
 - the match tournament is linked to that lobby.
+
+Migration `20261104193538_prediction_result_write_guard.sql` also enforces the
+existing frontend result guard in INSERT and both UPDATE policy expressions:
+the match must not be finished and neither result score may be populated.
+A stale future lock time cannot reopen predictions after a result is known.
+This does not change lock timestamps or scoring formulas. Trusted result writers
+continue using their existing server-side access.
+
+The transactional Clerk/lobby SQL suite reproduces the previously accepted
+after-result insert, then verifies its rejection, blocked edits to an existing
+resulted tip, idempotent joining, independent editable tips for two active members,
+and rejection of cross-player updates and ordinary-member owner removal.
 
 Long-term prediction INSERT and UPDATE policies use the same membership and
 lobby/tournament relationship. `is_lobby_member()` requires

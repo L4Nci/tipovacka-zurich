@@ -14,6 +14,18 @@ export const isOfficialEventPlayable = (event: OfficialEventCard | null) => (
   )
 );
 
+export const shouldShowOfficialEventOnHome = (
+  event: OfficialEventCard | null
+) => Boolean(
+  event &&
+  event.is_participating &&
+  event.participation_status === 'active'
+);
+
+export const shouldShowOfficialEventInPicker = (
+  event: OfficialEventCard | null
+) => Boolean(event && event.status === 'active');
+
 export const shouldShowFirstTipOnboarding = ({
   enabled,
   hasInvite,
@@ -44,8 +56,3 @@ export const getFirstPredictableOfficialEventMatch = (
       new Date(a.lock_time_utc).getTime() - new Date(b.lock_time_utc).getTime()
     ))[0] || null
 );
-
-export const shouldPromoteOfficialEventCard = (
-  event: OfficialEventCard | null,
-  lobbies: Lobby[]
-) => Boolean(event && lobbies.length === 0 && event.status === 'active');
