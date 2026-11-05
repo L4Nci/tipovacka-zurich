@@ -22,10 +22,17 @@ Veřejné sponzorované akce, ceny, obchod, platby a samostatné enterprise rozh
 
 ## Stav realizace
 
+**Release 5. 11. ověřen:** [PR #16](https://github.com/L4Nci/tipovacka-zurich/pull/16),
+commit `0e6aece`, je publikovaný na existujícím Netlify webu. Přihlašovací obrazovka
+Clerk a API ochrany fungují. Přihlášený sync dry-run vrátil 200, všech 144 zápasů
+beze změny, bez konfliktů a bez DB zápisu. Externí cron je vypnutý; plný přihlášený
+herní průchod na této adrese ještě ověří vlastník. Používá se stávající Clerk dev
+instance pro pracovní testování. Následující starší poznámky jsou historie realizace.
+
 - Clerk frontend je zapojený do hlavní aplikace: přihlášení/registrace, aktuální token pro Supabase a API, bootstrap interního UUID a dokončení profilu. Skutečná registrace a dokončení profilu v hlavní DB jsou ověřené; celý herní průchod ještě ne.
 - Backendový verifier `server/lib/clerkIdentity.ts` ověřuje podpis přes veřejné JWKS. `server/lib/clerkAuthorization.ts` převádí ověřenou identitu přes chráněné RPC na interní UUID; autoritu admina určuje DB profil. Zapojené jsou lokální a Netlify match-result, sdílený tournament-winner a lokální změna názvu lobby. Neplatná/chybějící identita vrací 401, neoprávněný hráč 403, nedostupné ověření 503 bez interních detailů.
 - V hlavní DB byla aplikována migrace `20261104095025_clerk_identity_bridge.sql`: chráněné mapování identity, bootstrap/profilové RPC a přechod stávajících RLS/RPC na interní UUID. Před ní vznikla datová a schématová záloha veřejných tabulek; nejde o plný dump Auth/Storage. V privátním DB allowlistu je zvolený issuer `https://civil-seal-3653.clerk.accounts.dev` pouze pro `http://localhost:3000`. Vlastník pro stejnou development instanci povolil i nativní Supabase Third-Party Auth; příjem skutečného tokenu potvrzuje vytvořený profil.
-- Větev `codex/functional-beta` existuje, Git checkpoint nevznikl. Dřívější snapshot 192 zdrojových souborů je popsaný v [baseline plánu](beta-baseline-plan.md); pozdější úpravy neobsahuje.
+- Větev `codex/functional-beta` byla pushnutá a sloučená přes PR #16. Dřívější snapshot 192 zdrojových souborů je popsaný v [baseline plánu](beta-baseline-plan.md); aktuální zdroje obsahuje Git release.
 - Jediná lokální konfigurace je ignorovaný `.env`; [šablona](../.env.example) neobsahuje klíče. Původní nastavení Supabase zůstalo zachované. Clerk hodnoty jsou doplněné a offline kontrola prošla. CLI je propojené s existující aplikací Tipovačka `app_3LdaRuXTIBtmKluY8rhCW5DPJY6`; produkční Clerk instance zatím není vytvořená.
 - Offline [kontrola](../scripts/check-env.mjs) a její [testy](../scripts/check-env.test.mjs) podporují testovací i produkční Clerk klíče. Kontrola hodnoty nevypisuje, nespouští aplikaci a nenahrazuje živé ověření identity ani RLS.
 - V existující Clerk development instanci je přes cílený CLI patch nastavené `session.claims.role = authenticated`. To je přístupová role Supabase, nikoli platformní admin. Nativní Supabase Third-Party Auth je vlastníkem povolené. Nepoužívá se náhradní ověření přes service-role na klientovi.

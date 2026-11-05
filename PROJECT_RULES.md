@@ -2,6 +2,12 @@
 
 **Release 5. 11. 2026:** vlastník zadal push a publikování aktuální pracovní verze na stávající `https://tipovacka-fotbal.netlify.app` a potvrdil Netlify CLI. Potřebný merge do `main`, nastavení tohoto webu a nasazení jsou pro tento balík schválené. Stav předchozích etap níže je historický; externí cron ani odložené Official Events/ceny se automaticky nezapínají.
 
+**Ověřený výsledek releasu:** PR #16 je sloučený a commit `0e6aece` publikovaný.
+Clerk přihlášení se vykresluje; chráněné API odmítá nepřihlášené požadavky.
+Sync dry-run vrátil 200, 144 nezměněných zápasů, bez konfliktů a bez DB zápisu.
+Externí cron ještě není naplánovaný. Kompletní herní průchod pod svým Clerk účtem
+na Netlify nyní ověří vlastník. Starší stavové poznámky níže jsou historie.
+
 ## Aktualizace plánování — 3. 11. 2026
 
 **Aktualizace 4. 11. 2026:** vlastník schválil přestavbu jediné stávající DB `hkhkbtzdyjbdeeoiurvw`, napojení Clerk, registraci, profil a RLS. Potvrdil, že projekt nyní není v ostrém provozu, a povolil čištění/přestavbu DB i transakční RLS testy. Clerk identity migrace už byla aplikována se zachováním dosavadní historie. Konfigurace je běžný `.env` lokálně a proměnné Netlify při nasazení; druhá DB ani beta profil se nepoužívají. Tento pokyn nahrazuje starší omezení na pouhé plánování a oddělenou betu; viz [aktuální rozsah](docs/beta-implementation-scope.md). Produkční deployment a merge zůstávají samostatným krokem.

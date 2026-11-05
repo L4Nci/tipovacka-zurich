@@ -130,7 +130,7 @@ The Champions League catalog is imported and active in the existing DB, linked
 to Testovací rodeo. Testing covers the whole season; there is no three-round limit.
 The 144 league-phase games are available now; knockout support is pending. The protected local/Netlify sync endpoint and cron-job.org configuration
 are described in the [import and cron runbook](docs/football-data-cron.md).
-The job is not deployed or scheduled yet. `npm run football-data:import` previews DB
+The endpoint is deployed on the working Netlify site; the external job is not scheduled yet. `npm run football-data:import` previews DB
 changes; explicit `-- --write` backs up the public tables and imports the catalog.
 
 The repository is linked to the owner's existing Clerk application **Tipovačka**
@@ -149,8 +149,13 @@ Supabase Third-Party Auth and completed a real Clerk sign-up and profile on loca
 Current DB verification confirms 15 profiles and two Clerk player accounts. The owner
 verified logout/login and created a lobby shared by both Google accounts and a legacy
 Supabase test account. That legacy account retains its existing platform-admin role.
-The working Netlify URL still serves the previous Supabase-auth frontend; Clerk is
-currently verified on localhost. A fresh legacy login and page reload were also tested.
+Release [#16](https://github.com/L4Nci/tipovacka-zurich/pull/16) published the Clerk
+frontend and football-data sync to [the working site](https://tipovacka-fotbal.netlify.app)
+on 5 November 2026 (app commit `0e6aece`). The Clerk sign-in screen and API guards
+were verified there. Authenticated sync dry-run returned 200, 144 unchanged matches,
+no conflicts and no DB writes. The owner still needs to verify the signed-in game
+flow on this hostname. The existing Clerk development instance remains in use for
+this working test; external cron scheduling is a separate next step.
 
 Migration `20261104193538_prediction_result_write_guard.sql` closes a reproduced
 direct-API gap: a recorded result or finished match now blocks prediction writes

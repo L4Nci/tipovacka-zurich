@@ -8,6 +8,13 @@ It is not a feature backlog, TODO list, sprint plan, GitHub Issue list, technica
 
 ## Planning update — 2026-11-03
 
+**Release verified — 2026-11-05:** PR #16 published the new Clerk frontend and
+football-data sync to the existing working Netlify site. The sign-in screen and
+API guards work; authenticated sync dry-run returned 144 unchanged matches,
+no conflicts and no DB writes. External cron scheduling and owner verification
+of the signed-in game flow remain pending. The following dated notes preserve
+the earlier planning history; see the [current runbook](football-data-cron.md).
+
 **Owner clarification — 2026-11-05:** this is currently a development/rebuild space,
 not active live production. The old production warning is superseded in AGENTS.md;
 do not repeatedly request approval for the agreed implementation. The Champions
@@ -27,7 +34,7 @@ The intended next version keeps Supabase as the data foundation and uses Clerk
 as the planned identity/account layer. A complete multilingual core flow,
 profile revision, UI refresh and gradual expansion to more competitions are
 the direction. Netlify is suitable for initial testing and later deployment of the same application.
-Implementation is underway as described above; a new deployment has not been performed.
+Implementation is underway; the working release was deployed on 5 November as described above.
 
 Cosmetic customization and visible supporter identity are the intended
 monetization area to validate. Pricing, payment implementation and exact

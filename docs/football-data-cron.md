@@ -1,5 +1,13 @@
 # Liga mistrů — import a cron-job.org
 
+**Nasazení ověřeno 5. 11. 2026:** [PR #16](https://github.com/L4Nci/tipovacka-zurich/pull/16),
+aplikační commit `0e6aece`, je publikovaný na [pracovním webu](https://tipovacka-fotbal.netlify.app).
+Clerk přihlášení se vykresluje. API vrací správně 405 pro GET syncu, 401 bez
+přihlášení/klíče a 404 pro neznámé API. Autentizovaný sync s `{"dryRun":true}`
+vrátil 200, 144 nezměněných zápasů, žádné konflikty a `wrote_to_db=false`.
+Externí cron **není zapnutý**; přihlášený herní průchod na Netlify ověří vlastník.
+Starší validační poznámky níže popisují jednotlivé etapy před tímto releasem.
+
 Stav 5. 11. 2026: do jediné stávající DB byl skutečně importován katalog LM
 2026/27: **36 klubů a 144 zápasů ligové fáze**, z toho 72 hotových a 72 budoucích.
 Na následný pokyn vlastníka je soutěž `uefa-champions-league-2026-27` aktivní
@@ -32,10 +40,9 @@ Nové prostředí, druhá DB ani další přihlašovací služba se nezakládaj�
 
 ## Nastavení jednoho jobu
 
-Endpoint je připravený ve zdrojích a ověřený lokálně. **Nový Netlify deployment
-dosud neproběhl**; job zapnout až po nasazení této funkce a konfigurace.
-Při nasazení celé aplikace ověřit také Clerk origin/issuer v backendu a Supabase;
-dosud ověřený DB allowlist zahrnuje jen localhost. Serverový cron používá vlastní
+Endpoint i konfigurace jsou nasazené a dry-run prošel. Job lze nyní nastavit
+podle příkladu níže. Clerk issuer/origin je nastavený v backendu i Supabase;
+DB allowlist zahrnuje localhost a přesný origin hlavního Netlify webu. Serverový cron používá vlastní
 klíč a uživatelské přihlášení nepotřebuje.
 
 ```text
