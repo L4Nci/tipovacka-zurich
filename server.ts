@@ -4,6 +4,7 @@ import path from "path";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import "dotenv/config";
+import { handleFootballDataSyncRequest } from "./server/lib/footballDataSync.ts";
 import { getSupabaseAdmin } from "./server/lib/supabaseAdmin.ts";
 import {
   applyMatchResult,
@@ -19,6 +20,12 @@ import {
   tournamentWinnerErrorResponse
 } from "./server/lib/tournamentWinner.ts";
 import { isAuthoritativePlatformAdmin } from "./server/lib/platformAuthorization.ts";
+import { readBearerToken } from "./server/lib/clerkIdentity.ts";
+import {
+  authorizeClerkPlatformAdmin,
+  clerkAuthorizationErrorResponse,
+  resolveClerkPlayerId
+} from "./server/lib/clerkAuthorization.ts";
 
 type SyncAuthResult =
   | { ok: true }
@@ -53,6 +60,14 @@ async function startServer() {
   app.use(express.json());
   app.use(cookieParser());
   app.use(cors());
+
+  app.all("/api/admin/sync-football-data", async (req, res) => {
+    const result = await handleFootballDataSyncRequest({
+      httpMethod: req.method, headers: { authorization: req.header("authorization") },
+      body: JSON.stringify(req.body || {}),
+    });
+    res.set(result.headers).status(result.statusCode).send(result.body);
+  });
 
   app.post("/api/admin/sync-results-dry-run", async (req, res) => {
     const auth = authorizeSyncRequest(req, "dry-run");
@@ -199,23 +214,17 @@ async function startServer() {
       return res.status(400).json({ error: "Skóre musí být nezáporné celé číslo." });
     }
 
-    const bearerToken = bearerTokenFromHeader(req.headers.authorization);
-    if (!bearerToken) {
+    if (!readBearerToken(req.headers.authorization)) {
       return res.status(401).json({ error: "Chybí přihlášení administrátora." });
     }
 
     try {
       const supabaseAdmin = getSupabaseAdmin();
-      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(bearerToken);
-
-      if (authError || !authData.user?.id) {
-        return res.status(401).json({ error: "Neplatné přihlášení administrátora." });
-      }
-
-      const adminUserId = authData.user.id;
-      if (!await isAuthoritativePlatformAdmin(supabaseAdmin, adminUserId)) {
-        return res.status(403).json({ error: "Pouze administrátor může vkládat výsledky a spouštět vyhodnocení." });
-      }
+      const adminUserId = await authorizeClerkPlatformAdmin(
+        supabaseAdmin,
+        req.headers.authorization,
+        "Pouze administrátor může vkládat výsledky a spouštět vyhodnocení.",
+      );
 
       const result = await applyMatchResult({
         supabaseAdmin,
@@ -228,8 +237,10 @@ async function startServer() {
 
       return res.status(result.statusCode).json(result.body);
     } catch (err: any) {
-      console.error("Match result admin error:", err);
-      return res.status(500).json({ error: "Chyba při ukládání výsledků: " + err.message });
+      const authError = clerkAuthorizationErrorResponse(err);
+      if (authError) return res.status(authError.statusCode).json({ error: authError.error });
+      console.error("Match result admin error.");
+      return res.status(500).json({ error: "Chyba při ukládání výsledků." });
     }
   });
 
@@ -240,20 +251,13 @@ async function startServer() {
       return res.status(400).json({ error: "Chybějí povinné parametry." });
     }
 
-    const bearerToken = bearerTokenFromHeader(req.headers.authorization);
-    if (!bearerToken) {
+    if (!readBearerToken(req.headers.authorization)) {
       return res.status(401).json({ error: "Chybí přihlášení uživatele." });
     }
 
     try {
       const supabaseAdmin = getSupabaseAdmin();
-      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(bearerToken);
-
-      if (authError || !authData.user?.id) {
-        return res.status(401).json({ error: "Neplatné přihlášení uživatele." });
-      }
-
-      const userId = authData.user.id;
+      const userId = await resolveClerkPlayerId(supabaseAdmin, req.headers.authorization);
 
       const { data: lobby, error: lobbyErr } = await supabaseAdmin
         .from("lobbies")
@@ -291,8 +295,10 @@ async function startServer() {
 
       return res.json({ success: true });
     } catch (err: any) {
-      console.error("/api/lobby/update-name err:", err);
-      return res.status(500).json({ error: err.message });
+      const authError = clerkAuthorizationErrorResponse(err);
+      if (authError) return res.status(authError.statusCode).json({ error: authError.error });
+      console.error("/api/lobby/update-name error.");
+      return res.status(500).json({ error: "Chyba při úpravě lobby." });
     }
   });
 

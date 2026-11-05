@@ -1,6 +1,8 @@
 export type Player = {
   id: string;
   username: string;
+  display_name?: string | null;
+  locale?: 'cs' | 'en';
   email?: string | null;
   role: 'player' | 'admin';
   lobby_role?: 'owner' | 'admin' | 'member';
@@ -35,6 +37,7 @@ export type Team = {
   group_name: string;
   sport_id?: string;
   short_name?: string;
+  logo_url?: string | null;
   is_final_winner?: number;
 };
 
@@ -43,6 +46,7 @@ export type Match = {
   home_team_id: string;
   away_team_id: string;
   start_time_utc: string;
+  lock_time_utc?: string;
   home_score: number | null;
   away_score: number | null;
   status: 'scheduled' | 'finished';
@@ -52,6 +56,8 @@ export type Match = {
   home_flag: string;
   away_name: string;
   away_flag: string;
+  home_logo_url?: string | null;
+  away_logo_url?: string | null;
   predicted_home_score?: number | null;
   predicted_away_score?: number | null;
   total_predictions?: number;
@@ -94,6 +100,11 @@ export type LobbyTournament = {
   tournament?: Tournament;
 };
 
+export type LobbyPrizeEntry = {
+  position: number;
+  label: string;
+};
+
 export type Lobby = {
   id: string;
   name: string;
@@ -110,6 +121,8 @@ export type Lobby = {
   member_count?: number | null;
   tournaments?: LobbyTournament[];
   tournament_name?: string;
+  prizes_enabled?: boolean;
+  prize_entries?: LobbyPrizeEntry[];
 };
 
 export type LobbyMember = {
@@ -201,7 +214,7 @@ export type UserBadge = {
   description: string;
   icon: string;
   tier: 'bronze' | 'silver' | 'gold' | 'special';
-  context_type: 'global' | 'lobby' | 'tournament' | 'lobby_tournament';
+  context_type: 'global' | 'lobby' | 'tournament' | 'lobby_tournament' | 'official_event';
   context_id: string;
   awarded_at: string;
   featured_position?: number | null;
@@ -286,6 +299,12 @@ export type OfficialEventCard = {
     home_name: string;
     away_name: string;
   } | null;
+  partner_name?: string | null;
+  partner_logo_url?: string | null;
+  accent_color?: string;
+  has_prizes?: boolean;
+  terms_required?: boolean;
+  participant_count?: number;
 };
 
 export type OfficialEventMatch = {
@@ -314,8 +333,67 @@ export type OfficialEventDetail = {
   description: string | null;
   cover_key: string | null;
   status: 'scheduled' | 'active' | 'completed' | 'archived';
-  participation_status: 'active' | 'left';
+  participation_status: 'active' | 'left' | null;
+  partner?: {
+    name?: string | null;
+    logo_url?: string | null;
+    url?: string | null;
+    text?: string | null;
+  };
+  accent_color?: string;
+  terms?: {
+    version: number;
+    summary?: string | null;
+    url?: string | null;
+    minimum_age?: number | null;
+    eligible_regions?: string[];
+    employees_excluded?: boolean;
+    claim_instructions?: string | null;
+    organizer_name?: string | null;
+    organizer_contact_url?: string | null;
+    accepted: boolean;
+  };
+  prizes?: OfficialEventPrize[];
   matches: OfficialEventMatch[];
+};
+
+export type OfficialEventPrize = {
+  id?: string;
+  rank_from: number;
+  rank_to: number;
+  title: string;
+  description?: string | null;
+  image_url?: string | null;
+  partner_name?: string | null;
+};
+
+export type OfficialEventSeasonBadge = {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  rule_type: 'winner' | 'top_10' | 'top_1_percent' | 'top_10_percent' | 'participant';
+  featured_position?: number | null;
+};
+
+export type OfficialEventSeasonResult = {
+  event_id: string;
+  slug: string;
+  event_name: string;
+  partner_name: string | null;
+  accent_color: string;
+  position: number | null;
+  participant_count: number;
+  top_percent: number | null;
+  better_than_percent: number | null;
+  total_points: number;
+  exact_hits: number;
+  saved_predictions: number;
+  evaluated_predictions: number;
+  result_is_final: boolean;
+  prize_eligibility: 'not_applicable' | 'pending_review' | 'eligible' | 'ineligible' | 'disqualified';
+  badges: OfficialEventSeasonBadge[];
+  qualifying_prizes: OfficialEventPrize[];
 };
 
 export type OfficialEventLeaderboardRow = {

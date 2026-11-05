@@ -1,5 +1,25 @@
 # Kompletní checklist pro další vývoj Tipovačky
 
+**Release 5. 11. 2026:** vlastník zadal push a publikování aktuální pracovní verze na stávající `https://tipovacka-fotbal.netlify.app` a potvrdil Netlify CLI. Potřebný merge do `main`, nastavení tohoto webu a nasazení jsou pro tento balík schválené. Stav předchozích etap níže je historický; externí cron ani odložené Official Events/ceny se automaticky nezapínají.
+
+## Aktualizace plánování — 3. 11. 2026
+
+**Aktualizace 4. 11. 2026:** vlastník schválil přestavbu jediné stávající DB `hkhkbtzdyjbdeeoiurvw`, napojení Clerk, registraci, profil a RLS. Potvrdil, že projekt nyní není v ostrém provozu, a povolil čištění/přestavbu DB i transakční RLS testy. Clerk identity migrace už byla aplikována se zachováním dosavadní historie. Konfigurace je běžný `.env` lokálně a proměnné Netlify při nasazení; druhá DB ani beta profil se nepoužívají. Tento pokyn nahrazuje starší omezení na pouhé plánování a oddělenou betu; viz [aktuální rozsah](docs/beta-implementation-scope.md). Produkční deployment a merge zůstávají samostatným krokem.
+
+**Upřesnění 5. 11. 2026:** projekt je nyní „tunící prostor“, nikoli ostrý provoz. Vlastník schválil import Ligy mistrů a přípravu chráněného endpointu pro cron-job.org. Původní varování před každým DB zápisem je historické; ve schváleném rozsahu se souhlas znovu nevyžaduje. [AGENTS.md](AGENTS.md) je s tímto režimem sjednocený. Zálohy a ověření zůstávají součástí práce, nikoli potvrzovacím kolečkem.
+
+Původní soutěže po MS v hokeji a fotbale jsou odehrané. Historická aplikace i data jsou dostupné, nový živý pilot tím nezačal. Historie slouží jako podklad a kontrolní vzorek; níže uvedené staré produkční checklisty nepřebíjejí aktuální oprávnění k přestavbě.
+
+Clerk registrace, profil a připojení hráčů do lobby jsou ověřené lokálně. Do hlavní DB je importovaný a aktivní katalog Ligy mistrů připojený do Testovacího rodea; [sync a postup pro cron-job.org](docs/football-data-cron.md) jsou připravené. Navazuje soutěžní účast a dokončení celého pilotního průchodu. Nový deployment zatím neproběhl. Primární publikum jsou soukromé party a komunity; Supabase zůstává datový základ a Clerk vrstva účtu. Další rozhodnutí a checklist jsou v [docs/product-restart-plan.md](docs/product-restart-plan.md), dlouhodobý směr v [docs/ROADMAP.md](docs/ROADMAP.md).
+
+Vlastník zvolil archiv staré verze a čistý pilot bez automatického přenosu starých účtů a bez započítání historických bodů do nového pořadí. Dne 3. 11. upřesnil, že jedinou reálnou lobby byli „Fotbaloví experti“ a jejich data lze použít pro revizi a ověření. U dvou testovacích lobby potvrdil archivaci a skrytí i ve staré aplikaci se zachováním dat. [Audit a konkrétní postup](docs/archive-test-lobbies-plan.md) jsou připravené; dnešní aplikace tuto operaci pro celou lobby neumí. Archivace, kopírování dat ani změny infrastruktury zatím neproběhly.
+
+První pilotní soutěž je Liga mistrů, následuje Premier League. **Vlastník přijal model B: stálá lobby pořadatele, soutěže uvnitř s vlastní účastí a pořadím, pozvánka do konkrétní soutěže.** Stejný model platí pro partu, hospodu Kobra a budoucí jednorázový sponzorovaný turnaj. Výběr A/B je uzavřený; přijatá logika je v [ROADMAP.md](docs/ROADMAP.md#accepted-organizer-model--2026-11-03), důvody v [rešerši](docs/lobby-model-research-2026-11-03.md).
+
+Produktový model a plán jsou přijaté; aktuální rozsah implementace upřesňuje aktualizace 4. 11. výše. Migrace stávajících Official Events a nasazení tímto shrnutím potvrzené nejsou. **Nový pokyn 5. 11. ruší tříkolový limit: Ligu mistrů 2026/27 odkrýt hned a postupně dohrát celou sezonu. Testovací rodeo má aktivní všech 144 importovaných zápasů ligové fáze; podpora play-off teprve naváže. Body vznikají vlastními novými tipy, sezonní vítěz se neboduje. Tipy budou samostatné v každé lobby.** Vlastník chce úplný konečný výsledek a při penaltách preferuje bodovat skóre rozstřelu, např. 5:4; plný kontrakt dopracuje T05. Oficiální góly a rozstřel se evidují zvlášť. Nový požadavek 5. 11. počítá s úpravou pravidel i během ladění soutěže: uchovat jejich verzi, ukázat dopad a případný přepočet provést viditelně. Nyní je připravená malá ukázka variant 90 minut/konečný výsledek; přepínání náhledu aktivní pravidla nemění. Běžné výsledky i novější opravy API se vyhodnocují automaticky napříč lobby; ruční obsluha není podmínkou provozu. Ceny a obchodní balíčky nejsou přijaté; první pilot zůstává soukromý.
+
+Starší stavové a produktové checklisty níže jsou historický kontext; aktuální stav nasazení ani schválení nové migrace z nich nevyvozujeme.
+
 ## 0. Stav projektu teď
 
 Cíl: stabilizovat ostrý provoz a připravit bezpečný základ pro V2.

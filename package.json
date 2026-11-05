@@ -10,9 +10,17 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "env:check": "node scripts/check-env.mjs",
+    "test:env": "node --test scripts/check-env.test.mjs",
+    "test:clerk": "node --import tsx --test server/lib/clerkIdentity.test.ts server/lib/clerkAuthorization.test.ts src/lib/clerkSupabase.test.ts && node --import tsx server/lib/tournamentWinner_auth_scenarios.ts",
+    "football-data:dry-run": "node --import dotenv/config scripts/football-data-dry-run.mjs",
+    "test:football-data": "node --test scripts/football-data-dry-run.test.mjs && node --import tsx --test server/lib/footballDataSync.test.ts",
+    "football-data:import": "node --import tsx scripts/football-data-import.ts",
+    "test:match-presentation": "node --import tsx --test src/lib/matchPresentation.test.ts"
   },
   "dependencies": {
+    "@clerk/react": "6.18.4",
     "@supabase/supabase-js": "^2.106.2",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
@@ -20,6 +28,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "jose": "6.2.14",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "qrcode": "1.5.4",

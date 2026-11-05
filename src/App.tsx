@@ -10,6 +10,9 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  Gift,
+  Minus,
+  Plus,
 } from 'lucide-react';
 import {
   Player,
@@ -19,12 +22,17 @@ import {
   Lobby,
   type AuthStatus,
   type MembershipHomeItem,
+  type LobbyPrizeEntry,
   type OfficialEventCard,
   type OnboardingState,
   type ProductFeatureFlags
 } from './types.ts';
+import { useClerkGameSession } from './lib/clerkSession.tsx';
 import { supabase } from './lib/supabase.ts';
-import { isDrawPrediction, isFootballKnockoutStage } from './lib/matchRules.ts';
+import { isDrawPrediction, requiresFootballWinner } from './lib/matchRules.ts';
+import { clubCrestUrl } from './lib/teamAssets.ts';
+import { formatMatchKickoff, MATCH_TIME_ZONE } from './lib/matchTime.ts';
+import { ScoringRulesPreview } from './components/ScoringRulesPreview.tsx';
 import { 
   fetchAllData, 
   fetchCriticalAppData,
@@ -32,18 +40,15 @@ import {
   fetchHomeDashboard,
   fetchHomeMembershipState,
   fetchUserLobbies,
-  loginUser, 
-  registerUser, 
-  logoutUser,
+  fetchLobbyPrizeMetadata,
+  LobbyPrizeSchemaUnavailableError,
   savePrediction as savePredDB, 
   fetchMatchPredictions,
   updateMatchResult as updateMatchResDB,
   setTournamentWinner as setWinnerDB,
   pickTournamentWinner as pickWinnerDB,
-  changePassword as changePassDB,
-  updateProfileAvatar,
-  updateProfileUsername,
-  loadPlayerFromAuthUser,
+  bootstrapMyAccount,
+  completeMyProfile,
   createLobby,
   joinLobbyByCode,
   cancelLobbyJoinRequest,
@@ -55,16 +60,6 @@ import { HomeDashboard, type AddLobbyMode } from './components/HomeDashboard.tsx
 import { isUntippedMatchForDisplay, type HomeDashboardSummary } from './lib/homeDashboard.ts';
 import { shouldRefreshHomeMembership } from './lib/membership.ts';
 import {
-  getUserAuthProviders,
-  isGeneratedProfileName,
-  requestPasswordReset,
-  resendSignupConfirmation,
-  signInWithOAuthProvider,
-  toFriendlyAuthError,
-  type SupportedOAuthProvider
-} from './lib/auth.ts';
-import { getAuthEventAction } from './lib/authLifecycle.ts';
-import {
   canStartLobbyNavigation,
   getLobbyNavigationViewState,
   runLobbyNavigationTransition,
@@ -75,12 +70,20 @@ import { getInviteCodeFromLocation } from './lib/sharing.ts';
 import {
   fetchMyOnboardingState,
   fetchOfficialEventHomeCard,
-  hideOfficialEvent,
-  joinOfficialEvent,
+  resolveOfficialEventSlug,
   updateMyOnboardingState
 } from './lib/officialEvents.ts';
-import { shouldShowFirstTipOnboarding } from './lib/officialEventsState.ts';
+import {
+  shouldShowFirstTipOnboarding,
+  shouldShowOfficialEventOnHome
+} from './lib/officialEventsState.ts';
 import { FirstTipOnboarding } from './components/FirstTipOnboarding.tsx';
+import {
+  MAX_LOBBY_PRIZES,
+  mergeLobbyPrizeMetadata,
+  prepareLobbyPrizeSelection,
+  preserveLobbyPrizeMetadata
+} from './lib/productEvolution.ts';
 
 const LazyAdminScreen = lazy(() => import('./components/AdminScreen.tsx'));
 const LazyLeaderboardScreen = lazy(() => import('./components/LeaderboardScreen.tsx'));
@@ -253,6 +256,7 @@ const UserAvatar = ({ player, size = 'md' }: { player?: Pick<Player, 'username' 
 };
 
 const formatStageLabel = (stage: string, lang: 'cz' | 'en') => {
+  if (/^league[ _](phase|stage)$/i.test(stage.trim())) return lang === 'cz' ? 'Ligová fáze' : 'League phase';
   if (lang === 'cz') return stage.replace(/^Group\s+/i, 'Skupina ');
   return stage;
 };
@@ -261,9 +265,17 @@ const getGroupCode = (stage: string) => {
   return stage.match(/^Group\s+([A-Z])$/i)?.[1]?.toUpperCase() || null;
 };
 
-const TeamFlag = ({ code, className = "w-6 h-4" }: { code: string | null | undefined, className?: string }) => {
+export const TeamFlag = ({ code, logoUrl, name, className = "w-6 h-4" }: { code: string | null | undefined; logoUrl?: string | null; name?: string; className?: string }) => {
   const [error, setError] = React.useState(false);
   const [retry, setRetry] = React.useState(false);
+  const [failedLogo, setFailedLogo] = React.useState<string | null>(null);
+  const crest = clubCrestUrl(logoUrl);
+  if (crest && failedLogo !== crest) return (
+    <span className={`${className} inline-flex items-center justify-center rounded-sm border border-slate-200 bg-slate-50 shadow-sm flex-shrink-0 overflow-hidden`}>
+      <img src={crest} alt={name || 'Club'} title={name} loading="lazy" decoding="async" referrerPolicy="no-referrer"
+        className="h-full w-full object-contain" onError={() => setFailedLogo(crest)} />
+    </span>
+  );
 
   if (!code) return null;
 
@@ -350,9 +362,10 @@ interface MatchCardProps {
   matchPredictions?: Prediction[];
   matchPredictionsLoading?: boolean;
   isHockey?: boolean;
+  lang?: 'cz' | 'en';
 }
 
-const MatchCard: React.FC<MatchCardProps> = ({ 
+export const MatchCard: React.FC<MatchCardProps> = ({
   match, 
   lobbyId,
   onPredict, 
@@ -361,7 +374,8 @@ const MatchCard: React.FC<MatchCardProps> = ({
   t,
   matchPredictions = [],
   matchPredictionsLoading = false,
-  isHockey = false
+  isHockey = false,
+  lang = 'cz' as const
 }) => {
   const [home, setHome] = useState(match.predicted_home_score ?? 0);
   const [away, setAway] = useState(match.predicted_away_score ?? 0);
@@ -372,11 +386,11 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const [timeLeft, setTimeLeft] = useState<string | null>(null);
 
   const startTime = new Date(match.start_time_utc).getTime();
-  const lockTime = startTime - (5 * 60 * 1000);
+  const lockTime = match.lock_time_utc ? new Date(match.lock_time_utc).getTime() : startTime - (5 * 60 * 1000);
   const isLocked = Date.now() > lockTime || match.status === 'finished';
-  const isFootballKnockout = !isHockey && isFootballKnockoutStage(match.stage, match.tournament_id);
+  const footballWinnerRequired = !isHockey && requiresFootballWinner(match.stage, match.tournament_id);
   const drawPredictionSelected = isDrawPrediction(home, away);
-  const drawPredictionBlocked = drawPredictionSelected && (isHockey || isFootballKnockout);
+  const drawPredictionBlocked = drawPredictionSelected && (isHockey || footballWinnerRequired);
 
   useEffect(() => {
     if (isLocked || isFinished) {
@@ -462,14 +476,14 @@ const MatchCard: React.FC<MatchCardProps> = ({
       return { home: 0, away: 0, draw: 0, isEmpty: true, isLoading: true };
     }
 
-    const predictionsForDistribution = isFootballKnockout
+    const predictionsForDistribution = footballWinnerRequired
       ? matchPredictions.filter(p => p.predicted_home_score !== p.predicted_away_score)
       : matchPredictions;
     const total = predictionsForDistribution.length;
     if (total === 0) return { home: 0, away: 0, draw: 0, isEmpty: true, isLoading: false };
     
     const homeWins = predictionsForDistribution.filter(p => p.predicted_home_score > p.predicted_away_score).length;
-    const draws = isFootballKnockout ? 0 : predictionsForDistribution.filter(p => p.predicted_home_score === p.predicted_away_score).length;
+    const draws = footballWinnerRequired ? 0 : predictionsForDistribution.filter(p => p.predicted_home_score === p.predicted_away_score).length;
     const awayWins = predictionsForDistribution.filter(p => p.predicted_away_score > p.predicted_home_score).length;
     
     return {
@@ -479,7 +493,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
       isEmpty: false,
       isLoading: false
     };
-  }, [isFootballKnockout, match.total_predictions, matchPredictions, matchPredictionsLoading]);
+  }, [footballWinnerRequired, match.total_predictions, matchPredictions, matchPredictionsLoading]);
   const hasOwnPrediction = match.predicted_home_score !== null && match.predicted_away_score !== null;
   const fallbackOtherPredictionsCount = Math.max((match.total_predictions || 0) - (hasOwnPrediction ? 1 : 0), 0);
   const otherPredictionsCount = showOthers
@@ -504,9 +518,9 @@ const MatchCard: React.FC<MatchCardProps> = ({
       <div className="p-4">
         <div className="flex justify-between items-center mb-3">
           <div className="flex flex-col">
-            <span className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
+            <span title={`${MATCH_TIME_ZONE} · ${lang === 'cz' ? 'český čas' : 'Czech time'}`} className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
               <Clock className="w-3 h-3" />
-              {new Date(match.start_time_utc).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' })}
+              {formatMatchKickoff(match.start_time_utc, lang)}
             </span>
             {timeLeft && (
               <span className="text-[9px] font-black text-red-500 uppercase mt-0.5 animate-pulse">
@@ -514,12 +528,12 @@ const MatchCard: React.FC<MatchCardProps> = ({
               </span>
             )}
           </div>
-          <span className="text-[10px] bg-slate-50 px-2 py-0.5 rounded-full font-bold text-slate-400 uppercase tracking-tighter transition-colors">{match.stage}</span>
+          <span className="text-[10px] bg-slate-50 px-2 py-0.5 rounded-full font-bold text-slate-400 uppercase tracking-tighter transition-colors">{formatStageLabel(match.stage, lang)}</span>
         </div>
 
         <div className="flex items-center justify-between gap-4 mb-6">
           <div className="flex-1 flex flex-col items-center text-center">
-            <TeamFlag code={match.home_flag || match.home_team_id} className="w-12 h-8 mb-2" />
+            <TeamFlag code={match.home_flag || match.home_team_id} logoUrl={match.home_logo_url} name={match.home_name} className={match.home_logo_url ? 'w-12 h-12 mb-2' : 'w-12 h-8 mb-2'} />
             <span className="text-sm font-semibold text-slate-700 line-clamp-1">{match.home_name}</span>
           </div>
 
@@ -534,7 +548,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
           </div>
 
           <div className="flex-1 flex flex-col items-center text-center">
-            <TeamFlag code={match.away_flag || match.away_team_id} className="w-12 h-8 mb-2" />
+            <TeamFlag code={match.away_flag || match.away_team_id} logoUrl={match.away_logo_url} name={match.away_name} className={match.away_logo_url ? 'w-12 h-12 mb-2' : 'w-12 h-8 mb-2'} />
             <span className="text-sm font-semibold text-slate-700 line-clamp-1">{match.away_name}</span>
           </div>
         </div>
@@ -542,12 +556,12 @@ const MatchCard: React.FC<MatchCardProps> = ({
         {!isFinished && (
           <div className="flex flex-col gap-3">
             <div className="px-1 mb-1">
-              <div className={`grid ${isFootballKnockout ? 'grid-cols-2' : 'grid-cols-3'} items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase`}>
+              <div className={`grid ${footballWinnerRequired ? 'grid-cols-2' : 'grid-cols-3'} items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase`}>
                 <span className="text-left text-[#ce1126]">
                   <span className="block text-[8px] text-slate-400 truncate">{homeOutcomeLabel}</span>
                   {predictionStats.isLoading ? '…' : `${predictionStats.home}%`}
                 </span>
-                {!isFootballKnockout && (
+                {!footballWinnerRequired && (
                   <span className="text-center text-[#1f2937]">
                     <span className="block text-[8px] text-slate-400">Remíza</span>
                     {predictionStats.isLoading ? '…' : `${predictionStats.draw}%`}
@@ -563,7 +577,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   style={{ width: `${predictionStats.home}%` }} 
                   className="h-full bg-[#ce1126] transition-[width] duration-700 ease-out" 
                 />
-                {!isFootballKnockout && (
+                {!footballWinnerRequired && (
                   <div
                     style={{ width: `${predictionStats.draw}%` }}
                     className="h-full bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.12)] transition-[width] duration-700 ease-out"
@@ -581,6 +595,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                 <div className="flex items-center gap-1.5">
                   <button 
                     onClick={() => setHome(h => Math.max(0, h - 1))}
+                    aria-label={lang === 'cz' ? 'Snížit tip domácích' : 'Decrease home prediction'}
                     disabled={isLocked}
                     className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
@@ -591,6 +606,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   </div>
                   <button 
                     onClick={() => setHome(h => Math.max(0, h + 1))}
+                    aria-label={lang === 'cz' ? 'Zvýšit tip domácích' : 'Increase home prediction'}
                     disabled={isLocked}
                     className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
@@ -603,6 +619,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                 <div className="flex items-center gap-1.5">
                   <button 
                     onClick={() => setAway(h => Math.max(0, h - 1))}
+                    aria-label={lang === 'cz' ? 'Snížit tip hostů' : 'Decrease away prediction'}
                     disabled={isLocked}
                     className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
@@ -613,6 +630,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   </div>
                   <button 
                     onClick={() => setAway(h => Math.max(0, h + 1))}
+                    aria-label={lang === 'cz' ? 'Zvýšit tip hostů' : 'Increase away prediction'}
                     disabled={isLocked}
                     className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
@@ -620,7 +638,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   </button>
                 </div>
               </div>
-              {!isLocked && isFootballKnockout && !drawPredictionSelected && (
+              {!isLocked && footballWinnerRequired && !drawPredictionSelected && (
                 <p className="mt-2 text-[10px] text-center text-slate-400 italic">
                   {t.playoffWinnerRequired}
                 </p>
@@ -645,7 +663,7 @@ const MatchCard: React.FC<MatchCardProps> = ({
                   <CheckCircle2 className="h-5 w-5" />
                   {t.tipSaved}
                 </>
-              ) : isFootballKnockout && drawPredictionSelected ? (
+              ) : footballWinnerRequired && drawPredictionSelected ? (
                 t.pickMatchWinner
               ) : (
                 match.predicted_home_score !== null ? t.updateTip : t.saveTip
@@ -950,7 +968,7 @@ type TournamentWinnerScreenProps = {
   currentUserPickId?: string;
   isWinnerPickerLocked: boolean;
   onPickTournamentWinner: (teamId: string) => Promise<void>;
-  TeamFlag: React.ComponentType<{ code: string | null | undefined; className?: string }>;
+  TeamFlag: React.ComponentType<{ code: string | null | undefined; className?: string; logoUrl?: string | null; name?: string }>;
 };
 
 const TournamentWinnerScreen = ({
@@ -1004,7 +1022,7 @@ const TournamentWinnerScreen = ({
                   <CheckCircle2 className="w-3 h-3 text-red-600" />
                 </motion.div>
               )}
-              <TeamFlag code={tm.flag_code || tm.id} className="w-10 h-6 mb-1" />
+              <TeamFlag code={tm.flag_code || tm.id} logoUrl={tm.logo_url} name={tm.name} className={tm.logo_url ? 'w-10 h-10 mb-1' : 'w-10 h-6 mb-1'} />
               <span className={`text-[10px] font-black ${isSelected ? 'text-white' : 'text-slate-400'}`}>
                 {tm.short_name ? tm.short_name : tm.id.replace('football-', '').toUpperCase()}
               </span>
@@ -1020,20 +1038,18 @@ const TournamentWinnerScreen = ({
 // --- Main App ---
 
 export default function App() {
+  const clerkSession = useClerkGameSession();
+  const [authRetry, setAuthRetry] = useState(0);
   const [user, setUser] = useState<Player | null>(null);
   const [authStatus, setAuthStatus] = useState<AuthStatus>('initializing');
-  const [authProviders, setAuthProviders] = useState<string[]>([]);
-  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
   const authSyncRequestRef = useRef(0);
   const authenticatedUserIdRef = useRef<string | null>(null);
-  const authenticatingUserIdRef = useRef<string | null>(null);
-  const passwordRecoveryRef = useRef(false);
   
   const [tab, setTab] = useState<'matches' | 'results' | 'leaderboard' | 'winner' | 'admin' | 'profile'>('matches');
   const [matchFilter, setMatchFilter] = useState('all');
   const [lang, setLang] = useState<'cz' | 'en'>(() => {
     const saved = localStorage.getItem('lang');
-    return (saved as 'cz' | 'en') || 'cz';
+    return saved === 'en' || saved === 'cz' ? saved : (navigator.language.startsWith('cs') ? 'cz' : 'en');
   });
   
   const [matches, setMatches] = useState<Match[]>([]);
@@ -1047,8 +1063,6 @@ export default function App() {
     lobbyId: null,
     tournamentId: null
   });
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [loginData, setLoginData] = useState({ username: '', email: '', password: '' });
   const [error, setError] = useState('');
   const criticalLoadRequestRef = useRef(0);
   const deferredLoadRequestRef = useRef(0);
@@ -1072,10 +1086,14 @@ export default function App() {
   const [onboardingState, setOnboardingState] = useState<OnboardingState | null>(null);
   const [officialEventCard, setOfficialEventCard] = useState<OfficialEventCard | null>(null);
   const [activeOfficialEventId, setActiveOfficialEventId] = useState<string | null>(null);
+  const [officialEventSlugInput] = useState(() => (
+    new URLSearchParams(window.location.search).get('event')?.trim().toLowerCase() || ''
+  ));
   const [officialProductLoading, setOfficialProductLoading] = useState(false);
   const [officialProductError, setOfficialProductError] = useState('');
   const [productFeatureFlagsReady, setProductFeatureFlagsReady] = useState(false);
   const officialProductRequestRef = useRef(0);
+  const officialEventDeepLinkRequestRef = useRef(0);
   const homeDashboardRequestRef = useRef(0);
   const homeExternalRefreshInFlightRef = useRef(false);
   const skipNextHomeLoadAfterLobbyRefreshRef = useRef(false);
@@ -1088,6 +1106,12 @@ export default function App() {
   const [newLobbyLongDescription, setNewLobbyLongDescription] = useState("");
   const [newLobbyTournament, setNewLobbyTournament] = useState("fifa-world-cup-2026");
   const [newLobbyJoinPolicy, setNewLobbyJoinPolicy] = useState<'open' | 'approval_required'>('open');
+  const [newLobbyPrizesEnabled, setNewLobbyPrizesEnabled] = useState(false);
+  const [newLobbyPrizeEntries, setNewLobbyPrizeEntries] = useState<LobbyPrizeEntry[]>([
+    { position: 1, label: '' },
+    { position: 2, label: '' },
+    { position: 3, label: '' }
+  ]);
   const [joinCodeInput, setJoinCodeInput] = useState(() => {
     return getInviteCodeFromLocation(window.location.pathname, window.location.search);
   });
@@ -1171,6 +1195,7 @@ export default function App() {
   });
   const [lobbyError, setLobbyError] = useState("");
   const [lobbySuccess, setLobbySuccess] = useState("");
+  const [lobbyPrizeLoadError, setLobbyPrizeLoadError] = useState("");
   const [isLobbyMutationSubmitting, setIsLobbyMutationSubmitting] = useState(false);
   const [pendingLobbyNavigation, setPendingLobbyNavigation] = useState<{
     action: LobbyNavigationAction;
@@ -1184,10 +1209,6 @@ export default function App() {
   const [championError, setChampionError] = useState('');
   const [adminMatchFilter, setAdminMatchFilter] = useState<'scheduled' | 'finished'>('scheduled');
   const [adminGroupFilter, setAdminGroupFilter] = useState('all');
-  const [passData, setPassData] = useState({ newPass: '', confirmPass: '' });
-  const [passMsg, setPassMsg] = useState('');
-  const [passError, setPassError] = useState('');
-  const [isPassSaving, setIsPassSaving] = useState(false);
   const [logoutError, setLogoutError] = useState('');
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [avatarData, setAvatarData] = useState({
@@ -1198,6 +1219,12 @@ export default function App() {
   const [avatarError, setAvatarError] = useState('');
   const [showAvatarEditor, setShowAvatarEditor] = useState(false);
   const [showScoringInfo, setShowScoringInfo] = useState(false);
+  const lobbyPrizeMetadataRequestRef = useRef(0);
+  const lobbyPrizeEnrichmentKeyRef = useRef('');
+  const privateLobbyPrizesEnabled = isProductFeatureEnabled(
+    productFeatureFlags,
+    'private_lobby_prizes_enabled'
+  );
 
   useEffect(() => {
     localStorage.setItem('lang', lang);
@@ -1231,6 +1258,56 @@ export default function App() {
     };
   }, [authStatus]);
 
+  useEffect(() => {
+    if (
+      !productFeatureFlagsReady ||
+      authStatus !== 'authenticated' ||
+      !user?.id ||
+      !privateLobbyPrizesEnabled
+    ) {
+      lobbyPrizeMetadataRequestRef.current += 1;
+      lobbyPrizeEnrichmentKeyRef.current = '';
+      setLobbyPrizeLoadError('');
+      return;
+    }
+
+    const lobbyIds = lobbies.map(lobby => lobby.id).sort();
+    if (lobbyIds.length === 0) {
+      setLobbyPrizeLoadError('');
+      return;
+    }
+
+    const enrichmentKey = `${user.id}:${lobbyIds.join(',')}`;
+    if (lobbyPrizeEnrichmentKeyRef.current === enrichmentKey) return;
+
+    const requestId = lobbyPrizeMetadataRequestRef.current + 1;
+    lobbyPrizeMetadataRequestRef.current = requestId;
+    lobbyPrizeEnrichmentKeyRef.current = enrichmentKey;
+    setLobbyPrizeLoadError('');
+
+    void fetchLobbyPrizeMetadata(lobbyIds)
+      .then(metadata => {
+        if (lobbyPrizeMetadataRequestRef.current !== requestId) return;
+        setLobbies(previous => mergeLobbyPrizeMetadata(previous, metadata));
+      })
+      .catch(prizeError => {
+        if (lobbyPrizeMetadataRequestRef.current !== requestId) return;
+        lobbyPrizeEnrichmentKeyRef.current = '';
+        console.error('Optional lobby prize metadata could not be loaded.', prizeError);
+        setLobbyPrizeLoadError(
+          prizeError instanceof LobbyPrizeSchemaUnavailableError
+            ? 'Ceny lobby nejsou v tomto rollout stavu databáze dostupné. Tvoje lobby zůstávají beze změny.'
+            : 'Ceny lobby se nepodařilo načíst. Tvoje lobby zůstávají dostupné.'
+        );
+      });
+  }, [
+    authStatus,
+    lobbies,
+    privateLobbyPrizesEnabled,
+    productFeatureFlagsReady,
+    user?.id
+  ]);
+
   const loadOfficialProductContext = useCallback(async () => {
     const onboardingEnabled = isProductFeatureEnabled(
       productFeatureFlags,
@@ -1251,7 +1328,7 @@ export default function App() {
       setOfficialEventCard(null);
       setOfficialProductLoading(false);
       setOfficialProductError('');
-      return;
+      return null;
     }
 
     const requestId = officialProductRequestRef.current + 1;
@@ -1264,15 +1341,17 @@ export default function App() {
         onboardingEnabled ? fetchMyOnboardingState() : Promise.resolve(null),
         officialEventsEnabled ? fetchOfficialEventHomeCard() : Promise.resolve(null)
       ]);
-      if (officialProductRequestRef.current !== requestId) return;
+      if (officialProductRequestRef.current !== requestId) return null;
       setOnboardingState(nextOnboardingState);
       setOfficialEventCard(nextEventCard);
+      return nextEventCard;
     } catch (contextError: any) {
-      if (officialProductRequestRef.current !== requestId) return;
+      if (officialProductRequestRef.current !== requestId) return null;
       setOfficialProductError(
         contextError?.message || 'Oficiální event se nepodařilo načíst.'
       );
       setOfficialEventCard(null);
+      return null;
     } finally {
       if (officialProductRequestRef.current === requestId) {
         setOfficialProductLoading(false);
@@ -1283,6 +1362,33 @@ export default function App() {
   useEffect(() => {
     void loadOfficialProductContext();
   }, [loadOfficialProductContext]);
+
+  useEffect(() => {
+    if (
+      authStatus !== 'authenticated'
+      || !officialEventSlugInput
+      || !isProductFeatureEnabled(productFeatureFlags, 'official_events_enabled')
+    ) return;
+
+    const requestId = officialEventDeepLinkRequestRef.current + 1;
+    officialEventDeepLinkRequestRef.current = requestId;
+    setOfficialProductLoading(true);
+    void resolveOfficialEventSlug(officialEventSlugInput)
+      .then(eventId => {
+        if (officialEventDeepLinkRequestRef.current !== requestId) return;
+        if (eventId) setActiveOfficialEventId(eventId);
+        else setOfficialProductError('Oficiální turnaj není dostupný.');
+      })
+      .catch(eventError => {
+        if (officialEventDeepLinkRequestRef.current !== requestId) return;
+        setOfficialProductError(eventError?.message || 'Oficiální turnaj se nepodařilo načíst.');
+      })
+      .finally(() => {
+        if (officialEventDeepLinkRequestRef.current === requestId) {
+          setOfficialProductLoading(false);
+        }
+      });
+  }, [authStatus, officialEventSlugInput, productFeatureFlags]);
 
   useEffect(() => {
     if (activeLobbyId) {
@@ -1454,12 +1560,16 @@ export default function App() {
 
   const clearAuthenticatedState = useCallback(() => {
     authSyncRequestRef.current += 1;
+    criticalLoadRequestRef.current += 1;
+    deferredLoadRequestRef.current += 1;
+    homeDashboardRequestRef.current += 1;
+    lobbyMetadataRequestRef.current += 1;
+    lobbyPrizeMetadataRequestRef.current += 1;
+    officialEventDeepLinkRequestRef.current += 1;
     lobbyNavigationRequestRef.current += 1;
     lobbyMutationInFlightRef.current = false;
     authenticatedUserIdRef.current = null;
-    authenticatingUserIdRef.current = null;
     setUser(null);
-    setAuthProviders([]);
     localStorage.removeItem('user');
     localStorage.removeItem('activeLobbyId');
     sessionStorage.removeItem('activeTournamentId');
@@ -1492,96 +1602,37 @@ export default function App() {
     setDeferredLoading(false);
   }, []);
 
-  // Supabase session is the only authoritative identity source.
+  // Clerk establishes identity; the RPC returns the separate internal player UUID.
   useEffect(() => {
+    if (!clerkSession.ready) return;
+    if (!clerkSession.signedIn || !clerkSession.subject) {
+      clearAuthenticatedState();
+      setAuthStatus('signed_out');
+      return;
+    }
+    if (authenticatedUserIdRef.current === clerkSession.subject) return;
+
     let active = true;
-
-    const synchronizeSession = async (
-      session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']
-    ) => {
-      if (!session?.user) {
-        if (!active) return;
-        clearAuthenticatedState();
-        setAuthStatus('signed_out');
-        return;
-      }
-
-      if (
-        authenticatedUserIdRef.current === session.user.id ||
-        authenticatingUserIdRef.current === session.user.id
-      ) return;
-
-      const requestId = ++authSyncRequestRef.current;
-      authenticatingUserIdRef.current = session.user.id;
-      try {
-        const restored = await loadPlayerFromAuthUser(session.user);
-        if (!active || requestId !== authSyncRequestRef.current || passwordRecoveryRef.current) return;
-
-        authenticatedUserIdRef.current = session.user.id;
-        setUser(restored);
-        setAuthProviders(getUserAuthProviders(session.user));
-        setAuthStatus(isGeneratedProfileName(restored.username) ? 'profile_onboarding' : 'authenticated');
-      } catch (err: any) {
-        if (!active || requestId !== authSyncRequestRef.current) return;
-        console.error('Error restoring authenticated profile:', err);
-        authenticatedUserIdRef.current = null;
-        setUser(null);
-        setAuthProviders([]);
-        setError(err?.message || 'Nepodařilo se načíst přihlášený profil.');
-        setAuthStatus('auth_error');
-        setLoading(false);
-      } finally {
-        if (authenticatingUserIdRef.current === session.user.id) {
-          authenticatingUserIdRef.current = null;
-        }
-      }
-    };
-
-    supabase.auth.getSession().then(({ data, error: sessionError }) => {
-      if (!active) return;
-      if (sessionError) {
-        setError(toFriendlyAuthError(sessionError));
-        setAuthStatus('auth_error');
-        setLoading(false);
-        return;
-      }
-      void synchronizeSession(data.session);
+    const requestId = ++authSyncRequestRef.current;
+    setAuthStatus('initializing');
+    setError('');
+    void bootstrapMyAccount().then(profile => {
+      if (!active || requestId !== authSyncRequestRef.current) return;
+      authenticatedUserIdRef.current = clerkSession.subject;
+      setUser(profile);
+      // An unfinished profile keeps the visitor's chosen language for onboarding.
+      if (!profile.needs_profile_completion) setLang(profile.locale === 'en' ? 'en' : 'cz');
+      setAuthStatus(profile.needs_profile_completion ? 'profile_onboarding' : 'authenticated');
+    }).catch((failure: unknown) => {
+      if (!active || requestId !== authSyncRequestRef.current) return;
+      authenticatedUserIdRef.current = null;
+      setUser(null);
+      setError(failure instanceof Error ? failure.message : 'Účet se nepodařilo načíst. / Unable to load your account.');
+      setAuthStatus('auth_error');
+      setLoading(false);
     });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!active) return;
-      const action = getAuthEventAction(event, Boolean(session), passwordRecoveryRef.current);
-
-      if (action === 'password_recovery') {
-        passwordRecoveryRef.current = true;
-        authenticatedUserIdRef.current = null;
-        setUser(null);
-        setAuthProviders([]);
-        setError('');
-        setAuthStatus('password_recovery');
-        setLoading(false);
-        return;
-      }
-
-      if (action === 'signed_out') {
-        passwordRecoveryRef.current = false;
-        clearAuthenticatedState();
-        setAuthStatus('signed_out');
-        return;
-      }
-
-      if (action === 'ignore') return;
-
-      window.setTimeout(() => {
-        if (active) void synchronizeSession(session);
-      }, 0);
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [clearAuthenticatedState]);
+    return () => { active = false; };
+  }, [clerkSession.ready, clerkSession.signedIn, clerkSession.subject, authRetry, clearAuthenticatedState]);
 
   const syncUserFromLeaderboard = (nextLeaderboard: Player[]) => {
     const myPlayer = nextLeaderboard.find(p => p.id === user?.id);
@@ -1605,6 +1656,10 @@ export default function App() {
     }
   };
 
+  const replaceLobbyCollection = useCallback((nextLobbies: Lobby[]) => {
+    setLobbies(previous => preserveLobbyPrizeMetadata(previous, nextLobbies));
+  }, []);
+
   const fetchAll = async (lobbyIdParam?: string) => {
     if (!user) return;
     try {
@@ -1618,7 +1673,7 @@ export default function App() {
       setTeams(res.teams);
       setLeaderboard(res.leaderboard);
       setAllPredictions(res.allPredictions);
-      setLobbies(res.lobbies);
+      replaceLobbyCollection(res.lobbies);
       setLoadedDataContext({
         lobbyId: res.lobbyId || null,
         tournamentId: activeTournamentId || null
@@ -1663,7 +1718,7 @@ export default function App() {
 
       setMatches(critical.matches);
       setTeams(critical.teams);
-      setLobbies(critical.lobbies);
+      replaceLobbyCollection(critical.lobbies);
       setLeaderboard([]);
       setAllPredictions([]);
       setLoadedDataContext({
@@ -1753,8 +1808,8 @@ export default function App() {
     const requestId = ++lobbyMetadataRequestRef.current;
     const nextLobbies = await fetchUserLobbies(user.id);
     if (requestId !== lobbyMetadataRequestRef.current) return;
-    setLobbies(nextLobbies);
-  }, [user]);
+    replaceLobbyCollection(nextLobbies);
+  }, [replaceLobbyCollection, user]);
 
   const loadHomeDashboard = useCallback(async ({
     refreshLobbyCollection = false
@@ -1799,7 +1854,7 @@ export default function App() {
         try {
           const refreshedLobbies = await fetchUserLobbies(user.id);
           if (homeDashboardRequestRef.current === requestId) {
-            setLobbies(refreshedLobbies);
+            replaceLobbyCollection(refreshedLobbies);
           }
         } catch (refreshError) {
           console.error('approved lobby refresh error:', refreshError);
@@ -1813,7 +1868,7 @@ export default function App() {
     if (lobbyCollectionResult.status === 'fulfilled') {
       if (lobbyCollectionResult.value) {
         skipNextHomeLoadAfterLobbyRefreshRef.current = true;
-        setLobbies(lobbyCollectionResult.value);
+        replaceLobbyCollection(lobbyCollectionResult.value);
       }
     } else {
       console.error('lobby collection refresh error:', lobbyCollectionResult.reason);
@@ -1826,7 +1881,7 @@ export default function App() {
       setHomeDashboardLoading(false);
       setHomeMembershipLoading(false);
     }
-  }, [user, lobbies]);
+  }, [user, lobbies, replaceLobbyCollection]);
 
   const refreshHomeAfterMembershipMutation = useCallback(async () => {
     if (!shouldRefreshHomeMembership({
@@ -2051,38 +2106,9 @@ export default function App() {
 
   const handleOpenOfficialEvent = async (event: OfficialEventCard) => {
     if (officialProductLoading) return;
-    setOfficialProductLoading(true);
     setOfficialProductError('');
-    try {
-      if (!event.is_participating) {
-        await joinOfficialEvent(event.event_id);
-      }
-      setActiveOfficialEventId(event.event_id);
-      setOfficialEventCard(previous => previous ? {
-        ...previous,
-        is_participating: true,
-        participation_status: 'active'
-      } : previous);
-      window.scrollTo({ top: 0 });
-    } catch (eventError: any) {
-      setOfficialProductError(eventError?.message || 'Do eventu se nepodařilo vstoupit.');
-    } finally {
-      setOfficialProductLoading(false);
-    }
-  };
-
-  const handleHideOfficialEvent = async (eventId: string) => {
-    if (officialProductLoading) return;
-    setOfficialProductLoading(true);
-    setOfficialProductError('');
-    try {
-      await hideOfficialEvent(eventId);
-      setOfficialEventCard(null);
-    } catch (eventError: any) {
-      setOfficialProductError(eventError?.message || 'Event se nepodařilo skrýt.');
-    } finally {
-      setOfficialProductLoading(false);
-    }
+    setActiveOfficialEventId(event.event_id);
+    window.scrollTo({ top: 0 });
   };
 
   useEffect(() => {
@@ -2142,13 +2168,24 @@ export default function App() {
       if (result.status === 'stale') return null;
 
       const data = result.data;
+      const hydratedLobby = {
+        ...result.hydratedLobby,
+        ...(result.targetLobby.prizes_enabled !== undefined
+          ? { prizes_enabled: result.targetLobby.prizes_enabled }
+          : {}),
+        ...(result.targetLobby.prize_entries !== undefined
+          ? { prize_entries: result.targetLobby.prize_entries }
+          : {})
+      };
       setMatches(data.matches);
       setTeams(data.teams);
       setLeaderboard(data.leaderboard);
       setAllPredictions(data.allPredictions);
-      setLobbies(data.lobbies);
+      replaceLobbyCollection(data.lobbies.map(lobby => (
+        lobby.id === hydratedLobby.id ? hydratedLobby : lobby
+      )));
       setLoadedDataContext({
-        lobbyId: result.hydratedLobby.id,
+        lobbyId: hydratedLobby.id,
         tournamentId: null
       });
       syncUserFromLeaderboard(data.leaderboard);
@@ -2156,25 +2193,31 @@ export default function App() {
       skipNextInitialDataLoadRef.current = true;
       setEntryOrigin('lobby-detail');
       setActiveTournamentId(null);
-      setActiveLobbyName(result.hydratedLobby.name);
+      setActiveLobbyName(hydratedLobby.name);
       setTab('matches');
-      setActiveLobbyId(result.hydratedLobby.id);
+      setActiveLobbyId(hydratedLobby.id);
       setPendingLobbyNavigation(null);
       setLobbyFormActive('none');
       if (action === 'create') {
-        setLobbySuccess(`Lobby "${result.hydratedLobby.name}" vytvořena! Kód: ${result.hydratedLobby.join_code}`);
+        setLobbySuccess(`Lobby "${hydratedLobby.name}" vytvořena! Kód: ${hydratedLobby.join_code}`);
         setNewLobbyName('');
         setNewLobbyShortDescription('');
         setNewLobbyLongDescription('');
         setNewLobbyJoinPolicy('open');
+        setNewLobbyPrizesEnabled(false);
+        setNewLobbyPrizeEntries([
+          { position: 1, label: '' },
+          { position: 2, label: '' },
+          { position: 3, label: '' }
+        ]);
       } else {
-        setLobbySuccess(`Úspěšně ses připojil k lobby "${result.hydratedLobby.name}"!`);
+        setLobbySuccess(`Úspěšně ses připojil k lobby "${hydratedLobby.name}"!`);
         setJoinCodeInput('');
         clearInviteAddress();
       }
       await completeOnboardingAfterLobbyPath(action === 'create' ? 'own_lobby' : 'invite');
       window.scrollTo({ top: 0 });
-      return result.hydratedLobby;
+      return hydratedLobby;
     } catch (navigationError: any) {
       if (lobbyNavigationRequestRef.current !== requestId) return null;
 
@@ -2234,81 +2277,26 @@ export default function App() {
     void loadInitialData();
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCompleteProfileOnboarding = async (displayName: string) => {
+    const profile = await completeMyProfile(displayName, avatarData.emoji, avatarData.bg, lang === 'en' ? 'en' : 'cs');
+    if (profile.needs_profile_completion) throw new Error(lang === 'en' ? 'Please finish your profile.' : 'Dokonči prosím profil.');
+    setUser(profile);
     setError('');
-    setLogoutError('');
-    setAuthStatus(isRegistering ? 'signing_up' : 'authenticating');
-
-    try {
-      if (isRegistering) {
-        const result = await registerUser(loginData.username, loginData.password, loginData.email);
-        if (result.status === 'email_confirmation_pending') {
-          setPendingConfirmationEmail(result.email);
-          setAuthStatus('email_confirmation_pending');
-        }
-      } else {
-        await loginUser(loginData.email, loginData.password);
-      }
-    } catch (err: any) {
-      setError(toFriendlyAuthError(err));
-      setAuthStatus('auth_error');
-    }
-  };
-
-  const handleOAuthLogin = async (provider: SupportedOAuthProvider) => {
-    setError('');
-    setAuthStatus('authenticating');
-    try {
-      await signInWithOAuthProvider(provider);
-    } catch (err: any) {
-      setError(toFriendlyAuthError(err));
-      setAuthStatus('auth_error');
-    }
-  };
-
-  const handlePasswordResetRequest = async (email: string) => {
-    setError('');
-    await requestPasswordReset(email);
-  };
-
-  const handleResendConfirmation = async () => {
-    setError('');
-    await resendSignupConfirmation(pendingConfirmationEmail);
-  };
-
-  const handleFinishPasswordRecovery = async (newPassword: string) => {
-    setError('');
-    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
-    if (updateError) throw new Error(toFriendlyAuthError(updateError));
-
-    passwordRecoveryRef.current = false;
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) throw new Error(toFriendlyAuthError(sessionError));
-    if (!session?.user) {
-      clearAuthenticatedState();
-      setAuthStatus('signed_out');
-      return;
-    }
-
-    const restored = await loadPlayerFromAuthUser(session.user);
-    authenticatedUserIdRef.current = session.user.id;
-    setUser(restored);
-    setAuthProviders(getUserAuthProviders(session.user));
-    setAuthStatus(isGeneratedProfileName(restored.username) ? 'profile_onboarding' : 'authenticated');
-  };
-
-  const handleCompleteProfileOnboarding = async (username: string) => {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) throw new Error(toFriendlyAuthError(sessionError));
-    if (!session?.user) throw new Error('Přihlášení vypršelo. Přihlas se prosím znovu.');
-
-    await updateProfileUsername(session.user.id, username);
-    const restored = await loadPlayerFromAuthUser(session.user);
-    authenticatedUserIdRef.current = session.user.id;
-    setUser(restored);
-    setAuthProviders(getUserAuthProviders(session.user));
     setAuthStatus('authenticated');
+  };
+
+  const handleSaveProfileName = async (displayName: string) => {
+    if (!user) return;
+    const profile = await completeMyProfile(displayName, user.avatar_emoji || '😀', user.avatar_bg || '#fee2e2', lang === 'en' ? 'en' : 'cs');
+    setUser(previous => previous ? { ...previous, ...profile } : previous);
+    setLeaderboard(previous => previous.map(player => player.id === profile.id ? { ...player, username: profile.username } : player));
+  };
+
+  const handleChangeLanguage = async (nextLanguage: 'cz' | 'en') => {
+    if (!user) return;
+    const profile = await completeMyProfile(user.display_name || user.username, user.avatar_emoji || '😀', user.avatar_bg || '#fee2e2', nextLanguage === 'en' ? 'en' : 'cs');
+    setUser(previous => previous ? { ...previous, ...profile } : previous);
+    setLang(nextLanguage);
   };
 
   const handleLogout = async () => {
@@ -2317,13 +2305,12 @@ export default function App() {
     setLogoutError('');
 
     try {
-      await logoutUser();
-      passwordRecoveryRef.current = false;
+      await clerkSession.logout();
       clearAuthenticatedState();
       setAuthStatus('signed_out');
     } catch (logoutFailure: any) {
       setLogoutError(
-        toFriendlyAuthError(logoutFailure) ||
+        logoutFailure?.message ||
         (lang === 'cz' ? 'Odhlášení se nezdařilo. Zkus to prosím znovu.' : 'Logout failed. Please try again.')
       );
     } finally {
@@ -2456,43 +2443,14 @@ export default function App() {
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPassMsg('');
-    setPassError('');
-    if (passData.newPass !== passData.confirmPass) {
-      setPassError(t.passMismatch);
-      return;
-    }
-    if (passData.newPass.length < 8) {
-      setPassError(lang === 'cz' ? 'Heslo musí mít alespoň 8 znaků.' : 'Password must be at least 8 characters.');
-      return;
-    }
-
-    setIsPassSaving(true);
-    try {
-      await changePassDB(passData.newPass);
-      setPassMsg(t.passUpdated);
-      setPassData({ newPass: '', confirmPass: '' });
-    } catch (err: any) {
-      setPassError(err.message);
-    } finally {
-      setIsPassSaving(false);
-    }
-  };
-
   const handleSaveAvatar = async (nextEmoji = avatarData.emoji, nextBg = avatarData.bg) => {
     if (!user) return;
     setAvatarMsg('');
     setAvatarError('');
 
     try {
-      await updateProfileAvatar(user.id, nextEmoji, nextBg);
-      const updatedUser = {
-        ...user,
-        avatar_emoji: nextEmoji,
-        avatar_bg: nextBg
-      };
+      const profile = await completeMyProfile(user.display_name || user.username, nextEmoji, nextBg, lang === 'en' ? 'en' : 'cs');
+      const updatedUser = { ...user, ...profile };
       setUser(updatedUser);
       setAvatarData({ emoji: nextEmoji, bg: nextBg });
       setAvatarMsg(lang === 'cz' ? 'Avatar uložen.' : 'Avatar saved.');
@@ -2710,7 +2668,7 @@ export default function App() {
   });
   const showFirstTipOnboarding = shouldShowFirstTipOnboarding({
     enabled: isProductFeatureEnabled(productFeatureFlags, 'onboarding_first_tip_enabled'),
-    hasInvite: Boolean(joinCodeInput),
+    hasInvite: Boolean(joinCodeInput || officialEventSlugInput),
     lobbies,
     state: onboardingState
   });
@@ -2719,30 +2677,15 @@ export default function App() {
     return (
       <AuthScreen
         status={authStatus}
-        registering={isRegistering}
-        email={loginData.email}
-        username={authStatus === 'profile_onboarding' ? (user?.username || loginData.username) : loginData.username}
-        password={loginData.password}
-        pendingEmail={pendingConfirmationEmail}
-        error={error}
-        invitePending={Boolean(joinCodeInput)}
-        onChange={(field, value) => setLoginData(previous => ({ ...previous, [field]: value }))}
-        onSubmit={handleLogin}
-        onToggleRegistering={() => {
-          setIsRegistering(previous => !previous);
-          setError('');
-          setAuthStatus('signed_out');
-        }}
-        onForgotPassword={handlePasswordResetRequest}
-        onOAuth={handleOAuthLogin}
-        onResendConfirmation={handleResendConfirmation}
-        onBackToLogin={() => {
-          setPendingConfirmationEmail('');
-          setError('');
-          setIsRegistering(false);
-          setAuthStatus('signed_out');
-        }}
-        onFinishPasswordRecovery={handleFinishPasswordRecovery}
+        lang={lang}
+        username={user?.display_name || ''}
+        error={error || logoutError}
+        invitePending={Boolean(joinCodeInput || officialEventSlugInput)}
+        signedIn={clerkSession.signedIn}
+        busy={isLoggingOut}
+        onRetry={() => setAuthRetry(previous => previous + 1)}
+        onLogout={handleLogout}
+        onLanguageChange={setLang}
         onCompleteProfileOnboarding={handleCompleteProfileOnboarding}
       />
     );
@@ -2849,6 +2792,21 @@ export default function App() {
             if (onboardingState?.status === 'completed') return;
             await persistOnboardingState('completed', 'start_event');
           }}
+          onJoined={async () => {
+            const refreshedEvent = await loadOfficialProductContext();
+            if (!shouldShowOfficialEventOnHome(refreshedEvent)) {
+              throw new Error(
+                'Účast je potvrzená, ale Home se nepodařilo aktualizovat. Zkus to prosím znovu.'
+              );
+            }
+            setLobbyFormActive('none');
+            setActiveOfficialEventId(null);
+            goHome();
+          }}
+          commercialEnabled={isProductFeatureEnabled(productFeatureFlags, 'official_event_commercial_enabled')}
+          resultsEnabled={isProductFeatureEnabled(productFeatureFlags, 'official_event_results_enabled')}
+          hasOwnedLobby={lobbies.some(lobby => lobby.owner_id === user.id)}
+          username={user.username || 'Tipér'}
         />
       </Suspense>
     );
@@ -2885,18 +2843,14 @@ export default function App() {
                 t={t}
                 lang={lang}
                 user={user}
-                authProviders={authProviders}
+                accountEmail={clerkSession.email}
+                onManageAccount={clerkSession.manageAccount}
+                onSaveProfileName={handleSaveProfileName}
                 currentUserStats={currentUserStats}
                 currentUserRank={currentUserRank}
                 currentUserLeaderGap={currentUserLeaderGap}
-                passData={passData}
-                setPassData={setPassData}
-                passMsg={passMsg}
-                passError={passError}
-                isPassSaving={isPassSaving}
                 logoutError={logoutError}
                 isLoggingOut={isLoggingOut}
-                onUpdatePassword={handleUpdatePassword}
                 avatarData={avatarData}
                 showAvatarEditor={showAvatarEditor}
                 setShowAvatarEditor={setShowAvatarEditor}
@@ -2904,7 +2858,7 @@ export default function App() {
                 avatarError={avatarError}
                 onSaveAvatar={handleSaveAvatar}
                 onLogout={handleLogout}
-                setLang={setLang}
+                onChangeLanguage={handleChangeLanguage}
                 UserAvatar={UserAvatar}
                 communityEnabled={isProductFeatureEnabled(productFeatureFlags, 'public_profiles_enabled')}
                 badgesEnabled={isProductFeatureEnabled(productFeatureFlags, 'badges_enabled')}
@@ -2969,15 +2923,22 @@ export default function App() {
             membershipItems={homeMembershipItems}
             membershipLoading={homeMembershipLoading}
             membershipError={homeMembershipError}
-            officialEvent={officialEventCard}
+            officialEvents={officialEventCard ? [officialEventCard] : []}
             officialEventBusy={officialProductLoading}
+            officialEventsEnabled={isProductFeatureEnabled(
+              productFeatureFlags,
+              'official_events_enabled'
+            )}
+            officialEventCommercialEnabled={isProductFeatureEnabled(
+              productFeatureFlags,
+              'official_event_commercial_enabled'
+            )}
             addLobbyMode={lobbyFormActive}
             onRetrySummaries={() => void loadHomeDashboard()}
             onCancelJoinRequest={handleCancelHomeJoinRequest}
             onOpenContext={openHomeContext}
             onOpenLobby={openLobbyDetail}
             onOpenOfficialEvent={event => void handleOpenOfficialEvent(event)}
-            onHideOfficialEvent={eventId => void handleHideOfficialEvent(eventId)}
             onSetAddLobbyMode={mode => {
               setLobbyFormActive(mode);
               setLobbyError('');
@@ -2985,6 +2946,14 @@ export default function App() {
             }}
           />
           <div className="px-4 pb-6 sm:px-6">
+            {lobbyPrizeLoadError && (
+              <p
+                role="alert"
+                className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[10px] font-semibold leading-relaxed text-amber-900"
+              >
+                {lobbyPrizeLoadError}
+              </p>
+            )}
             {/* Expanded Forms */}
             {(lobbyFormActive === 'create' || lobbyFormActive === 'join') && (
               <motion.div
@@ -3001,6 +2970,21 @@ export default function App() {
                       setLobbyError("Prosím zadejte název lobby.");
                       return;
                     }
+                    let prizeSelection: {
+                      enabled: boolean;
+                      entries: LobbyPrizeEntry[];
+                    } | undefined;
+                    if (privateLobbyPrizesEnabled) {
+                      try {
+                        prizeSelection = prepareLobbyPrizeSelection({
+                          enabled: newLobbyPrizesEnabled,
+                          entries: newLobbyPrizeEntries
+                        });
+                      } catch (prizeError: any) {
+                        setLobbyError(prizeError?.message || 'Zkontroluj nastavení cen.');
+                        return;
+                      }
+                    }
                     await navigateAfterLobbyMutation(
                       'create',
                       () => createLobby(
@@ -3009,7 +2993,8 @@ export default function App() {
                         'public',
                         newLobbyShortDescription,
                         newLobbyLongDescription,
-                        newLobbyJoinPolicy
+                        newLobbyJoinPolicy,
+                        prizeSelection
                       )
                     );
                   }} className="space-y-3">
@@ -3056,6 +3041,7 @@ export default function App() {
                         <option value="ms-hockey-2026">🏒 MS v hokeji 2026</option>
                       </select>
                     </div>
+                    {newLobbyTournament !== 'ms-hockey-2026' && <ScoringRulesPreview lang={lang} />}
                     <fieldset disabled={isLobbyMutationSubmitting}>
                       <legend className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Způsob vstupu</legend>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -3091,6 +3077,97 @@ export default function App() {
                         </label>
                       </div>
                     </fieldset>
+                    {privateLobbyPrizesEnabled && (
+                      <fieldset
+                        disabled={isLobbyMutationSubmitting}
+                        className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"
+                      >
+                        <legend className="px-1 text-[9px] font-black uppercase tracking-wider text-slate-500">
+                          O co hrajeme?
+                        </legend>
+                        <div className="mt-1 grid grid-cols-2 gap-2">
+                          {([
+                            [false, 'Bez cen'],
+                            [true, 'Hrajeme o ceny']
+                          ] as const).map(([enabled, label]) => (
+                            <label
+                              key={label}
+                              className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 ${
+                                newLobbyPrizesEnabled === enabled
+                                  ? 'border-red-200 bg-white text-slate-900 shadow-sm'
+                                  : 'border-transparent bg-transparent text-slate-500'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="lobby-prizes"
+                                checked={newLobbyPrizesEnabled === enabled}
+                                onChange={() => setNewLobbyPrizesEnabled(enabled)}
+                              />
+                              <span className="text-[10px] font-black uppercase">{label}</span>
+                            </label>
+                          ))}
+                        </div>
+
+                        {newLobbyPrizesEnabled && (
+                          <div className="mt-3 space-y-2">
+                            <div className="flex items-center gap-2 text-slate-700">
+                              <Gift className="h-4 w-4 text-amber-700" aria-hidden="true" />
+                              <p className="text-[10px] font-black uppercase">Ceny podle umístění</p>
+                            </div>
+                            {newLobbyPrizeEntries.map((entry, index) => (
+                              <label
+                                key={entry.position}
+                                className="grid grid-cols-[68px_1fr] items-center gap-2"
+                              >
+                                <span className="text-[10px] font-black text-slate-500">
+                                  {index + 1}. místo
+                                </span>
+                                <input
+                                  type="text"
+                                  value={entry.label}
+                                  maxLength={120}
+                                  onChange={event => setNewLobbyPrizeEntries(previous => previous.map(
+                                    (item, itemIndex) => itemIndex === index
+                                      ? { ...item, label: event.target.value }
+                                      : item
+                                  ))}
+                                  className="min-h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
+                                  placeholder={index === 0 ? 'Např. 500 Kč' : 'Volitelné'}
+                                />
+                              </label>
+                            ))}
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                aria-label="Přidat další cenu"
+                                disabled={newLobbyPrizeEntries.length >= MAX_LOBBY_PRIZES}
+                                onClick={() => setNewLobbyPrizeEntries(previous => [
+                                  ...previous,
+                                  { position: previous.length + 1, label: '' }
+                                ])}
+                                className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-40"
+                              >
+                                <Plus className="h-4 w-4" aria-hidden="true" />
+                                Přidat další cenu
+                              </button>
+                              <button
+                                type="button"
+                                aria-label="Odebrat poslední cenu"
+                                disabled={newLobbyPrizeEntries.length <= 1}
+                                onClick={() => setNewLobbyPrizeEntries(previous => previous.slice(0, -1))}
+                                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-40"
+                              >
+                                <Minus className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                            </div>
+                            <p className="text-[9px] font-medium leading-relaxed text-slate-500">
+                              Ceny zajišťuje správce lobby. Tipovačka je nedrží, neověřuje ani negarantuje.
+                            </p>
+                          </div>
+                        )}
+                      </fieldset>
+                    )}
                     <button
                       type="submit"
                       disabled={isLobbyMutationSubmitting}
@@ -3222,6 +3299,7 @@ export default function App() {
                 communityProfilesEnabled={isProductFeatureEnabled(productFeatureFlags, 'public_profiles_enabled')}
                 shareEnabled={isProductFeatureEnabled(productFeatureFlags, 'share_cards_enabled')}
                 tournamentManagementEnabled={isProductFeatureEnabled(productFeatureFlags, 'tournament_management_enabled')}
+                privateLobbyPrizesEnabled={isProductFeatureEnabled(productFeatureFlags, 'private_lobby_prizes_enabled')}
                 UserAvatar={UserAvatar}
               />
             </Suspense>
@@ -3272,6 +3350,7 @@ export default function App() {
                    matchPredictions={predictionsByMatchId.get(m.id) || []}
                    matchPredictionsLoading={deferredLoading && !predictionsByMatchId.has(m.id)}
                    isHockey={isHockey}
+                   lang={lang}
                  />
               ))}
               {scheduledMatchesForView.length === 0 && (
@@ -3336,6 +3415,7 @@ export default function App() {
                    matchPredictions={predictionsByMatchId.get(m.id) || []}
                    matchPredictionsLoading={deferredLoading && !predictionsByMatchId.has(m.id)}
                    isHockey={isHockey}
+                   lang={lang}
                  />
                ))}
                {finishedMatchesForView.length === 0 && (

@@ -1,10 +1,15 @@
+import { MATCH_TIME_ZONE, pragueCalendarDay } from '../lib/matchTime.ts';
 import { useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
   ChevronRight,
+  KeyRound,
   Plus,
-  Trophy
+  Trophy,
+  X
 } from 'lucide-react';
 import type { Lobby, MembershipHomeItem, OfficialEventCard as OfficialEventCardType } from '../types.ts';
 import {
@@ -15,10 +20,13 @@ import {
   type HomeDashboardSummary
 } from '../lib/homeDashboard.ts';
 import { getLatestMembershipHomeItems } from '../lib/membership.ts';
-import { shouldPromoteOfficialEventCard } from '../lib/officialEventsState.ts';
+import {
+  shouldShowOfficialEventInPicker,
+  shouldShowOfficialEventOnHome
+} from '../lib/officialEventsState.ts';
 import { OfficialEventCard } from './OfficialEventCard.tsx';
 
-export type AddLobbyMode = 'none' | 'menu' | 'create' | 'join';
+export type AddLobbyMode = 'none' | 'menu' | 'create' | 'join' | 'official';
 
 type HomeDashboardProps = {
   lang: 'cz' | 'en';
@@ -29,8 +37,10 @@ type HomeDashboardProps = {
   membershipItems: MembershipHomeItem[];
   membershipLoading: boolean;
   membershipError: string;
-  officialEvent: OfficialEventCardType | null;
+  officialEvents: OfficialEventCardType[];
   officialEventBusy: boolean;
+  officialEventsEnabled: boolean;
+  officialEventCommercialEnabled: boolean;
   addLobbyMode: AddLobbyMode;
   addLobbyPanel?: ReactNode;
   onRetrySummaries: () => void;
@@ -42,7 +52,6 @@ type HomeDashboardProps = {
   ) => void;
   onOpenLobby: (lobby: Lobby) => void;
   onOpenOfficialEvent: (event: OfficialEventCardType) => void;
-  onHideOfficialEvent: (eventId: string) => void;
   onSetAddLobbyMode: (mode: AddLobbyMode) => void;
 };
 
@@ -174,22 +183,21 @@ const formatLockTime = (value: string | null, lang: 'cz' | 'en') => {
   if (!Number.isFinite(date.getTime())) return null;
 
   const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const dayDiff = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  const dayDiff = pragueCalendarDay(date) - pragueCalendarDay(now);
   const time = date.toLocaleTimeString(lang === 'cz' ? 'cs-CZ' : 'en-GB', {
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    timeZone: MATCH_TIME_ZONE
   });
 
   if (lang === 'cz') {
     if (dayDiff === 0) return `Uzávěrka dnes v ${time}`;
     if (dayDiff === 1) return `Uzávěrka zítra v ${time}`;
-    return `Uzávěrka ${date.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' })} v ${time}`;
+    return `Uzávěrka ${date.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', timeZone: MATCH_TIME_ZONE })} v ${time}`;
   }
   if (dayDiff === 0) return `Locks today at ${time}`;
   if (dayDiff === 1) return `Locks tomorrow at ${time}`;
-  return `Locks ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} at ${time}`;
+  return `Locks ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: MATCH_TIME_ZONE })} at ${time}`;
 };
 
 const formatLaterStatus = (value: string | null, lang: 'cz' | 'en') => {
@@ -460,6 +468,144 @@ const LobbyWorldCard = ({
   );
 };
 
+const AddLobbySheet = ({
+  lang,
+  mode,
+  officialEvents,
+  officialEventBusy,
+  officialEventsEnabled,
+  officialEventCommercialEnabled,
+  onOpenOfficialEvent,
+  onSetMode
+}: {
+  lang: 'cz' | 'en';
+  mode: AddLobbyMode;
+  officialEvents: OfficialEventCardType[];
+  officialEventBusy: boolean;
+  officialEventsEnabled: boolean;
+  officialEventCommercialEnabled: boolean;
+  onOpenOfficialEvent: (event: OfficialEventCardType) => void;
+  onSetMode: (mode: AddLobbyMode) => void;
+}) => {
+  if (mode !== 'menu' && mode !== 'official') return null;
+
+  const optionClassName = 'flex w-full items-center gap-3 border-b border-slate-100 px-4 py-4 text-left last:border-b-0 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500';
+  const pickerEvents = officialEvents.filter(shouldShowOfficialEventInPicker);
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/35 sm:items-center sm:p-4"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onSetMode('none');
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-lobby-sheet-title"
+        className="max-h-[88vh] w-full overflow-y-auto rounded-t-2xl bg-white p-4 shadow-2xl sm:max-w-lg sm:rounded-2xl"
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            {mode === 'official' && (
+              <button
+                type="button"
+                onClick={() => onSetMode('menu')}
+                aria-label={lang === 'cz' ? 'Zpět na výběr' : 'Back to choices'}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              >
+                <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+            <h2 id="add-lobby-sheet-title" className="truncate text-sm font-black text-slate-900">
+              {mode === 'official'
+                ? (lang === 'cz' ? 'Oficiální turnaje' : 'Official tournaments')
+                : (lang === 'cz' ? 'Přidat lobby' : 'Add lobby')}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => onSetMode('none')}
+            aria-label={lang === 'cz' ? 'Zavřít' : 'Close'}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        {mode === 'menu' ? (
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <button type="button" onClick={() => onSetMode('join')} className={optionClassName}>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 text-red-600">
+                <KeyRound className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-black text-slate-900">
+                  {lang === 'cz' ? 'Připojit se kódem' : 'Join with a code'}
+                </span>
+                <span className="mt-1 block text-[10px] font-medium text-slate-500">
+                  {lang === 'cz' ? 'Připojit se do lobby kamaráda.' : "Join a friend's lobby."}
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+            </button>
+            <button type="button" onClick={() => onSetMode('create')} className={optionClassName}>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
+                <Plus className="h-5 w-5" aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-black text-slate-900">
+                  {lang === 'cz' ? 'Založit lobby' : 'Create a lobby'}
+                </span>
+                <span className="mt-1 block text-[10px] font-medium text-slate-500">
+                  {lang === 'cz' ? 'Soukromá lobby.' : 'A private lobby.'}
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+            </button>
+            {officialEventsEnabled && (
+              <button type="button" onClick={() => onSetMode('official')} className={optionClassName}>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                  <Trophy className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-black text-slate-900">
+                    {lang === 'cz' ? 'Oficiální turnaje' : 'Official tournaments'}
+                  </span>
+                  <span className="mt-1 block text-[10px] font-medium text-slate-500">
+                    {lang === 'cz' ? 'Veřejné soutěže Tipovačky.' : 'Public Tipovačka competitions.'}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        ) : pickerEvents.length > 0 ? (
+          <div className="space-y-4">
+            {pickerEvents.map((event, index) => (
+              <OfficialEventCard
+                key={event.event_id}
+                event={event}
+                commercialEnabled={officialEventCommercialEnabled}
+                busy={officialEventBusy}
+                eagerCover={index === 0}
+                onOpen={onOpenOfficialEvent}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center">
+            <p className="text-xs font-black text-slate-700">
+              {lang === 'cz' ? 'Teď není otevřený žádný turnaj.' : 'There is no open tournament right now.'}
+            </p>
+          </div>
+        )}
+      </section>
+    </div>,
+    document.body
+  );
+};
+
 export function HomeDashboard({
   lang,
   lobbies,
@@ -469,8 +615,10 @@ export function HomeDashboard({
   membershipItems,
   membershipLoading,
   membershipError,
-  officialEvent,
+  officialEvents,
   officialEventBusy,
+  officialEventsEnabled,
+  officialEventCommercialEnabled,
   addLobbyMode,
   addLobbyPanel,
   onRetrySummaries,
@@ -478,9 +626,10 @@ export function HomeDashboard({
   onOpenContext,
   onOpenLobby,
   onOpenOfficialEvent,
-  onHideOfficialEvent,
   onSetAddLobbyMode
 }: HomeDashboardProps) {
+  const homeOfficialEvents = officialEvents.filter(shouldShowOfficialEventOnHome);
+  const hasHomeItems = lobbies.length > 0 || homeOfficialEvents.length > 0;
   const membershipNotices = (
     <MembershipNotices
       lang={lang}
@@ -494,43 +643,6 @@ export function HomeDashboard({
     />
   );
 
-  if (lobbies.length === 0) {
-    return (
-      <main className="flex flex-1 flex-col p-6">
-        {membershipNotices}
-        {officialEvent && (
-          <OfficialEventCard
-            event={officialEvent}
-            prominent={shouldPromoteOfficialEventCard(officialEvent, lobbies)}
-            busy={officialEventBusy}
-            onOpen={onOpenOfficialEvent}
-            onHide={onHideOfficialEvent}
-          />
-        )}
-        <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-600">
-            <Trophy className="h-8 w-8" />
-          </div>
-          <h2 className="text-xl font-black text-slate-900">{lang === 'cz' ? 'Začni tipovat s ostatními' : 'Start predicting together'}</h2>
-          <p className="mx-auto mt-2 max-w-[290px] text-xs font-medium leading-relaxed text-slate-500">
-            {lang === 'cz'
-              ? 'Připoj se do existující lobby pomocí kódu, nebo si založ vlastní.'
-              : 'Join an existing lobby with a code, or create your own.'}
-          </p>
-          <div className="mt-7 grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
-            <button type="button" onClick={() => onSetAddLobbyMode('join')} className="min-h-12 rounded-xl bg-red-600 px-4 text-[10px] font-black uppercase tracking-wider text-white shadow-md shadow-red-100">
-              {lang === 'cz' ? 'Připojit se kódem' : 'Join with code'}
-            </button>
-            <button type="button" onClick={() => onSetAddLobbyMode('create')} className="min-h-12 rounded-xl border border-slate-200 bg-white px-4 text-[10px] font-black uppercase tracking-wider text-slate-700">
-              {lang === 'cz' ? 'Založit lobby' : 'Create lobby'}
-            </button>
-          </div>
-          {addLobbyPanel && <div className="mt-4 w-full text-left">{addLobbyPanel}</div>}
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="flex flex-1 flex-col p-4 sm:p-6">
       <section aria-labelledby="home-lobbies-title">
@@ -538,62 +650,69 @@ export function HomeDashboard({
           <span id="home-lobbies-title">{lang === 'cz' ? 'Tvoje lobby' : 'Your lobbies'}</span>
         </h2>
         {membershipNotices}
-        <div className="space-y-4">
-          {lobbies.map((lobby, index) => {
-            const summary = getPrimaryHomeDashboardSummaryForLobby(lobby.id, summaries) ||
-              getCompletedLobbySummary(lobby);
+        {hasHomeItems ? (
+          <div className="space-y-4">
+            {lobbies.map((lobby, index) => {
+              const summary = getPrimaryHomeDashboardSummaryForLobby(lobby.id, summaries) ||
+                getCompletedLobbySummary(lobby);
 
-            return (
-              <LobbyWorldCard
-                key={lobby.id}
-                lobby={lobby}
-                summary={summary}
-                lang={lang}
-                loading={summariesLoading}
-                error={summariesError}
-                eagerCover={index === 0}
-                onRetry={onRetrySummaries}
-                onOpenContext={onOpenContext}
-                onOpenLobby={onOpenLobby}
+              return (
+                <LobbyWorldCard
+                  key={lobby.id}
+                  lobby={lobby}
+                  summary={summary}
+                  lang={lang}
+                  loading={summariesLoading}
+                  error={summariesError}
+                  eagerCover={index === 0}
+                  onRetry={onRetrySummaries}
+                  onOpenContext={onOpenContext}
+                  onOpenLobby={onOpenLobby}
+                />
+              );
+            })}
+            {homeOfficialEvents.map((event, index) => (
+              <OfficialEventCard
+                key={event.event_id}
+                event={event}
+                commercialEnabled={officialEventCommercialEnabled}
+                busy={officialEventBusy}
+                eagerCover={lobbies.length === 0 && index === 0}
+                onOpen={onOpenOfficialEvent}
               />
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-7 text-center">
+            <p className="text-xs font-black text-slate-700">
+              {lang === 'cz' ? 'Zatím tu nemáš žádnou lobby.' : 'You do not have a lobby yet.'}
+            </p>
+          </div>
+        )}
       </section>
-
-      {officialEvent && (
-        <section className="mt-6" aria-label="Oficiální event">
-          <OfficialEventCard
-            event={officialEvent}
-            prominent={false}
-            busy={officialEventBusy}
-            onOpen={onOpenOfficialEvent}
-            onHide={onHideOfficialEvent}
-          />
-        </section>
-      )}
 
       <section className="mt-6">
         <button
           type="button"
-          onClick={() => onSetAddLobbyMode(addLobbyMode === 'none' ? 'menu' : 'none')}
+          onClick={() => onSetAddLobbyMode('menu')}
           className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-wider text-slate-600"
         >
           <Plus className="h-4 w-4" /> {lang === 'cz' ? 'Přidat lobby' : 'Add lobby'}
         </button>
 
-        {addLobbyMode === 'menu' && (
-          <div className="mt-2 grid grid-cols-2 gap-2 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-            <button type="button" onClick={() => onSetAddLobbyMode('join')} className="min-h-11 rounded-xl bg-red-50 px-3 text-[9px] font-black uppercase text-red-600">
-              {lang === 'cz' ? 'Připojit se kódem' : 'Join with code'}
-            </button>
-            <button type="button" onClick={() => onSetAddLobbyMode('create')} className="min-h-11 rounded-xl bg-slate-100 px-3 text-[9px] font-black uppercase text-slate-700">
-              {lang === 'cz' ? 'Založit novou lobby' : 'Create new lobby'}
-            </button>
-          </div>
-        )}
         {addLobbyPanel && <div className="mt-3">{addLobbyPanel}</div>}
       </section>
+
+      <AddLobbySheet
+        lang={lang}
+        mode={addLobbyMode}
+        officialEvents={officialEvents}
+        officialEventBusy={officialEventBusy}
+        officialEventsEnabled={officialEventsEnabled}
+        officialEventCommercialEnabled={officialEventCommercialEnabled}
+        onOpenOfficialEvent={onOpenOfficialEvent}
+        onSetMode={onSetAddLobbyMode}
+      />
     </main>
   );
 }

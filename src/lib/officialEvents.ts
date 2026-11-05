@@ -3,6 +3,7 @@ import type {
   OfficialEventCard,
   OfficialEventDetail,
   OfficialEventLeaderboard,
+  OfficialEventSeasonResult,
   OnboardingState
 } from '../types.ts';
 
@@ -47,9 +48,39 @@ export const fetchOfficialEventHomeCard = async (): Promise<OfficialEventCard | 
   return data as OfficialEventCard | null;
 };
 
+export const resolveOfficialEventSlug = async (slug: string): Promise<string | null> => {
+  const { data, error } = await supabase.rpc('resolve_official_event_slug', {
+    slug_param: slug
+  });
+  if (returnNullForMissingRpc(error)) return null;
+  if (error) throw error;
+  return data ? String(data) : null;
+};
+
 export const joinOfficialEvent = async (eventId: string) => {
   const { data, error } = await supabase.rpc('join_official_event', {
     event_id_param: eventId
+  });
+  if (error) throw error;
+  return data as { event_id: string; state: 'joined' | 'rejoined' | 'already_participating' };
+};
+
+export const acceptOfficialEventTermsAndJoin = async ({
+  eventId,
+  accepted,
+  declaredAgeEligible,
+  declaredRegionEligible
+}: {
+  eventId: string;
+  accepted: boolean;
+  declaredAgeEligible: boolean;
+  declaredRegionEligible: boolean;
+}) => {
+  const { data, error } = await supabase.rpc('accept_official_event_terms_and_join', {
+    event_id_param: eventId,
+    accepted_param: accepted,
+    declared_age_eligible_param: declaredAgeEligible,
+    declared_region_eligible_param: declaredRegionEligible
   });
   if (error) throw error;
   return data as { event_id: string; state: 'joined' | 'rejoined' | 'already_participating' };
@@ -108,4 +139,15 @@ export const fetchOfficialEventLeaderboard = async (
   });
   if (error) throw error;
   return data as OfficialEventLeaderboard | null;
+};
+
+export const fetchOfficialEventSeasonResult = async (
+  eventId: string
+): Promise<OfficialEventSeasonResult | null> => {
+  const { data, error } = await supabase.rpc('get_official_event_season_result', {
+    event_id_param: eventId
+  });
+  if (returnNullForMissingRpc(error)) return null;
+  if (error) throw error;
+  return data as OfficialEventSeasonResult | null;
 };

@@ -1,4 +1,4 @@
-import React, { Dispatch, FormEvent, SetStateAction } from 'react';
+import React, { Dispatch, SetStateAction, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Flame, LogOut, Pencil, X } from 'lucide-react';
 import { Player } from '../types.ts';
@@ -28,18 +28,14 @@ type ProfileScreenProps = {
   t: any;
   lang: 'cz' | 'en';
   user: Player;
-  authProviders: string[];
+  accountEmail: string | null;
+  onManageAccount: () => void;
+  onSaveProfileName: (displayName: string) => Promise<void>;
   currentUserStats: ProfileStats;
   currentUserRank: number | null;
   currentUserLeaderGap: number;
-  passData: { newPass: string; confirmPass: string };
-  setPassData: Dispatch<SetStateAction<{ newPass: string; confirmPass: string }>>;
-  passMsg: string;
-  passError: string;
-  isPassSaving: boolean;
   logoutError: string;
   isLoggingOut: boolean;
-  onUpdatePassword: (event: FormEvent) => Promise<void>;
   avatarData: { emoji: string; bg: string };
   showAvatarEditor: boolean;
   setShowAvatarEditor: Dispatch<SetStateAction<boolean>>;
@@ -47,7 +43,7 @@ type ProfileScreenProps = {
   avatarError: string;
   onSaveAvatar: (emoji?: string, bg?: string) => Promise<void>;
   onLogout: () => Promise<void>;
-  setLang: Dispatch<SetStateAction<'cz' | 'en'>>;
+  onChangeLanguage: (language: 'cz' | 'en') => Promise<void>;
   UserAvatar: UserAvatarComponent;
   communityEnabled: boolean;
   badgesEnabled: boolean;
@@ -57,18 +53,14 @@ export default function ProfileScreen({
   t,
   lang,
   user,
-  authProviders,
+  accountEmail,
+  onManageAccount,
+  onSaveProfileName,
   currentUserStats,
   currentUserRank,
   currentUserLeaderGap,
-  passData,
-  setPassData,
-  passMsg,
-  passError,
-  isPassSaving,
   logoutError,
   isLoggingOut,
-  onUpdatePassword,
   avatarData,
   showAvatarEditor,
   setShowAvatarEditor,
@@ -76,11 +68,32 @@ export default function ProfileScreen({
   avatarError,
   onSaveAvatar,
   onLogout,
-  setLang,
+  onChangeLanguage,
   UserAvatar,
   communityEnabled,
   badgesEnabled
 }: ProfileScreenProps) {
+  const [displayName, setDisplayName] = useState(user.display_name || user.username);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const profileSavingRef = useRef(false);
+  const [profileMessage, setProfileMessage] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const changeLanguage = async (language: 'cz' | 'en') => {
+    if (profileSavingRef.current) return;
+    profileSavingRef.current = true;
+    setProfileSaving(true);
+    setProfileError('');
+    try { await onChangeLanguage(language); }
+    catch (failure: unknown) { setProfileError(failure instanceof Error ? failure.message : 'Jazyk se nepodařilo uložit. / Unable to save language.'); }
+    finally { profileSavingRef.current = false; setProfileSaving(false); }
+  };
+  const saveAvatar = async (emoji: string, bg: string) => {
+    if (profileSavingRef.current) return;
+    profileSavingRef.current = true;
+    setProfileSaving(true);
+    try { await onSaveAvatar(emoji, bg); }
+    finally { profileSavingRef.current = false; setProfileSaving(false); }
+  };
   return (
     <motion.div
       key="profile"
@@ -94,6 +107,7 @@ export default function ProfileScreen({
           <UserAvatar player={user} size="lg" />
           <button
             type="button"
+            disabled={profileSaving}
             onClick={() => setShowAvatarEditor(true)}
             className="absolute -right-1 -bottom-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg ring-4 ring-white active:scale-95 transition-all"
             aria-label={lang === 'cz' ? 'Upravit avatar' : 'Edit avatar'}
@@ -102,6 +116,27 @@ export default function ProfileScreen({
           </button>
         </div>
         <h2 className="text-xl font-black text-slate-900 uppercase transition-colors">{user.username}</h2>
+        <form className="mt-4 w-full space-y-3" onSubmit={async event => {
+          event.preventDefault();
+          if (profileSavingRef.current) return;
+          profileSavingRef.current = true;
+          setProfileSaving(true);
+          setProfileError('');
+          setProfileMessage('');
+          try {
+            await onSaveProfileName(displayName);
+            setProfileMessage(lang === 'cz' ? 'Jméno uloženo.' : 'Name saved.');
+          } catch (failure: unknown) {
+            setProfileError(failure instanceof Error ? failure.message : (lang === 'cz' ? 'Jméno se nepodařilo uložit.' : 'Unable to save name.'));
+          } finally { profileSavingRef.current = false; setProfileSaving(false); }
+        }}>
+          <label className="block text-xs font-bold text-slate-500">{lang === 'cz' ? 'Zobrazované jméno' : 'Display name'}
+            <input required minLength={2} maxLength={40} autoComplete="nickname" value={displayName} onChange={event => setDisplayName(event.target.value)} className="mt-2 w-full rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-red-600" />
+          </label>
+          <button type="submit" disabled={profileSaving} className="min-h-11 w-full rounded-2xl bg-slate-900 text-xs font-bold text-white disabled:opacity-60">{profileSaving ? (lang === 'cz' ? 'Ukládám…' : 'Saving…') : (lang === 'cz' ? 'Uložit jméno' : 'Save name')}</button>
+          {profileMessage ? <p className="text-center text-xs text-green-700" role="status">{profileMessage}</p> : null}
+          {profileError ? <p className="text-center text-xs text-red-600" role="alert">{profileError}</p> : null}
+        </form>
         {(currentUserStats.currentStreak ?? 0) >= 3 && (
           <div className="mt-2 flex items-center gap-1 text-orange-500 font-black italic text-sm">
             <Flame className="w-4 h-4 fill-current" />
@@ -149,7 +184,8 @@ export default function ProfileScreen({
                   <button
                     key={emoji}
                     type="button"
-                    onClick={() => onSaveAvatar(emoji, avatarData.bg)}
+                    disabled={profileSaving}
+                    onClick={() => void saveAvatar(emoji, avatarData.bg)}
                     className={`h-10 rounded-xl text-xl border transition-all ${avatarData.emoji === emoji ? 'border-red-600 bg-red-50 shadow-sm scale-105' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
                     aria-label={`Avatar ${emoji}`}
                   >
@@ -162,7 +198,8 @@ export default function ProfileScreen({
                   <button
                     key={color}
                     type="button"
-                    onClick={() => onSaveAvatar(avatarData.emoji, color)}
+                    disabled={profileSaving}
+                    onClick={() => void saveAvatar(avatarData.emoji, color)}
                     className={`h-9 rounded-xl border transition-all ${avatarData.bg === color ? 'border-slate-900 ring-2 ring-slate-900/10 scale-105' : 'border-white hover:border-slate-200'}`}
                     style={{ backgroundColor: color }}
                     aria-label={`Avatar color ${color}`}
@@ -269,7 +306,7 @@ export default function ProfileScreen({
           <div className="rounded-2xl bg-slate-50 px-4 py-3">
             <p className="text-[9px] font-black uppercase text-slate-400">E-mail</p>
             <p className="mt-1 truncate text-xs font-semibold text-slate-700">
-              {user.email || (lang === 'cz' ? 'Není dostupný' : 'Not available')}
+              {accountEmail || (lang === 'cz' ? 'Není dostupný' : 'Not available')}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 px-4 py-3">
@@ -277,60 +314,29 @@ export default function ProfileScreen({
               {lang === 'cz' ? 'Přihlášení' : 'Sign-in methods'}
             </p>
             <p className="mt-1 text-xs font-semibold text-slate-700">
-              {authProviders.length > 0
-                ? authProviders.map(provider => (
-                    provider === 'email' ? 'E-mail' : provider === 'google' ? 'Google' : provider === 'apple' ? 'Apple' : provider
-                  )).join(', ')
-                : (lang === 'cz' ? 'E-mail' : 'Email')}
+              Clerk
             </p>
           </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 italic">{t.changePass}</h3>
-        <form onSubmit={onUpdatePassword} className="space-y-3">
-          <input
-            type="password"
-            autoComplete="new-password"
-            placeholder={t.newPass}
-            value={passData.newPass}
-            onChange={e => setPassData(p => ({ ...p, newPass: e.target.value }))}
-            className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm focus:ring-2 focus:ring-red-500 transition-all outline-none"
-            required
-          />
-          <input
-            type="password"
-            autoComplete="new-password"
-            placeholder={t.confirmPass}
-            value={passData.confirmPass}
-            onChange={e => setPassData(p => ({ ...p, confirmPass: e.target.value }))}
-            className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-100 text-sm focus:ring-2 focus:ring-red-500 transition-all outline-none"
-            required
-          />
-          <button
-            type="submit"
-            disabled={isPassSaving}
-            className="w-full py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isPassSaving ? (lang === 'cz' ? 'Ukládám...' : 'Saving...') : t.changePass}
-          </button>
-          {passMsg && <p className="text-[10px] text-green-600 font-bold text-center mt-2">{passMsg}</p>}
-          {passError && <p className="text-[10px] text-red-600 font-bold text-center mt-2">{passError}</p>}
-        </form>
+      <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">{lang === 'cz' ? 'Zabezpečení účtu' : 'Account security'}</h3>
+        <p className="mb-4 text-xs leading-relaxed text-slate-500">{lang === 'cz' ? 'E-mail, heslo a přihlášená zařízení spravuješ ve svém účtu.' : 'Manage your email, password and signed-in devices in your account.'}</p>
+        <button type="button" onClick={onManageAccount} className="min-h-12 w-full rounded-2xl bg-slate-900 text-xs font-black text-white">{lang === 'cz' ? 'Spravovat účet' : 'Manage account'}</button>
       </div>
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t.langSelect}</h3>
         <div className="grid grid-cols-2 gap-4">
           <button
-            onClick={() => setLang('cz')}
+            disabled={profileSaving} onClick={() => void changeLanguage('cz')}
             className={`py-3 rounded-2xl font-black border-2 transition-all ${lang === 'cz' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}
           >
             Čeština
           </button>
           <button
-            onClick={() => setLang('en')}
+            disabled={profileSaving} onClick={() => void changeLanguage('en')}
             className={`py-3 rounded-2xl font-black border-2 transition-all ${lang === 'en' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}
           >
             English

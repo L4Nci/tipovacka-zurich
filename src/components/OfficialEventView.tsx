@@ -1,29 +1,65 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Minus, Plus, Trophy } from 'lucide-react';
 import {
+  ArrowLeft,
+  Check,
+  ExternalLink,
+  Gift,
+  Minus,
+  Plus,
+  ShieldCheck,
+  Trophy
+} from 'lucide-react';
+import {
+  acceptOfficialEventTermsAndJoin,
   fetchOfficialEventDetail,
   fetchOfficialEventLeaderboard,
+  fetchOfficialEventSeasonResult,
+  joinOfficialEvent,
   saveOfficialEventPrediction
 } from '../lib/officialEvents.ts';
 import { getFirstPredictableOfficialEventMatch } from '../lib/officialEventsState.ts';
+import { shouldShowLobbyMakerCta } from '../lib/productEvolution.ts';
 import type {
   OfficialEventDetail,
   OfficialEventLeaderboard,
-  OfficialEventMatch
+  OfficialEventMatch,
+  OfficialEventSeasonResult
 } from '../types.ts';
+import { OfficialEventSeasonResultCard } from './OfficialEventSeasonResult.tsx';
 
 type OfficialEventViewProps = {
   eventId: string;
   onBack: () => void;
   onCreateLobby: () => void;
   onFirstPredictionSaved: () => Promise<void>;
+  onJoined: () => Promise<void>;
+  commercialEnabled: boolean;
+  resultsEnabled: boolean;
+  hasOwnedLobby: boolean;
+  username: string;
+};
+
+const getOfficialEventCover = (coverKey: string | null) => {
+  const normalized = String(coverKey || '').toLowerCase();
+  if (normalized.includes('hockey') || normalized.includes('ice')) {
+    return '/lobby-covers/ice-community.jpg';
+  }
+  if (normalized.includes('community') || normalized.includes('clubhouse')) {
+    return '/lobby-covers/community-clubhouse.jpg';
+  }
+  return '/lobby-covers/stadium-community.jpg';
 };
 
 export default function OfficialEventView({
   eventId,
   onBack,
   onCreateLobby,
-  onFirstPredictionSaved
+  onFirstPredictionSaved,
+  onJoined,
+  commercialEnabled,
+  resultsEnabled,
+  hasOwnedLobby,
+  username
 }: OfficialEventViewProps) {
   const [detail, setDetail] = useState<OfficialEventDetail | null>(null);
   const [leaderboard, setLeaderboard] = useState<OfficialEventLeaderboard | null>(null);
@@ -33,17 +69,26 @@ export default function OfficialEventView({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [savedMatchId, setSavedMatchId] = useState<string | null>(null);
+  const [seasonResult, setSeasonResult] = useState<OfficialEventSeasonResult | null>(null);
+  const [joining, setJoining] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [declaredAgeEligible, setDeclaredAgeEligible] = useState(false);
+  const [declaredRegionEligible, setDeclaredRegionEligible] = useState(false);
+  const [viewedLeaderboard, setViewedLeaderboard] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [nextDetail, nextLeaderboard] = await Promise.all([
+      const [nextDetail, nextLeaderboard, nextSeasonResult] = await Promise.all([
         fetchOfficialEventDetail(eventId),
-        fetchOfficialEventLeaderboard(eventId)
+        fetchOfficialEventLeaderboard(eventId),
+        resultsEnabled ? fetchOfficialEventSeasonResult(eventId) : Promise.resolve(null)
       ]);
       setDetail(nextDetail);
       setLeaderboard(nextLeaderboard);
+      setSeasonResult(nextSeasonResult);
+      if (nextLeaderboard) setViewedLeaderboard(true);
       if (nextDetail) {
         const first = getFirstPredictableOfficialEventMatch(nextDetail.matches);
         setSelectedMatchId(current => current || first?.id || nextDetail.matches[0]?.id || null);
@@ -60,7 +105,7 @@ export default function OfficialEventView({
     } finally {
       setLoading(false);
     }
-  }, [eventId]);
+  }, [eventId, resultsEnabled]);
 
   useEffect(() => {
     void load();
@@ -111,6 +156,30 @@ export default function OfficialEventView({
     }
   };
 
+  const join = async () => {
+    if (!detail || joining) return;
+    setJoining(true);
+    setError('');
+    try {
+      const terms = detail.terms;
+      if (terms && terms.version > 0) {
+        await acceptOfficialEventTermsAndJoin({
+          eventId,
+          accepted: acceptedTerms,
+          declaredAgeEligible: terms.minimum_age ? declaredAgeEligible : true,
+          declaredRegionEligible: terms.eligible_regions?.length ? declaredRegionEligible : true
+        });
+      } else {
+        await joinOfficialEvent(eventId);
+      }
+      await onJoined();
+    } catch (joinError: any) {
+      setError(joinError?.message || 'Do eventu se nepodařilo vstoupit.');
+    } finally {
+      setJoining(false);
+    }
+  };
+
   if (loading && !detail) {
     return (
       <main className="mx-auto min-h-screen max-w-lg bg-slate-50 p-5">
@@ -125,15 +194,154 @@ export default function OfficialEventView({
       <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-slate-100 bg-white p-4">
         <button type="button" onClick={onBack} aria-label="Zpět na Home" className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700"><ArrowLeft className="h-4 w-4" /></button>
         <div>
-          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-red-600">Oficiální event</p>
-          <h1 className="text-lg font-black text-slate-950">{detail?.name || 'Tipovačka Start'}</h1>
+          <p className="text-[9px] font-black uppercase text-red-600">Oficiální turnaj</p>
+          <h1 className="text-lg font-black text-slate-950">{detail?.name || 'Oficiální turnaj'}</h1>
         </div>
       </header>
 
       <main className="space-y-5 p-4">
         {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">{error}</p>}
 
-        {selectedMatch && (
+        {detail && (
+          <section className="relative min-h-48 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <img
+              src={getOfficialEventCover(detail.cover_key)}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full object-cover opacity-[0.3]"
+            />
+            <div className="absolute inset-0 bg-white/10" aria-hidden="true" />
+            <div className="absolute inset-0 bg-gradient-to-r from-white via-white/90 to-white/35" aria-hidden="true" />
+            <div
+              className="absolute inset-x-0 top-0 h-1"
+              style={{ backgroundColor: detail.accent_color || '#DC2626' }}
+              aria-hidden="true"
+            />
+            <div className="relative flex min-h-48 max-w-[88%] flex-col justify-end p-5">
+              <p className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-[0.14em] text-red-600">
+                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                Oficiální turnaj
+              </p>
+              <h2 className="mt-2 break-words text-2xl font-black leading-tight text-slate-950">
+                {detail.name}
+              </h2>
+              {detail.description && (
+                <p className="mt-2 max-w-sm text-xs font-semibold leading-relaxed text-slate-600">
+                  {detail.description}
+                </p>
+              )}
+              {commercialEnabled && detail.partner?.name && (
+                <div className="mt-3 flex items-center gap-2">
+                  {detail.partner.logo_url && (
+                    <img
+                      src={detail.partner.logo_url}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-6 max-w-20 object-contain"
+                    />
+                  )}
+                  <p className="text-[9px] font-black uppercase text-slate-500">
+                    S partnerem {detail.partner.name}
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {commercialEnabled && detail && (
+          (detail.prizes?.length || 0) > 0 || Boolean(detail.partner?.text)
+        ) && (
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="h-1" style={{ backgroundColor: detail.accent_color || '#DC2626' }} />
+            <div className="p-5">
+              {(detail.prizes?.length || 0) > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 text-slate-900">
+                    <Gift className="h-4 w-4" aria-hidden="true" />
+                    <h2 className="text-xs font-black uppercase">O co se hraje</h2>
+                  </div>
+                  <ol className="mt-3 space-y-2">
+                    {detail.prizes?.map(prize => (
+                      <li key={prize.id || `${prize.rank_from}-${prize.title}`} className="flex gap-3 text-xs">
+                        <span className="w-16 shrink-0 font-black text-slate-500">
+                          {prize.rank_from === prize.rank_to
+                            ? `${prize.rank_from}. místo`
+                            : `${prize.rank_from}.–${prize.rank_to}.`}
+                        </span>
+                        <span className="font-semibold text-slate-900">{prize.title}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              {(detail.prizes?.length || 0) === 0 && detail.partner?.text && (
+                <p className="text-xs font-semibold leading-relaxed text-slate-600">
+                  {detail.partner.text}
+                </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {detail && detail.participation_status !== 'active' && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-black text-slate-950">Zapojit se do turnaje</h2>
+            <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500">
+              Účast vznikne až po potvrzení. Tipy i body zůstávají oddělené od soukromých lobby.
+            </p>
+
+            {detail.terms && detail.terms.version > 0 && (
+              <div className="mt-4 space-y-3 rounded-xl bg-slate-50 p-4">
+                {detail.terms.summary && <p className="text-xs font-semibold leading-relaxed text-slate-700">{detail.terms.summary}</p>}
+                <label className="flex items-start gap-3 text-xs font-semibold text-slate-700">
+                  <input type="checkbox" checked={acceptedTerms} onChange={event => setAcceptedTerms(event.target.checked)} className="mt-0.5 h-4 w-4 accent-red-600" />
+                  <span>Souhlasím s pravidly tohoto turnaje.</span>
+                </label>
+                {detail.terms.minimum_age && (
+                  <label className="flex items-start gap-3 text-xs font-semibold text-slate-700">
+                    <input type="checkbox" checked={declaredAgeEligible} onChange={event => setDeclaredAgeEligible(event.target.checked)} className="mt-0.5 h-4 w-4 accent-red-600" />
+                    <span>Potvrzuji, že splňuji minimální věk {detail.terms.minimum_age} let.</span>
+                  </label>
+                )}
+                {(detail.terms.eligible_regions?.length || 0) > 0 && (
+                  <label className="flex items-start gap-3 text-xs font-semibold text-slate-700">
+                    <input type="checkbox" checked={declaredRegionEligible} onChange={event => setDeclaredRegionEligible(event.target.checked)} className="mt-0.5 h-4 w-4 accent-red-600" />
+                    <span>Potvrzuji, že splňuji územní podmínky soutěže.</span>
+                  </label>
+                )}
+                {detail.terms.url && (
+                  <a href={detail.terms.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2">
+                    Úplná pravidla <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              disabled={joining || Boolean(
+                detail.terms &&
+                detail.terms.version > 0 &&
+                (
+                  !acceptedTerms ||
+                  (detail.terms.minimum_age && !declaredAgeEligible) ||
+                  ((detail.terms.eligible_regions?.length || 0) > 0 && !declaredRegionEligible)
+                )
+              )}
+              onClick={() => void join()}
+              className="mt-4 min-h-12 w-full rounded-xl bg-red-600 px-4 text-[10px] font-black uppercase text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
+            >
+              {joining ? 'Připojuji…' : 'Zapojit se'}
+            </button>
+          </section>
+        )}
+
+        {seasonResult && resultsEnabled && (
+          <OfficialEventSeasonResultCard result={seasonResult} username={username} />
+        )}
+
+        {detail?.participation_status === 'active' && selectedMatch && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Nejbližší otevřený zápas</p>
             <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
@@ -166,7 +374,7 @@ export default function OfficialEventView({
           </section>
         )}
 
-        {!selectedMatch && (
+        {detail?.participation_status === 'active' && !selectedMatch && !seasonResult && (
           <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center">
             <Trophy className="mx-auto h-7 w-7 text-slate-400" />
             <h2 className="mt-3 text-base font-black text-slate-900">Teď není otevřený žádný zápas</h2>
@@ -203,9 +411,14 @@ export default function OfficialEventView({
           </section>
         )}
 
-        {savedMatchId && (
+        {shouldShowLobbyMakerCta({
+          hasOwnedLobby,
+          savedPrediction: Boolean(savedMatchId),
+          viewedLeaderboard,
+          completedEvent: Boolean(seasonResult)
+        }) && (
           <button type="button" onClick={onCreateLobby} className="min-h-12 w-full rounded-xl border border-slate-300 bg-white text-[10px] font-black uppercase tracking-wider text-slate-800">
-            Založit vlastní lobby
+            Založit vlastní tipovačku
           </button>
         )}
       </main>

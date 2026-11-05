@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {
   getFirstPredictableOfficialEventMatch,
   isOfficialEventPlayable,
-  shouldPromoteOfficialEventCard,
+  shouldShowOfficialEventInPicker,
+  shouldShowOfficialEventOnHome,
   shouldShowFirstTipOnboarding
 } from './officialEventsState.ts';
 import type { Lobby, OfficialEventCard, OfficialEventMatch, OnboardingState } from '../types.ts';
@@ -37,6 +38,19 @@ const lobby = { id: 'lobby-1' } as Lobby;
 assert.equal(isOfficialEventPlayable(event), true);
 assert.equal(isOfficialEventPlayable({ ...event, open_match_count: 0 }), false);
 assert.equal(isOfficialEventPlayable({ ...event, status: 'completed' }), false);
+assert.equal(shouldShowOfficialEventOnHome(event), false);
+assert.equal(shouldShowOfficialEventOnHome({
+  ...event,
+  is_participating: true,
+  participation_status: 'active'
+}), true);
+assert.equal(shouldShowOfficialEventOnHome({
+  ...event,
+  is_participating: false,
+  participation_status: 'left'
+}), false);
+assert.equal(shouldShowOfficialEventInPicker(event), true);
+assert.equal(shouldShowOfficialEventInPicker({ ...event, status: 'completed' }), false);
 
 assert.equal(shouldShowFirstTipOnboarding({
   enabled: true,
@@ -62,9 +76,6 @@ assert.equal(shouldShowFirstTipOnboarding({
   lobbies: [],
   state: { ...onboardingState, status: 'skipped' }
 }), false);
-
-assert.equal(shouldPromoteOfficialEventCard(event, []), true);
-assert.equal(shouldPromoteOfficialEventCard(event, [lobby]), false);
 
 const matches: OfficialEventMatch[] = [
   {

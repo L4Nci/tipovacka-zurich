@@ -1,7 +1,8 @@
 import { supabase } from "./supabase.ts";
-import type { User } from "@supabase/supabase-js";
+import { getClerkAccessToken } from "./clerkSupabase.ts";
+import { normalizeAccountProfile, type AccountProfile } from "./clerkAccount.ts";
 import { calculatePoints } from "./scoring.ts";
-import { isDrawPrediction, isFootballKnockoutStage } from "./matchRules.ts";
+import { isDrawPrediction, requiresFootballWinner } from "./matchRules.ts";
 import {
   Player,
   Team,
@@ -12,16 +13,21 @@ import {
   LobbyCommunity,
   LobbyJoinRequest,
   MembershipHomeItem,
-  HallOfFameEntry
+  HallOfFameEntry,
+  LobbyPrizeEntry
 } from "../types.ts";
-import { getAuthRedirectUrl } from "./auth.ts";
-import { getSignupOutcome } from "./authLifecycle.ts";
 import {
   summarizeHomeDashboardContext,
   type HomeDashboardContextInput,
   type HomeDashboardMatchInput,
   type HomeDashboardSummary
 } from "./homeDashboard.ts";
+import {
+  isLobbyPrizeSchemaMismatch,
+  normalizeLobbyPrizeEntries,
+  prepareLobbyPrizeSelection,
+  type LobbyPrizeMetadata
+} from "./productEvolution.ts";
 
 const SUPABASE_PAGE_SIZE = 1000;
 const SUPABASE_MAX_PAGES = 20;
@@ -112,99 +118,32 @@ const fetchPredictionCountsByMatchId = async (
   return statsMap;
 };
 
-export const loadPlayerFromAuthUser = async (authUser: User): Promise<Player> => {
-  const { data: profile, error } = await supabase
-    .from("profiles")
-    .select("id, username, role, tournament_winner_id, avatar_emoji, avatar_bg")
-    .eq("id", authUser.id)
-    .maybeSingle();
-
+/** Identity and internal player UUID are resolved atomically by the database. */
+export const bootstrapMyAccount = async (): Promise<AccountProfile> => {
+  if (!await getClerkAccessToken()) throw new Error("Přihlášení vypršelo. Přihlas se prosím znovu.");
+  const { data, error } = await supabase.rpc("bootstrap_my_account").abortSignal(AbortSignal.timeout(15_000));
   if (error) throw error;
-  if (!profile) {
-    throw new Error("Přihlášení proběhlo, ale profil zatím není připravený. Zkus to prosím znovu.");
-  }
-
-  return {
-    id: profile.id,
-    email: authUser.email || null,
-    username: profile.username,
-    role: profile.role || "player",
-    tournament_winner_id: profile.tournament_winner_id,
-    avatar_emoji: profile.avatar_emoji || "😀",
-    avatar_bg: profile.avatar_bg || "#fee2e2"
-  } as Player;
+  return normalizeAccountProfile(data);
 };
 
-/**
- * Direct session check kept for small callers outside App auth orchestration.
- */
-export const checkSession = async () => {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error || !session?.user) return null;
-  return loadPlayerFromAuthUser(session.user);
-};
-
-/**
- * Sign In
- */
-export const loginUser = async (email: string, pass: string) => {
-  const normalizedEmail = email.trim().toLowerCase();
-  if (!normalizedEmail.includes("@")) {
-    throw new Error("Přihlašování uživatelským jménem není bezpečně dostupné. Použij e-mail.");
+export const completeMyProfile = async (
+  displayName: string,
+  avatarEmoji: string,
+  avatarBg: string,
+  locale: "cs" | "en",
+): Promise<AccountProfile> => {
+  const name = displayName.trim();
+  if (name.length < 2 || name.length > 40) {
+    throw new Error(locale === "en" ? "Use 2–40 characters for your display name." : "Zobrazované jméno musí mít 2–40 znaků.");
   }
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: normalizedEmail,
-    password: pass
+  const { data, error } = await supabase.rpc("complete_my_profile", {
+    p_display_name: name,
+    p_avatar_emoji: avatarEmoji,
+    p_avatar_bg: avatarBg,
+    p_locale: locale,
   });
-
   if (error) throw error;
-  if (!data.user || !data.session) throw new Error("Chyba při přihlašování.");
-  return data;
-};
-
-/**
- * Sign Up / Registration
- */
-export const registerUser = async (username: string, pass: string, emailParam: string) => {
-  const email = emailParam.trim().toLowerCase();
-  const trimmedUsername = username.trim();
-  if (!email.includes("@")) throw new Error("Zadej platnou e-mailovou adresu.");
-  if (trimmedUsername.length < 2) throw new Error("Zobrazované jméno musí mít alespoň 2 znaky.");
-  if (pass.length < 8) throw new Error("Heslo musí mít alespoň 8 znaků.");
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password: pass,
-    options: {
-      data: {
-        username: trimmedUsername
-      },
-      emailRedirectTo: getAuthRedirectUrl()
-    }
-  });
-
-  if (error) throw error;
-  if (!data.user) throw new Error("Registrace se nezdařila.");
-
-  if (getSignupOutcome(Boolean(data.session)) === "email_confirmation_pending") {
-    return {
-      status: "email_confirmation_pending" as const,
-      email
-    };
-  }
-
-  return {
-    status: "authenticated" as const
-  };
-};
-
-/**
- * Sign Out
- */
-export const logoutUser = async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+  return normalizeAccountProfile(data);
 };
 
 export { calculatePoints };
@@ -216,6 +155,7 @@ export const fetchTournaments = async () => {
   const { data, error } = await supabase
     .from("tournaments")
     .select("*")
+    .neq("status", "hidden")
     .order("name", { ascending: true });
   if (error) throw error;
   return data;
@@ -362,6 +302,39 @@ export const fetchUserLobbies = async (userId: string) => {
   }
 
   return formatted;
+};
+
+export class LobbyPrizeSchemaUnavailableError extends Error {
+  constructor() {
+    super('Ceny lobby nejsou v tomto databázovém rollout stavu dostupné.');
+    this.name = 'LobbyPrizeSchemaUnavailableError';
+  }
+}
+
+export const fetchLobbyPrizeMetadata = async (
+  lobbyIds: string[]
+): Promise<LobbyPrizeMetadata[]> => {
+  if (lobbyIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('lobbies')
+    .select('id, prizes_enabled, prize_entries')
+    .in('id', lobbyIds);
+
+  if (error) {
+    if (isLobbyPrizeSchemaMismatch(error)) {
+      throw new LobbyPrizeSchemaUnavailableError();
+    }
+    throw error;
+  }
+
+  return (data || []).map((row: any) => ({
+    id: String(row.id),
+    prizes_enabled: Boolean(row.prizes_enabled),
+    prize_entries: Array.isArray(row.prize_entries)
+      ? normalizeLobbyPrizeEntries(row.prize_entries)
+      : []
+  }));
 };
 
 const normalizeHomeDashboardSummary = (row: any): HomeDashboardSummary => ({
@@ -527,6 +500,8 @@ type LobbyRpcRow = {
   join_code: string;
   join_policy?: 'open' | 'approval_required';
   visibility: 'private' | 'public';
+  prizes_enabled?: boolean;
+  prize_entries?: Lobby['prize_entries'];
   created_at?: string;
   tournament_name?: string;
   is_owner?: boolean;
@@ -548,6 +523,8 @@ const lobbyFromRpcRow = (row: LobbyRpcRow): Lobby => ({
   join_code: row.join_code,
   join_policy: row.join_policy === 'approval_required' ? 'approval_required' : 'open',
   visibility: row.visibility,
+  prizes_enabled: Boolean(row.prizes_enabled),
+  prize_entries: Array.isArray(row.prize_entries) ? row.prize_entries : [],
   created_at: row.created_at,
   tournament_name: row.tournament_name || "",
   is_owner: Boolean(row.is_owner),
@@ -563,16 +540,30 @@ export const createLobby = async (
   visibility: 'private' | 'public' = 'public',
   shortDescription = "",
   longDescription = "",
-  joinPolicy: 'open' | 'approval_required' = 'open'
+  joinPolicy: 'open' | 'approval_required' = 'open',
+  prizes?: {
+    enabled: boolean;
+    entries: LobbyPrizeEntry[];
+  }
 ) => {
-  const { data, error } = await supabase.rpc("create_lobby_secure", {
+  const baseParams = {
     lobby_name_param: name,
     tournament_id_param: tournamentId,
     visibility_param: visibility,
     short_description_param: shortDescription,
     long_description_param: longDescription,
     join_policy_param: joinPolicy
-  });
+  };
+  const prizeSelection = prizes
+    ? prepareLobbyPrizeSelection(prizes)
+    : null;
+  const { data, error } = prizeSelection
+    ? await supabase.rpc("create_lobby_with_prizes_secure", {
+        ...baseParams,
+        prizes_enabled_param: prizeSelection.enabled,
+        prize_entries_param: prizeSelection.entries
+      })
+    : await supabase.rpc("create_lobby_secure", baseParams);
 
   if (error) throw error;
   return lobbyFromRpcRow(firstLobbyRpcRow(data as LobbyRpcRow[] | null));
@@ -614,7 +605,7 @@ export class LobbyJoinPendingError extends Error {
 
 /**
  * Join a lobby atomically. The RPC accepts only the invitation code and derives
- * the caller identity and member role from auth.uid().
+ * the caller identity and member role from the database's current player resolver.
  */
 export const joinLobbyByCode = async (joinCode: string) => {
   const { data, error } = await supabase.rpc("join_lobby_secure", {
@@ -926,14 +917,17 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
       home_team_id: m.home_participant_id,
       away_team_id: m.away_participant_id,
       start_time_utc: m.start_time_utc,
+      lock_time_utc: m.lock_time_utc,
       home_score: m.home_score ?? null,
       away_score: m.away_score ?? null,
       status: m.status === "finished" ? "finished" : "scheduled",
       stage: m.stage || "Group Stage",
       home_name: homePart?.short_name || homePart?.name || m.home_participant_id.replace(/^(football|hockey)-/, '').toUpperCase(),
       home_flag: homePart?.flag_code || "⚽",
+      home_logo_url: homePart?.logo_url || null,
       away_name: awayPart?.short_name || awayPart?.name || m.away_participant_id.replace(/^(football|hockey)-/, '').toUpperCase(),
       away_flag: awayPart?.flag_code || "⚽",
+      away_logo_url: awayPart?.logo_url || null,
       predicted_home_score: userPred ? userPred.predicted_home_score : null,
       predicted_away_score: userPred ? userPred.predicted_away_score : null,
       total_predictions: statsMap.get(m.id) || 0
@@ -986,7 +980,7 @@ export const savePrediction = async (userId: string, lobbyId: string, matchId: s
     throw new Error("V hokeji není remíza povolena. Vyberte vítěze zápasu v základní době / po prodloužení!");
   }
 
-  if (isDrawPrediction(home, away) && isFootballKnockoutStage(match.stage, match.tournament_id)) {
+  if (isDrawPrediction(home, away) && requiresFootballWinner(match.stage, match.tournament_id)) {
     throw new Error("V play-off nelze tipovat remízu.");
   }
 
@@ -1282,40 +1276,6 @@ export const pickTournamentWinner = async (
 };
 
 /**
- * Change profile password (Supabase Auth built-in service)
- */
-export const changePassword = async (newPass: string) => {
-  const { error } = await supabase.auth.updateUser({ password: newPass });
-  if (error) throw error;
-};
-
-export const updateProfileUsername = async (userId: string, username: string) => {
-  const normalizedUsername = username.trim();
-  if (normalizedUsername.length < 2) {
-    throw new Error("Zobrazované jméno musí mít alespoň 2 znaky.");
-  }
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({ username: normalizedUsername })
-    .eq("id", userId);
-
-  if (error) throw error;
-};
-
-export const updateProfileAvatar = async (userId: string, avatarEmoji: string, avatarBg: string) => {
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      avatar_emoji: avatarEmoji,
-      avatar_bg: avatarBg
-    })
-    .eq("id", userId);
-
-  if (error) throw error;
-};
-
-/**
  * Legacy support / Single user fetch fallback (queries first lobby user has or defaults)
  */
 export const fetchAllData = async (userId: string, lobbyId?: string, tournamentId?: string) => {
@@ -1377,6 +1337,7 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
     id: p.id,
     name: p.name,
     flag_code: p.flag_code || "🏳️",
+    logo_url: p.logo_url || null,
     group_name: p.short_name || "A",
     sport_id: p.sport_id || String(p.id).split("-")[0],
     short_name: p.short_name,
@@ -1486,6 +1447,7 @@ export const fetchCriticalAppData = async (userId: string, lobbyId?: string, tou
     id: p.id,
     name: p.name,
     flag_code: p.flag_code || "🏳️",
+    logo_url: p.logo_url || null,
     group_name: p.short_name || "A",
     sport_id: p.sport_id || String(p.id).split("-")[0],
     short_name: p.short_name,
@@ -1516,14 +1478,13 @@ export const fetchDeferredAppData = async (lobbyId: string, tournamentId: string
  * Admin: Update match score and recalculate points of corresponding predictions (FÁZE S11)
  */
 export const updateMatchResult = async (matchId: string, homeScore: number, awayScore: number) => {
-  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = await getClerkAccessToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json"
   };
 
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
-  }
+  if (!accessToken) throw new Error("Chybí přihlášení uživatele.");
+  headers.Authorization = `Bearer ${accessToken}`;
 
   const response = await fetch("/api/admin/match-result", {
     method: "POST",
@@ -1550,14 +1511,13 @@ export const setTournamentWinner = async (
   tournamentId: string = "fifa-world-cup-2026",
   options: { confirm?: boolean; previewOnly?: boolean } = {}
 ) => {
-  const { data: { session } } = await supabase.auth.getSession();
+  const accessToken = await getClerkAccessToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json"
   };
 
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
-  }
+  if (!accessToken) throw new Error("Chybí přihlášení uživatele.");
+  headers.Authorization = `Bearer ${accessToken}`;
 
   const response = await fetch("/api/admin/set-tournament-winner", {
     method: "POST",
@@ -1583,14 +1543,14 @@ export const setTournamentWinner = async (
  * Update Lobby name (Owner only - enforced by API/app logic context)
  */
 export const updateLobbyName = async (lobbyId: string, newName: string) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) throw new Error("Chybí přihlášení uživatele.");
+  const accessToken = await getClerkAccessToken();
+  if (!accessToken) throw new Error("Chybí přihlášení uživatele.");
 
   const response = await fetch("/api/lobby/update-name", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`
+      Authorization: `Bearer ${accessToken}`
     },
     body: JSON.stringify({ lobbyId, newName })
   });

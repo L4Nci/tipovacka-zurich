@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "../../server/lib/supabaseAdmin.ts";
 import { applyMatchResult } from "../../server/lib/resultSync.ts";
-import { isAuthoritativePlatformAdmin } from "../../server/lib/platformAuthorization.ts";
+import { authorizeClerkPlatformAdmin, clerkAuthorizationErrorResponse } from "../../server/lib/clerkAuthorization.ts";
+import { readBearerToken } from "../../server/lib/clerkIdentity.ts";
 
 type NetlifyEvent = {
   httpMethod?: string;
@@ -31,11 +32,6 @@ const headerValue = (headers: NetlifyEvent["headers"], name: string) => {
   return entry?.[1] || "";
 };
 
-const bearerTokenFromHeader = (headers: NetlifyEvent["headers"]) => {
-  const authHeader = headerValue(headers, "authorization");
-  return authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : null;
-};
-
 const isValidScore = (score: unknown): score is number =>
   Number.isInteger(score) && Number(score) >= 0;
 
@@ -57,23 +53,17 @@ export const handler = async (event: NetlifyEvent) => {
     return jsonResponse(400, { error: "Skóre musí být nezáporné celé číslo." });
   }
 
-  const bearerToken = bearerTokenFromHeader(event.headers);
-  if (!bearerToken) {
+  if (!readBearerToken(headerValue(event.headers, "authorization"))) {
     return jsonResponse(401, { error: "Chybí přihlášení administrátora." });
   }
 
   try {
     const supabaseAdmin = getSupabaseAdmin();
-    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(bearerToken);
-
-    if (authError || !authData.user?.id) {
-      return jsonResponse(401, { error: "Neplatné přihlášení administrátora." });
-    }
-
-    const adminUserId = authData.user.id;
-    if (!await isAuthoritativePlatformAdmin(supabaseAdmin, adminUserId)) {
-      return jsonResponse(403, { error: "Pouze administrátor může vkládat výsledky a spouštět vyhodnocení." });
-    }
+    const adminUserId = await authorizeClerkPlatformAdmin(
+      supabaseAdmin,
+      headerValue(event.headers, "authorization"),
+      "Pouze administrátor může vkládat výsledky a spouštět vyhodnocení.",
+    );
 
     const result = await applyMatchResult({
       supabaseAdmin,
@@ -86,7 +76,9 @@ export const handler = async (event: NetlifyEvent) => {
 
     return jsonResponse(result.statusCode, result.body);
   } catch (err: any) {
-    console.error("Match result function error:", err);
-    return jsonResponse(500, { error: "Chyba při ukládání výsledků: " + err.message });
+    const authError = clerkAuthorizationErrorResponse(err);
+    if (authError) return jsonResponse(authError.statusCode, { error: authError.error });
+    console.error("Match result function error.");
+    return jsonResponse(500, { error: "Chyba při ukládání výsledků." });
   }
 };
