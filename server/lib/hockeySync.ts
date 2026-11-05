@@ -57,9 +57,14 @@ export async function submitHockeyBatch(admin: SupabaseClient, batch: any, dryRu
   return data as Record<string, any>;
 }
 
-export async function runHockeyCatalogSync(admin: SupabaseClient, dryRun: boolean) {
+export async function runHockeyCatalogSync(admin: SupabaseClient, dryRun: boolean, options: {
+  elhEnabled?: boolean; sync?: (competition: HockeyCompetition) => Promise<Record<string, any>>;
+} = {}) {
   const entries = await Promise.all((Object.keys(HOCKEY_COMPETITIONS) as HockeyCompetition[]).map(async competition => {
-    try { return [competition, await submitHockeyBatch(admin, await prepareHockeyBatch(admin, competition), dryRun)] as const; }
+    if (competition === 'ELH' && !(options.elhEnabled ?? process.env.ELH_SYNC_ENABLED === 'true')) {
+      return [competition, { skipped: true, disabled: true, reason: 'ELH source pending: hosted source access must be verified before activation.' }] as const;
+    }
+    try { return [competition, await (options.sync ? options.sync(competition) : submitHockeyBatch(admin, await prepareHockeyBatch(admin, competition), dryRun))] as const; }
     catch (error) { return [competition, { failed: true, error: error instanceof HockeyProviderError
       ? error.message : `${competition} sync failed; check source availability, validation and initialization.` }] as const; }
   }));

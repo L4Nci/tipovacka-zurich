@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NHL_CLUBS, normalizeNhlSchedules, normalizeElhSeason, parseElhDetail, pragueKickoff, readHockeySource, HockeyProviderError } from './hockeyProvider.ts';
+import { runHockeyCatalogSync } from './hockeySync.ts';
 
 const now = new Date('2026-11-05T20:00:00Z');
 function nhl() {
@@ -85,4 +86,10 @@ test('source diagnostics expose only controlled status messages, never reflected
     (e: any) => e instanceof HockeyProviderError && e.message === 'Hockey source unavailable (403).');
   await assert.rejects(() => readHockeySource('https://www.hokej.cz/tipsport-extraliga/zapasy', async () => { throw new Error('reflected-private-value'); }),
     (e: any) => e instanceof HockeyProviderError && !e.message.includes('reflected-private-value'));
+});
+test('an explicitly disabled ELH source is not called or reported as a failure; NHL keeps running', async () => {
+  const calls: string[] = [];
+  const result = await runHockeyCatalogSync({} as any, false, { elhEnabled: false, sync: async code => { calls.push(code); return { wrote_to_db: true, conflicts: [] }; } });
+  assert.deepEqual(calls, ['NHL']); assert.equal(result.failed, false);
+  assert.equal(result.competitions.ELH.skipped, true); assert.equal(result.wrote_to_db, true);
 });

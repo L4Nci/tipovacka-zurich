@@ -1,7 +1,10 @@
 # Kompletní checklist pro další vývoj Tipovačky
 
 **Více lig — 5. 11. večer:** na pokyn vlastníka jsou importované a aktivní Premier
-League, NHL a základní část české extraligy, připojené do Testovacího rodea.
+League a NHL, připojené do Testovacího rodea. Extraligový import je zachovaný, ale
+dočasně skrytý/archivovaný: Hokej.cz z Netlify vrací 403 a API-Sports Free odmítá
+sezonu 2026. Cron ELH výslovně přeskočí, ostatní ligy fungují. Další zdroj se
+nejprve ověří s přístupem; placené API zatím schválené není.
 Společný chráněný endpoint rozšiřujeme na CL/PL/NHL/ELH se stejným cronem a klíčem.
 Hokej počítá oficiální konečné skóre (po nájezdech s jedním rozhodujícím gólem),
 5 bodů přesně / 2 za vítěze; předchozí fotbalové pravidlo se nemění.
