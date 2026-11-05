@@ -1,5 +1,13 @@
 # Liga mistrů — import a cron-job.org
 
+**Samoopravy — 5. 11. 2026:** API katalog je autoritativní. Stejná již ověřená revize
+se stejnými API fakty opraví lokálně chybné skóre i nesedící body dokončených zápasů.
+Ruční zápis už sám o sobě neznamená trvalé přeskočení. Starší data se ignorují;
+rozporná fakta dokončeného výsledku pod stejnou revizí zůstávají konfliktem.
+Podrobnosti a přijatý budoucí princip shody 2 ze 3 jsou v
+[politice zdrojů](result-source-policy.md). Dnes je připojené jedno API, hlasování
+více zdrojů není implementované.
+
 **Aktuální stav — 5. 11. 2026:** [úloha 8799825](https://console.cron-job.org/jobs/8799825)
 je zapnutá každých 15 minut (`*/15 * * * *`, Europe/Prague), POST s tělem
 `{"dryRun":false}`, timeout 30 s. Vlastník výslovně schválil uložení klíče syncu
@@ -102,11 +110,12 @@ Tajný klíč patří do hlavičky, nikoli URL.
 - První dokončený výsledek a body se uloží v jediné transakci. Server používá
   existující `calculatePoints`; všechny tipy načítá stránkovaně. DB porovná celý
   snapshot se zamčenými řádky, při změně vše vrátí zpět a vyžádá opakování.
-- Opakované uložení stejného výsledku nepřidává body znovu. Novější revize
-  výsledku vlastněného API se opraví automaticky a atomicky přepočítá body všech
-  dotčených lobby. Jiný výsledek se stejnou revizí nebo odvolaný stav se odloží
-  jako konflikt. Případný historický ruční zápis má samostatný původ a sync jej
-  přeskakuje; ruční obsluha není součástí běžného vyhodnocování.
+- Opakované uložení stejného výsledku nepřidává body znovu. Novější platná revize
+  opraví výsledek i body. Stejný ověřený API snímek navíc opraví lokálně chybné
+  skóre; body dokončených zápasů se kontrolují i při nezměněném výsledku. Mění se
+  pouze nesedící bodové řádky a tipy hráčů se nepřepisují. Značka `manual-admin`
+  v tomto API katalogu není automatické zamčení proti opravě. Rozporná API fakta
+  dokončeného zápasu ve stejné revizi nebo odvolaný dokončený stav jsou konfliktem.
 - Importér podporuje hlavní soutěž LM 2026/27 včetně play-off. Kvalifikace a jiné
   soutěže do tohoto jobu nepatří. Pravidlo `football-final-shootout-v1` používá
   výsledek po případném prodloužení; při rozstřelu pouze skóre penalt. Například
@@ -127,6 +136,16 @@ problémový výsledek se zachová. Při chybě spojení nelze tvrdit, že DB ni
 nezapsala — opakování je idempotentní. Chyby nevracejí token ani tělo API chyby.
 
 ## Ověření rozšíření play-off
+
+Navazující migrace `20261105151206_football_data_self_healing.sql` je aplikovaná.
+Původní sync, play-off i nová sada samooprav prošly společně s ROLLBACK: skóre a
+body ve dvou lobby opravené ze stejné revize, oprava samotných bodů při stejném
+skóre, idempotence, ignorování starých dat, konflikt rozporných faktů ve stejné
+revizi a jeho automatické vyřešení novější platnou revizí. Žádné skutečné skóre
+nebylo kvůli demonstraci poškozené. Audit soutěže našel 0 neshod skóre; živý
+dry-run i zapisovací běh vrátily 200, 144 beze změny a `local_repairs=0`.
+Bezpečnostní advisories se nezměnily. Historické výsledky ostatních providerů
+nespadají do této funkce. Níže jsou podrobnosti předchozího rozšíření play-off.
 
 Migrace `20261105141718_football_data_knockout_sync.sql` je aplikovaná v jediné
 stávající DB. Privátní helper nemá veřejný EXECUTE; sync RPC zůstává service-only.
