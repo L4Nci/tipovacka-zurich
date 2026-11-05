@@ -10,7 +10,7 @@ async function main() {
   const args = process.argv.slice(2);
   const competition = args[0] ?? 'CL';
   const season = Number(args[1] ?? new Date().getUTCFullYear());
-  if (args.length > 2 || !supportedCompetition(competition) || !Number.isInteger(season) || season < 2000 || season > 2100) {
+  if (args.length > 2 || !['CL', 'PL'].includes(competition) || !Number.isInteger(season) || season < 2000 || season > 2100) {
     throw new Error('Usage: npm run football-data:dry-run -- [CL|PL] [season-start-year]');
   }
   const reader = createProviderReader(process.env.FOOTBALL_DATA_API_TOKEN);

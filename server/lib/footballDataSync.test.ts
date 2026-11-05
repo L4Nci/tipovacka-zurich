@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { handleFootballDataSyncRequest, normalizeFootballDataSeason, prepareFootballDataBatch } from './footballDataSync.ts';
+import { handleFootballDataSyncRequest, normalizeFootballDataSeason, prepareFootballDataBatch, runFootballDataCatalogSync, FootballDataSyncError } from './footballDataSync.ts';
 import { isFootballKnockoutStage, isGroupStage } from '../../src/lib/matchRules.ts';
 
 function season() {
@@ -18,6 +18,23 @@ function season() {
   return { resultSet: { count: 144 }, matches };
 }
 const now = new Date('2026-11-05T09:00:00Z');
+function premierLeague() {
+  const teams = Array.from({ length: 20 }, (_, i) => i + 1);
+  const games: any[] = [];
+  const team = (id: number) => ({ id, name: `Club ${id}`, tla: `C${id}` });
+  for (let round = 0; round < 19; round++) {
+    for (let i = 0; i < 10; i++) {
+      const home = teams[i], away = teams[19 - i];
+      for (const reverse of [false, true]) games.push({
+        ...season().matches[0], id: 10000 + games.length, competition: { code: 'PL' },
+        stage: 'REGULAR_SEASON', matchday: round + 1 + (reverse ? 19 : 0),
+        homeTeam: team(reverse ? away : home), awayTeam: team(reverse ? home : away),
+      });
+    }
+    teams.splice(1, 0, teams.pop()!);
+  }
+  return { resultSet: { count: 380 }, matches: games };
+}
 const secret = 'test-only-sync-secret-with-at-least-32-characters';
 const request = (body: any = {}) => ({ httpMethod: 'POST', headers: { authorization: `Bearer ${secret}` }, body: JSON.stringify(body) });
 const knockout = (stage = 'FINAL', id = 1000): any => ({
@@ -26,6 +43,30 @@ const knockout = (stage = 'FINAL', id = 1000): any => ({
 const withKnockouts = (...games: any[]) => {
   const data = season(); data.matches.push(...games); data.resultSet.count = data.matches.length; return data;
 };
+
+test('PL imports all 380 fixtures into a separate catalog, sharing canonical club identities', () => {
+  const batch = normalizeFootballDataSeason(premierLeague(), now, 'PL');
+  assert.equal(batch.competition, 'PL'); assert.equal(batch.clubs.length, 20);
+  assert.equal(batch.matches.length, 380); assert.equal(batch.matches[0].stage, 'Regular Season');
+  assert.equal(isFootballKnockoutStage(batch.matches[0].stage, 'premier-league-2026-27'), false);
+  for (const mutate of [
+    (p: any) => { p.matches.pop(); p.resultSet.count--; },
+    (p: any) => { p.matches[0].stage = 'FINAL'; },
+    (p: any) => { p.matches[0].competition.code = 'CL'; },
+  ]) { const p = premierLeague(); mutate(p); assert.throws(() => normalizeFootballDataSeason(p, now, 'PL')); }
+});
+
+test('shared cron keeps syncing PL when CL fails and returns an actionable failure', async () => {
+  const calls: string[] = [];
+  const result = await runFootballDataCatalogSync({} as any, false, async code => {
+    calls.push(code); if (code === 'CL') throw new FootballDataSyncError(422, 'Invalid season.');
+    return { wrote_to_db: true, unchanged: 380, conflicts: [] };
+  });
+  assert.deepEqual(calls, ['CL', 'PL']); assert.equal(result.failed, true); assert.equal(result.wrote_to_db, true);
+  assert.equal(result.competitions.PL.unchanged, 380);
+  const http = await handleFootballDataSyncRequest(request(), { secret, tokenConfigured: true, sync: async () => result });
+  assert.equal(http.statusCode, 502);
+});
 
 test('normalization produces stable scoped identities without inventing results or selecting pilot rounds', () => {
   const data = season();

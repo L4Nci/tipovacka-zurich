@@ -60,6 +60,7 @@ const getLobbyRulesText = (longDescription?: string | null) => {
 };
 
 interface LobbyViewProps {
+  tournamentCatalog?: {id: string; name: string; sport_id: string}[];
   lobby: Lobby;
   user: AppUser;
   onSelectTournament: (tournamentId: string) => void;
@@ -89,6 +90,7 @@ interface LobbyViewProps {
 }
 
 export function LobbyView({
+  tournamentCatalog = [],
   lobby,
   user,
   onSelectTournament,
@@ -330,9 +332,7 @@ export function LobbyView({
   ));
 
   // Check which tournaments can be added
-  const availableToAdd = [
-    { id: 'fifa-world-cup-2026', name: '🏆 FIFA World Cup 2026' }
-  ].filter(at => 
+  const availableToAdd = tournamentCatalog.filter(at =>
     !lobbyTournaments.some(t => t.id === at.id)
   );
 

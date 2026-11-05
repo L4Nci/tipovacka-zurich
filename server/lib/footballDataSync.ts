@@ -4,9 +4,15 @@ import { analyzeSeason, createProviderReader, readFinalScore } from './footballD
 import { calculatePoints } from '../../src/lib/scoring.ts';
 import { clubCrestUrl } from '../../src/lib/teamAssets.ts';
 import { getSupabaseAdmin } from './supabaseAdmin.ts';
+import { runHockeyCatalogSync } from './hockeySync.ts';
 
 export const FOOTBALL_DATA_TOURNAMENT = 'uefa-champions-league-2026-27';
 export const FOOTBALL_DATA_SCORING_RULE = 'football-final-shootout-v1';
+export const FOOTBALL_DATA_COMPETITIONS = {
+  CL: { tournamentId: FOOTBALL_DATA_TOURNAMENT, stage: 'LEAGUE_STAGE', label: 'League Phase' },
+  PL: { tournamentId: 'premier-league-2026-27', stage: 'REGULAR_SEASON', label: 'Regular Season' },
+} as const;
+export type FootballCompetition = keyof typeof FOOTBALL_DATA_COMPETITIONS;
 const knockoutStages: Record<string, { label: string; maximum: number }> = {
   PLAYOFFS: { label: 'Playoffs', maximum: 16 },
   LAST_16: { label: 'Round of 16', maximum: 16 },
@@ -18,12 +24,17 @@ export class FootballDataSyncError extends Error {
   constructor(public statusCode: number, message: string) { super(message); }
 }
 
-export function normalizeFootballDataSeason(payload: any, now = new Date()) {
+export function normalizeFootballDataSeason(payload: any, now = new Date(), competition: FootballCompetition = 'CL') {
+  const config = FOOTBALL_DATA_COMPETITIONS[competition];
+  if (!config) throw new FootballDataSyncError(422, 'Unsupported competition.');
   if (!Array.isArray(payload?.matches) || payload.resultSet?.count !== payload.matches.length) {
     throw new FootballDataSyncError(422, 'Season response is incomplete.');
   }
-  const league = payload.matches.filter((m: any) => m?.stage === 'LEAGUE_STAGE');
-  const report = analyzeSeason({ ...payload, matches: league, resultSet: { count: league.length } }, { competition: 'CL', season: 2026, now });
+  if (competition === 'PL' && payload.matches.some((m: any) => m?.stage !== config.stage)) {
+    throw new FootballDataSyncError(422, 'Unexpected Premier League phase.');
+  }
+  const league = payload.matches.filter((m: any) => m?.stage === config.stage);
+  const report = analyzeSeason({ ...payload, matches: league, resultSet: { count: league.length } }, { competition, season: 2026, now });
   if (!report.validationPassed) throw new FootballDataSyncError(422, 'Season validation failed; no import was submitted.');
   const clubs = new Map<string, { id: string; name: string; short_name: string; logo_url: string | null }>();
   const roster = new Set<number>(league.flatMap((m: any) => [m.homeTeam.id, m.awayTeam.id]));
@@ -32,14 +43,14 @@ export function normalizeFootballDataSeason(payload: any, now = new Date()) {
   const phaseCounts = new Map<string, number>();
   const awaitingFixtures: number[] = [];
   const fixtures = payload.matches.filter((m: any) => {
-    if (!m || (m.stage !== 'LEAGUE_STAGE' && !Object.hasOwn(knockoutStages, m.stage))) return false;
+    if (!m || (m.stage !== config.stage && !(competition === 'CL' && Object.hasOwn(knockoutStages, m.stage)))) return false;
     if (!Number.isSafeInteger(m.id) || m.id <= 0 || seen.has(m.id)
-      || m.competition?.code !== 'CL' || m.season?.id !== seasonId
+      || m.competition?.code !== competition || m.season?.id !== seasonId
       || !String(m.season?.startDate ?? '').startsWith('2026-')) {
       throw new FootballDataSyncError(422, 'Fixture identity does not match the season.');
     }
     seen.add(m.id);
-    if (m.stage === 'LEAGUE_STAGE') return true;
+    if (m.stage === config.stage) return true;
     const count = (phaseCounts.get(m.stage) ?? 0) + 1;
     phaseCounts.set(m.stage, count);
     if (count > knockoutStages[m.stage].maximum) throw new FootballDataSyncError(422, 'Knockout phase contains too many fixtures.');
@@ -73,7 +84,7 @@ export function normalizeFootballDataSeason(payload: any, now = new Date()) {
     const score = readFinalScore(m);
     if (m.status === 'FINISHED' && (
       !['regular', 'extra_time', 'penalties'].includes(score.kind)
-      || (m.stage === 'LEAGUE_STAGE' && score.kind !== 'regular')
+      || (m.stage === config.stage && score.kind !== 'regular')
       || Date.parse(m.utcDate) > +now
       || !score.gameScoreCandidate || Object.values(score.gameScoreCandidate).some(n => Number(n) > 99)
       || (m.stage === 'FINAL' && score.gameScoreCandidate.home === score.gameScoreCandidate.away)
@@ -86,7 +97,7 @@ export function normalizeFootballDataSeason(payload: any, now = new Date()) {
     return {
       id: `football-data-match-${m.id}`, provider_match_id: String(m.id),
       home_id: `football-data-team-${m.homeTeam.id}`, away_id: `football-data-team-${m.awayTeam.id}`,
-      kickoff: m.utcDate, matchday: m.matchday ?? null, stage: m.stage === 'LEAGUE_STAGE' ? 'League Phase' : knockoutStages[m.stage].label, provider_status: m.status,
+      kickoff: m.utcDate, matchday: m.matchday ?? null, stage: m.stage === config.stage ? config.label : knockoutStages[m.stage].label, provider_status: m.status,
       provider_updated_at: m.lastUpdated,
       provider_score: Object.fromEntries(['duration', 'fullTime', 'halfTime', 'regularTime', 'extraTime', 'penalties']
         .filter(key => m.score?.[key] !== undefined).map(key => [key, m.score[key]])),
@@ -95,11 +106,11 @@ export function normalizeFootballDataSeason(payload: any, now = new Date()) {
       scores: [] as any[],
     };
   });
-  return { competition: 'CL', season: 2026, scoring_rule: FOOTBALL_DATA_SCORING_RULE, awaiting_fixtures: awaitingFixtures, clubs: [...clubs.values()], matches };
+  return { competition, season: 2026, scoring_rule: FOOTBALL_DATA_SCORING_RULE, awaiting_fixtures: awaitingFixtures, clubs: [...clubs.values()], matches };
 }
 
-export async function prepareFootballDataBatch(admin: SupabaseClient, payload: any, now = new Date()) {
-  const batch = normalizeFootballDataSeason(payload, now);
+export async function prepareFootballDataBatch(admin: SupabaseClient, payload: any, now = new Date(), competition: FootballCompetition = 'CL') {
+  const batch = normalizeFootballDataSeason(payload, now, competition);
   const byId = new Map(batch.matches.map((m: any) => [m.id, m]));
   const ids = batch.matches.filter((m: any) => m.status === 'finished').map((m: any) => m.id);
   // Stable composite ordering and explicit pagination: PostgREST normally caps at 1,000 rows.
@@ -125,11 +136,12 @@ export async function prepareFootballDataBatch(admin: SupabaseClient, payload: a
 }
 
 export async function runFootballDataSync(admin: SupabaseClient, options: {
-  dryRun: boolean; bootstrap?: boolean; token?: string; transport?: typeof fetch;
+  dryRun: boolean; bootstrap?: boolean; token?: string; transport?: typeof fetch; competition?: FootballCompetition;
 }) {
+  const competition = options.competition ?? 'CL';
   const reader = createProviderReader(options.token ?? process.env.FOOTBALL_DATA_API_TOKEN, options.transport);
-  const payload = await reader.matches('CL', 2026);
-  const batch = await prepareFootballDataBatch(admin, payload);
+  const payload = await reader.matches(competition, 2026);
+  const batch = await prepareFootballDataBatch(admin, payload, new Date(), competition);
   const { data, error } = await admin.rpc('sync_football_data_catalog', {
     batch_param: batch, dry_run_param: options.dryRun, bootstrap_param: options.bootstrap === true,
   });
@@ -139,6 +151,23 @@ export async function runFootballDataSync(admin: SupabaseClient, options: {
     throw new FootballDataSyncError(503, 'Database sync could not be confirmed; retry idempotently.');
   }
   return data as Record<string, any>;
+}
+
+/** Independent transactions: one unavailable league must not stop the other league's results. */
+export async function runFootballDataCatalogSync(admin: SupabaseClient, dryRun: boolean,
+  sync = (competition: FootballCompetition) => runFootballDataSync(admin, { dryRun, competition })) {
+  const competitions: Record<string, any> = {};
+  for (const competition of Object.keys(FOOTBALL_DATA_COMPETITIONS) as FootballCompetition[]) {
+    try { competitions[competition] = await sync(competition); }
+    catch (error) {
+      competitions[competition] = { failed: true, status: error instanceof FootballDataSyncError ? error.statusCode : 502,
+        error: error instanceof FootballDataSyncError ? error.message : 'Provider sync failed; retry.' };
+    }
+  }
+  const results = Object.values(competitions);
+  return { dry_run: dryRun, wrote_to_db: results.some(result => result.wrote_to_db === true), competitions,
+    failed: results.some(result => result.failed), busy: results.some(result => result.busy),
+    conflicts: results.flatMap(result => result.conflicts ?? []) };
 }
 
 type Request = { httpMethod?: string; headers?: Record<string, string | undefined>; body?: string | null };
@@ -173,8 +202,14 @@ export async function handleFootballDataSyncRequest(event: Request, dependencies
     return response(503, { error: 'Football data provider token is not configured.' });
   }
   try {
-    const result = await (dependencies.sync ?? (dry => runFootballDataSync(getSupabaseAdmin(), { dryRun: dry })))(dryRun);
-    return response(result.busy ? 409 : result.conflicts?.length ? 409 : 200, result);
+    const result = await (dependencies.sync ?? (async dry => {
+      const admin = getSupabaseAdmin();
+      const [football, hockey] = await Promise.all([runFootballDataCatalogSync(admin, dry), runHockeyCatalogSync(admin, dry)]);
+      return { ...football, competitions: { ...football.competitions, ...hockey.competitions },
+        failed: football.failed || hockey.failed, busy: football.busy || hockey.busy,
+        wrote_to_db: football.wrote_to_db || hockey.wrote_to_db, conflicts: [...football.conflicts, ...hockey.conflicts] };
+    }))(dryRun);
+    return response(result.failed ? 502 : result.busy ? 409 : result.conflicts?.length ? 409 : 200, result);
   } catch (error) {
     if (error instanceof FootballDataSyncError) return response(error.statusCode, { error: error.message });
     // Upstream failures may reflect credentials. Never return or log their text.

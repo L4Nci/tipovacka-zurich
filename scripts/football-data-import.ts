@@ -4,11 +4,15 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getSupabaseAdmin } from '../server/lib/supabaseAdmin.ts';
-import { FOOTBALL_DATA_TOURNAMENT, runFootballDataSync } from '../server/lib/footballDataSync.ts';
+import { FOOTBALL_DATA_COMPETITIONS, runFootballDataSync, type FootballCompetition } from '../server/lib/footballDataSync.ts';
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length > 1 || (args.length && !['--write', '--backup-only'].includes(args[0]))) throw new Error('Usage: npm run football-data:import -- [--write|--backup-only]');
+  const competitionIndex = args.indexOf('--competition');
+  const competition = (competitionIndex < 0 ? 'CL' : args.splice(competitionIndex, 2)[1]) as FootballCompetition;
+  if (!Object.hasOwn(FOOTBALL_DATA_COMPETITIONS, competition) || args.length > 1 || (args.length && !['--write', '--backup-only'].includes(args[0]))) {
+    throw new Error('Usage: npm run football-data:import -- [--write|--backup-only] [--competition CL|PL]');
+  }
   if (new URL(process.env.VITE_SUPABASE_URL || '').hostname !== 'hkhkbtzdyjbdeeoiurvw.supabase.co') {
     throw new Error('Unexpected database target; import stopped.');
   }
@@ -39,8 +43,8 @@ async function main() {
     console.log(JSON.stringify({ backup: path, sha256: createHash('sha256').update(json).digest('hex') }));
   }
   if (args[0] === '--backup-only') return;
-  const result = await runFootballDataSync(admin, { dryRun: !write, bootstrap: true });
-  console.log(JSON.stringify({ ...result, tournament_id: FOOTBALL_DATA_TOURNAMENT }, null, 2));
+  const result = await runFootballDataSync(admin, { dryRun: !write, bootstrap: true, competition });
+  console.log(JSON.stringify({ ...result, tournament_id: FOOTBALL_DATA_COMPETITIONS[competition].tournamentId }, null, 2));
   if (result.busy || result.conflicts?.length) process.exitCode = 1;
 }
 main().catch(() => { console.error('Football data import failed. No credentials are printed. Inspect the checked provider and DB configuration.'); process.exitCode = 1; });

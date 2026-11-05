@@ -3,7 +3,14 @@
 Přijatý směr 5. 11. 2026: běžný provoz je automatický. Ruční zápisy nejsou běžný
 pracovní postup a samy nesmějí navždy vyřadit zápas spravovaný API ze synchronizace.
 
-## Dnešní implementace: jeden zdroj
+## Dnešní implementace: jeden autoritativní zdroj pro každou soutěž
+
+Rozšíření 5. 11. večer: CL a PL používají football-data.org, NHL feed webu NHL
+a česká extraliga Hokej.cz. Není to konsenzus tří zdrojů nad stejným zápasem.
+Football-data má provider `lastUpdated`; hokejové zdroje mají čas našeho získání
+pozorování, shodná již ověřená fakta zachovají revizi. Zpětné pořadí našich běhů
+odmítáme, stáří uvnitř cache hokejového zdroje takto určit neumíme.
+Katalogy a konkrétní hranice jsou v [multi-sport runbooku](multi-sport-sync.md).
 
 Liga mistrů používá football-data.org a cron každých 15 minut. Jeho dokončené
 výsledky jsou autoritou pro tento API katalog. Historické jiné soutěže tím neměníme.

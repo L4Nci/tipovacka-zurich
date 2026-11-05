@@ -29,10 +29,10 @@ import {
 } from './types.ts';
 import { useClerkGameSession } from './lib/clerkSession.tsx';
 import { supabase } from './lib/supabase.ts';
-import { isDrawPrediction, requiresFootballWinner, formatStageLabel } from './lib/matchRules.ts';
+import { isDrawPrediction, requiresFootballWinner, formatStageLabel, isHockeyTournament } from './lib/matchRules.ts';
 import { clubCrestUrl } from './lib/teamAssets.ts';
 import { formatMatchKickoff, MATCH_TIME_ZONE } from './lib/matchTime.ts';
-import { ScoringRulesPreview } from './components/ScoringRulesPreview.tsx';
+import { TournamentSetup } from './components/TournamentSetup.tsx';
 import { 
   fetchAllData, 
   fetchCriticalAppData,
@@ -40,6 +40,7 @@ import {
   fetchHomeDashboard,
   fetchHomeMembershipState,
   fetchUserLobbies,
+  fetchTournaments,
   fetchLobbyPrizeMetadata,
   LobbyPrizeSchemaUnavailableError,
   savePrediction as savePredDB, 
@@ -550,12 +551,12 @@ export const MatchCard: React.FC<MatchCardProps> = ({
         {!isFinished && (
           <div className="flex flex-col gap-3">
             <div className="px-1 mb-1">
-              <div className={`grid ${footballWinnerRequired ? 'grid-cols-2' : 'grid-cols-3'} items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase`}>
+              <div className={`grid ${isHockey || footballWinnerRequired ? 'grid-cols-2' : 'grid-cols-3'} items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase`}>
                 <span className="text-left text-[#ce1126]">
                   <span className="block text-[8px] text-slate-400 truncate">{homeOutcomeLabel}</span>
                   {predictionStats.isLoading ? '…' : `${predictionStats.home}%`}
                 </span>
-                {!footballWinnerRequired && (
+                {!isHockey && !footballWinnerRequired && (
                   <span className="text-center text-[#1f2937]">
                     <span className="block text-[8px] text-slate-400">Remíza</span>
                     {predictionStats.isLoading ? '…' : `${predictionStats.draw}%`}
@@ -571,7 +572,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                   style={{ width: `${predictionStats.home}%` }} 
                   className="h-full bg-[#ce1126] transition-[width] duration-700 ease-out" 
                 />
-                {!footballWinnerRequired && (
+                {!isHockey && !footballWinnerRequired && (
                   <div
                     style={{ width: `${predictionStats.draw}%` }}
                     className="h-full bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.12)] transition-[width] duration-700 ease-out"
@@ -1047,6 +1048,7 @@ export default function App() {
   });
   
   const [matches, setMatches] = useState<Match[]>([]);
+  const [visibleMatchCount, setVisibleMatchCount] = useState(30);
   const [teams, setTeams] = useState<Team[]>([]);
   const [leaderboard, setLeaderboard] = useState<Player[]>([]);
   const [allPredictions, setAllPredictions] = useState<Prediction[]>([]);
@@ -1098,7 +1100,9 @@ export default function App() {
   const [newLobbyName, setNewLobbyName] = useState("");
   const [newLobbyShortDescription, setNewLobbyShortDescription] = useState("");
   const [newLobbyLongDescription, setNewLobbyLongDescription] = useState("");
-  const [newLobbyTournament, setNewLobbyTournament] = useState("fifa-world-cup-2026");
+  const [newLobbyTournament, setNewLobbyTournament] = useState("");
+  const [tournamentCatalog, setTournamentCatalog] = useState<{id: string; name: string; sport_id: string}[]>([]);
+  const [catalogError, setCatalogError] = useState('');
   const [newLobbyJoinPolicy, setNewLobbyJoinPolicy] = useState<'open' | 'approval_required'>('open');
   const [newLobbyPrizesEnabled, setNewLobbyPrizesEnabled] = useState(false);
   const [newLobbyPrizeEntries, setNewLobbyPrizeEntries] = useState<LobbyPrizeEntry[]>([
@@ -1111,8 +1115,23 @@ export default function App() {
   });
 
   const activeLobby = lobbies.find(l => l.id === activeLobbyId);
-  const isHockey = activeTournamentId === "ms-hockey-2026";
+  const isHockey = isHockeyTournament(activeTournamentId, tournamentCatalog.find(t => t.id === activeTournamentId)?.sport_id);
   const [winnerPickerTeams, setWinnerPickerTeams] = useState<any[]>([]);
+
+  useEffect(() => { setVisibleMatchCount(30); }, [activeTournamentId, matchFilter, tab]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+    let cancelled = false;
+    fetchTournaments().then(items => {
+      if (cancelled) return;
+      setTournamentCatalog(items);
+      setCatalogError('');
+      setNewLobbyTournament(previous => items.some(item => item.id === previous) ? previous
+        : items.find(item => item.id === 'uefa-champions-league-2026-27')?.id || items[0]?.id || '');
+    }).catch(() => { if (!cancelled) setCatalogError(lang === 'cz' ? 'Soutěže se nepodařilo načíst. Obnov stránku.' : 'Could not load competitions. Refresh the page.'); });
+    return () => { cancelled = true; };
+  }, [authStatus, lang]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -2459,7 +2478,7 @@ export default function App() {
   };
 
   const leaderboardWithStreaks = useMemo(() => {
-    const isHockey = activeTournamentId === "ms-hockey-2026";
+    const isHockey = isHockeyTournament(activeTournamentId, tournamentCatalog.find(t => t.id === activeTournamentId)?.sport_id);
 
     // Determine the most recently finished match to calculate "previous" state
     const finishedMatchesSorted = [...matches]
@@ -2964,6 +2983,10 @@ export default function App() {
                       setLobbyError("Prosím zadejte název lobby.");
                       return;
                     }
+                    if (!tournamentCatalog.some(item => item.id === newLobbyTournament)) {
+                      setLobbyError(lang === 'cz' ? 'Vyber dostupnou soutěž.' : 'Select an available competition.');
+                      return;
+                    }
                     let prizeSelection: {
                       enabled: boolean;
                       entries: LobbyPrizeEntry[];
@@ -3024,18 +3047,8 @@ export default function App() {
                         placeholder="Volitelné informace pro členy lobby."
                       />
                     </div>
-                    <div>
-                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Turnaj</label>
-                      <select
-                        value={newLobbyTournament} onChange={e => setNewLobbyTournament(e.target.value)}
-                        disabled={isLobbyMutationSubmitting}
-                        className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-bold text-slate-700"
-                      >
-                        <option value="fifa-world-cup-2026">🏆 FIFA World Cup 2026</option>
-                        <option value="ms-hockey-2026">🏒 MS v hokeji 2026</option>
-                      </select>
-                    </div>
-                    {newLobbyTournament !== 'ms-hockey-2026' && <ScoringRulesPreview lang={lang} />}
+                    <TournamentSetup catalog={tournamentCatalog} value={newLobbyTournament} onChange={setNewLobbyTournament}
+                      disabled={isLobbyMutationSubmitting} lang={lang} error={catalogError} />
                     <fieldset disabled={isLobbyMutationSubmitting}>
                       <legend className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Způsob vstupu</legend>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -3265,6 +3278,7 @@ export default function App() {
           <LazyScreenErrorBoundary>
             <Suspense fallback={<DeferredScreenSkeleton />}>
               <LazyLobbyView
+                tournamentCatalog={tournamentCatalog}
                 lobby={activeLobby}
                 user={{ ...user, username: user.username || '' }}
                 lang={lang as 'cz' | 'en'}
@@ -3333,7 +3347,7 @@ export default function App() {
                   <Calendar className="w-4 h-4 shrink-0" /> {t.upcoming}
                 </span>
               </h2>
-              {scheduledMatchesForView.map(m => (
+              {scheduledMatchesForView.slice(0, visibleMatchCount).map(m => (
                  <MatchCard 
                    key={m.id} 
                    match={m} 
@@ -3347,6 +3361,11 @@ export default function App() {
                    lang={lang}
                  />
               ))}
+              {scheduledMatchesForView.length > visibleMatchCount && (
+                <button type="button" onClick={() => setVisibleMatchCount(n => n + 30)} className="mb-5 w-full rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-600">
+                  {lang === 'cz' ? 'Další zápasy' : 'More matches'} ({visibleMatchCount}/{scheduledMatchesForView.length})
+                </button>
+              )}
               {scheduledMatchesForView.length === 0 && (
                 <div className="rounded-3xl border border-slate-100 bg-white px-5 py-10 text-center shadow-sm">
                   <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 text-slate-400">
@@ -3398,7 +3417,7 @@ export default function App() {
               <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                  <CheckCircle2 className="w-4 h-4" /> {t.finished}
               </h2>
-              {finishedMatchesForView.map(m => (
+              {finishedMatchesForView.slice(0, visibleMatchCount).map(m => (
                  <MatchCard 
                    key={m.id} 
                    match={m} 
@@ -3412,6 +3431,11 @@ export default function App() {
                    lang={lang}
                  />
                ))}
+              {finishedMatchesForView.length > visibleMatchCount && (
+                <button type="button" onClick={() => setVisibleMatchCount(n => n + 30)} className="mb-5 w-full rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-600">
+                  {lang === 'cz' ? 'Další výsledky' : 'More results'} ({visibleMatchCount}/{finishedMatchesForView.length})
+                </button>
+              )}
                {finishedMatchesForView.length === 0 && (
                 <div className="rounded-3xl border border-slate-100 bg-white px-5 py-10 text-center shadow-sm">
                   <CheckCircle2 className="mx-auto h-10 w-10 text-slate-200" />
