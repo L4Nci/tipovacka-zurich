@@ -165,6 +165,8 @@ Finished CL results and points are reconciled from the authoritative API snapsho
 the same verified revision can repair local corruption without waiting for another
 upstream revision. Older data are ignored; contradictory finished-result facts
 under an unchanged revision remain conflicts. There is currently one provider.
+Unfinished games earn zero points; a fabricated local final can be cleared using
+the same verified pending API snapshot, without retracting a genuine API final.
 Future independent-source voting is described in the [result-source policy](docs/result-source-policy.md).
 
 Migration `20261104193538_prediction_result_write_guard.sql` closes a reproduced

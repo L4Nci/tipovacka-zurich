@@ -147,6 +147,12 @@ dry-run i zapisovací běh vrátily 200, 144 beze změny a `local_repairs=0`.
 Bezpečnostní advisories se nezměnily. Historické výsledky ostatních providerů
 nespadají do této funkce. Níže jsou podrobnosti předchozího rozšíření play-off.
 
+Navazující migrace `20261105152200_football_data_pending_state_repair.sql` je také
+aplikovaná: nedokončené zápasy mají 0 bodů a lokálně vymyšlený konečný výsledek
+se odstraní, pokud stejné uložené API fakty stále potvrzují neodehraný stav.
+Skutečný dokončený výsledek potvrzený API se jiným pending snímkem neodvolává.
+Celá původní, play-off i rozšířená samoopravná SQL sada znovu prošla s ROLLBACK.
+
 Migrace `20261105141718_football_data_knockout_sync.sql` je aplikovaná v jediné
 stávající DB. Privátní helper nemá veřejný EXECUTE; sync RPC zůstává service-only.
 Před ní vznikla další soukromá záloha veřejných tabulek. Původní i nová rollback

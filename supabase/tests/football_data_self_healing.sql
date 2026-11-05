@@ -19,6 +19,22 @@ BEGIN
   SELECT user_id,lobby_id INTO STRICT u2,l2 FROM public.lobby_members WHERE membership_status='active' AND lobby_id<>l1 ORDER BY lobby_id,user_id LIMIT 1;
   INSERT INTO public.predictions(user_id,lobby_id,match_id,predicted_home_score,predicted_away_score)
     VALUES(u1,l1,'football-data-match-920001',3,1),(u2,l2,'football-data-match-920001',2,0);
+
+  -- The API still says TIMED. A local fabricated final must not leave scores or points behind.
+  UPDATE public.matches SET home_score=9,away_score=9,status='finished' WHERE id='football-data-match-920001';
+  UPDATE public.predictions SET points_earned=5 WHERE match_id='football-data-match-920001';
+  report := public.sync_football_data_catalog(batch,false,false);
+  IF report->>'local_repairs'<>'1' OR report->>'predictions_updated'<>'2'
+    OR (SELECT status FROM public.matches WHERE id='football-data-match-920001')<>'scheduled'
+    OR (SELECT home_score FROM public.matches WHERE id='football-data-match-920001') IS NOT NULL
+    OR EXISTS (SELECT 1 FROM public.predictions WHERE match_id='football-data-match-920001' AND points_earned<>0)
+    THEN RAISE EXCEPTION 'Verified pending snapshot did not clear the fabricated local final and points.'; END IF;
+  UPDATE public.predictions SET points_earned=1 WHERE match_id='football-data-match-920001' AND lobby_id=l1;
+  report := public.sync_football_data_catalog(batch,false,false);
+  IF report->>'local_repairs'<>'1' OR report->>'predictions_updated'<>'1' OR report->>'matches_updated'<>'0'
+    OR EXISTS (SELECT 1 FROM public.predictions WHERE match_id='football-data-match-920001' AND points_earned<>0)
+    THEN RAISE EXCEPTION 'Pending match with an unchanged score retained unearned points.'; END IF;
+
   game := (games->0)||jsonb_build_object('status','finished','provider_status','FINISHED','kickoff',now()-interval '2 hours',
     'home_score',3,'away_score',1,'provider_updated_at',now()-interval '1 minute',
     'provider_score','{"duration":"REGULAR","fullTime":{"home":3,"away":1}}'::jsonb,
@@ -58,6 +74,17 @@ BEGIN
   report := public.sync_football_data_catalog(jsonb_set(batch,'{matches,0}',alternate),false,false);
   IF jsonb_array_length(report->'conflicts')<>0 OR (SELECT home_score FROM public.matches WHERE id='football-data-match-920001')<>3
     THEN RAISE EXCEPTION 'Older provider snapshot overwrote newer facts.'; END IF;
+
+  alternate := (games->0)||jsonb_build_object('provider_updated_at',now());
+  report := public.sync_football_data_catalog(jsonb_set(batch,'{matches,0}',alternate),false,false);
+  IF report->'conflicts'->0->>'reason'<>'unconfirmed_result_revision'
+    OR (SELECT status FROM public.matches WHERE id='football-data-match-920001')<>'finished'
+    THEN RAISE EXCEPTION 'A different pending snapshot retracted a genuine API final.'; END IF;
+
+  alternate := game||jsonb_build_object('status','scheduled','home_score',null,'away_score',null); denied:=false;
+  BEGIN PERFORM public.sync_football_data_catalog(jsonb_set(batch,'{matches,0}',alternate),false,false);
+  EXCEPTION WHEN invalid_parameter_value THEN denied:=true; END;
+  IF NOT denied THEN RAISE EXCEPTION 'Incoherent API/application status was accepted.'; END IF;
 
   alternate := game||jsonb_build_object('home_score',2,'away_score',0,
     'provider_score','{"duration":"REGULAR","fullTime":{"home":2,"away":0}}'::jsonb);

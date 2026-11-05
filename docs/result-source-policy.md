@@ -13,9 +13,11 @@ výsledky jsou autoritou pro tento API katalog. Historické jiné soutěže tím
   skóre. Označení `manual-admin` je původ zápisu, nikoli automatický trvalý zákaz opravy.
 - U dokončených zápasů se kontrolují očekávané body i při nezměněném výsledku.
   Opraví se pouze skutečně nesedící body; opakování nic nepřičítá a nemění hráčovy tipy.
+- U nedokončených zápasů jsou body vždy 0. Pokud stejný ověřený API snímek stále
+  říká, že se nehrálo, napraví i lokálně omylem zapsaný konečný výsledek.
 - Starší revize se ignoruje. Revize jsou časová razítka jednoho konkrétního providera.
 - Rozporné API fakty dokončeného zápasu pod stejnou revizí znamenají konflikt.
-  Stejně tak automaticky neodvoláváme již přijatý dokončený výsledek na stav rozehráno.
+  Stejně tak jiný snímek automaticky neodvolá dokončený výsledek potvrzený API na stav rozehráno.
   Znovu načítáme zdroj; cron po dvou neúspěších upozorní správce.
 - Zápas, soutěž, týmy a fáze musejí sedět. Výsledek musí odpovídat platným API
   složkám a pravidlu `football-final-shootout-v1`; uzávěrky tipů zůstávají zachované.
@@ -25,6 +27,8 @@ posílá jako platný výsledek. Tu vyřeší jeho oprava nebo nezávislé dalš
 Není potřeba ručně kontrolovat každý zápas; nejednoznačné případy mají vyvolat upozornění.
 
 Migrace `20261105151206_football_data_self_healing.sql` je aplikovaná ve stávající DB.
+Navazující `20261105152200_football_data_pending_state_repair.sql` doplňuje opravu
+nedokončených zápasů a kontrolu shody aplikačního stavu se stavem providera.
 `local_repairs` počítá zápasy s navrženou/provedenou opravou podle stejného ověřeného
 snímku. `predictions_updated` udává skutečně změněné bodové řádky, nikoli připsané
 bonusové body. Historické `manual_skipped` zůstává v odpovědi pro kompatibilitu a je 0.
