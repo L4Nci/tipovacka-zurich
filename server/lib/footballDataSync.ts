@@ -6,15 +6,57 @@ import { clubCrestUrl } from '../../src/lib/teamAssets.ts';
 import { getSupabaseAdmin } from './supabaseAdmin.ts';
 
 export const FOOTBALL_DATA_TOURNAMENT = 'uefa-champions-league-2026-27';
+export const FOOTBALL_DATA_SCORING_RULE = 'football-final-shootout-v1';
+const knockoutStages: Record<string, { label: string; maximum: number }> = {
+  PLAYOFFS: { label: 'Playoffs', maximum: 16 },
+  LAST_16: { label: 'Round of 16', maximum: 16 },
+  QUARTER_FINALS: { label: 'Quarterfinals', maximum: 8 },
+  SEMI_FINALS: { label: 'Semifinals', maximum: 4 },
+  FINAL: { label: 'Final', maximum: 1 },
+};
 export class FootballDataSyncError extends Error {
   constructor(public statusCode: number, message: string) { super(message); }
 }
 
 export function normalizeFootballDataSeason(payload: any, now = new Date()) {
-  const report = analyzeSeason(payload, { competition: 'CL', season: 2026, now });
+  if (!Array.isArray(payload?.matches) || payload.resultSet?.count !== payload.matches.length) {
+    throw new FootballDataSyncError(422, 'Season response is incomplete.');
+  }
+  const league = payload.matches.filter((m: any) => m?.stage === 'LEAGUE_STAGE');
+  const report = analyzeSeason({ ...payload, matches: league, resultSet: { count: league.length } }, { competition: 'CL', season: 2026, now });
   if (!report.validationPassed) throw new FootballDataSyncError(422, 'Season validation failed; no import was submitted.');
   const clubs = new Map<string, { id: string; name: string; short_name: string; logo_url: string | null }>();
-  const matches = payload.matches.filter((m: any) => m.stage === 'LEAGUE_STAGE').map((m: any) => {
+  const roster = new Set<number>(league.flatMap((m: any) => [m.homeTeam.id, m.awayTeam.id]));
+  const seasonId = league[0].season.id;
+  const seen = new Set<number>();
+  const phaseCounts = new Map<string, number>();
+  const awaitingFixtures: number[] = [];
+  const fixtures = payload.matches.filter((m: any) => {
+    if (!m || (m.stage !== 'LEAGUE_STAGE' && !Object.hasOwn(knockoutStages, m.stage))) return false;
+    if (!Number.isSafeInteger(m.id) || m.id <= 0 || seen.has(m.id)
+      || m.competition?.code !== 'CL' || m.season?.id !== seasonId
+      || !String(m.season?.startDate ?? '').startsWith('2026-')) {
+      throw new FootballDataSyncError(422, 'Fixture identity does not match the season.');
+    }
+    seen.add(m.id);
+    if (m.stage === 'LEAGUE_STAGE') return true;
+    const count = (phaseCounts.get(m.stage) ?? 0) + 1;
+    phaseCounts.set(m.stage, count);
+    if (count > knockoutStages[m.stage].maximum) throw new FootballDataSyncError(422, 'Knockout phase contains too many fixtures.');
+    if (!m.homeTeam?.id || !m.awayTeam?.id || !m.utcDate) {
+      if (!['SCHEDULED', 'TIMED', 'POSTPONED'].includes(m.status)) throw new FootballDataSyncError(422, 'Played fixture has unresolved participants or time.');
+      awaitingFixtures.push(m.id);
+      return false;
+    }
+    if (!roster.has(m.homeTeam.id) || !roster.has(m.awayTeam.id) || m.homeTeam.id === m.awayTeam.id
+      || (m.matchday != null && ![1, 2].includes(m.matchday))
+      || !['SCHEDULED', 'TIMED', 'IN_PLAY', 'PAUSED', 'EXTRA_TIME', 'PENALTY_SHOOTOUT', 'FINISHED', 'SUSPENDED', 'POSTPONED', 'CANCELLED', 'AWARDED'].includes(m.status)
+      || typeof m.utcDate !== 'string' || !/^\d{4}-\d{2}-\d{2}T.+Z$/.test(m.utcDate) || !Number.isFinite(Date.parse(m.utcDate))) {
+      throw new FootballDataSyncError(422, 'Invalid knockout fixture.');
+    }
+    return true;
+  });
+  const matches = fixtures.map((m: any) => {
     for (const team of [m.homeTeam, m.awayTeam]) {
       if (typeof team.name !== 'string' || !team.name.trim() || team.name.length > 160) {
         throw new FootballDataSyncError(422, 'Club identity is incomplete.');
@@ -29,23 +71,31 @@ export function normalizeFootballDataSeason(payload: any, now = new Date()) {
       throw new FootballDataSyncError(422, 'Fixture revision time is missing.');
     }
     const score = readFinalScore(m);
-    // This importer supports league phase only; knockout rules are a separate step.
-    if (m.status === 'FINISHED' && (score.kind !== 'regular' || Date.parse(m.utcDate) > +now)) {
-      throw new FootballDataSyncError(422, 'League-phase result requires review.');
+    if (m.status === 'FINISHED' && (
+      !['regular', 'extra_time', 'penalties'].includes(score.kind)
+      || (m.stage === 'LEAGUE_STAGE' && score.kind !== 'regular')
+      || Date.parse(m.utcDate) > +now
+      || !score.gameScoreCandidate || Object.values(score.gameScoreCandidate).some(n => Number(n) > 99)
+      || (m.stage === 'FINAL' && score.gameScoreCandidate.home === score.gameScoreCandidate.away)
+    )) {
+      throw new FootballDataSyncError(422, 'Finished result does not match the scoring contract.');
+    }
+    if (['TIMED', 'SCHEDULED'].includes(m.status) && (m.score?.fullTime?.home != null || m.score?.fullTime?.away != null)) {
+      throw new FootballDataSyncError(422, 'Unplayed fixture already has a score.');
     }
     return {
       id: `football-data-match-${m.id}`, provider_match_id: String(m.id),
       home_id: `football-data-team-${m.homeTeam.id}`, away_id: `football-data-team-${m.awayTeam.id}`,
-      kickoff: m.utcDate, matchday: m.matchday, provider_status: m.status,
+      kickoff: m.utcDate, matchday: m.matchday ?? null, stage: m.stage === 'LEAGUE_STAGE' ? 'League Phase' : knockoutStages[m.stage].label, provider_status: m.status,
       provider_updated_at: m.lastUpdated,
       provider_score: Object.fromEntries(['duration', 'fullTime', 'halfTime', 'regularTime', 'extraTime', 'penalties']
         .filter(key => m.score?.[key] !== undefined).map(key => [key, m.score[key]])),
-      home_score: score.officialGoals?.home ?? null, away_score: score.officialGoals?.away ?? null,
-      status: m.status === 'FINISHED' ? 'finished' : ['IN_PLAY', 'PAUSED'].includes(m.status) ? 'live' : 'scheduled',
+      home_score: score.gameScoreCandidate?.home ?? null, away_score: score.gameScoreCandidate?.away ?? null,
+      status: m.status === 'FINISHED' ? 'finished' : ['IN_PLAY', 'PAUSED', 'EXTRA_TIME', 'PENALTY_SHOOTOUT'].includes(m.status) ? 'live' : 'scheduled',
       scores: [] as any[],
     };
   });
-  return { competition: 'CL', season: 2026, clubs: [...clubs.values()], matches };
+  return { competition: 'CL', season: 2026, scoring_rule: FOOTBALL_DATA_SCORING_RULE, awaiting_fixtures: awaitingFixtures, clubs: [...clubs.values()], matches };
 }
 
 export async function prepareFootballDataBatch(admin: SupabaseClient, payload: any, now = new Date()) {

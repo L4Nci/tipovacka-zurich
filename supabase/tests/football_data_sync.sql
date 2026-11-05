@@ -64,12 +64,12 @@ BEGIN
   IF report->>'predictions_updated'<>'0' THEN RAISE EXCEPTION 'Repeated result re-awarded points.'; END IF;
 
   batch := jsonb_set(batch,'{matches,0,home_score}','3');
+  batch := jsonb_set(batch,'{matches,0,provider_score,fullTime,home}','3');
   report := public.sync_football_data_catalog(batch,false,false);
   IF jsonb_array_length(report->'conflicts')<>1
     OR (SELECT home_score FROM public.matches WHERE id='football-data-match-900001')<>2
     THEN RAISE EXCEPTION 'Sync overwrote a confirmed result.'; END IF;
   batch := jsonb_set(batch,'{matches,0,provider_updated_at}',to_jsonb(now()+interval '1 second'));
-  batch := jsonb_set(batch,'{matches,0,provider_score,fullTime,home}','3');
   batch := jsonb_set(batch,'{matches,0,scores,0,points_earned}','2');
   report := public.sync_football_data_catalog(batch,false,false);
   IF report->>'results_corrected'<>'1'

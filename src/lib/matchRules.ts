@@ -28,3 +28,12 @@ export const requiresFootballWinner = (
   const phase = (stage || '').trim().toLowerCase().replace(/[_\s-]+/g, ' ');
   return tournamentId === 'fifa-world-cup-2026' || ['final', 'finals', 'third place'].includes(phase);
 };
+
+export const formatStageLabel = (stage: string, lang: 'cz' | 'en'): string => {
+  if (/^league[ _](phase|stage)$/i.test(stage.trim())) return lang === 'cz' ? 'Ligová fáze' : 'League phase';
+  if (lang === 'en') return stage;
+  const labels: Record<string, string> = {
+    Playoffs: 'Play-off', 'Round of 16': 'Osmifinále', Quarterfinals: 'Čtvrtfinále', Semifinals: 'Semifinále', Final: 'Finále',
+  };
+  return Object.hasOwn(labels, stage) ? labels[stage] : stage.replace(/^Group\s+/i, 'Skupina ');
+};

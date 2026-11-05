@@ -26,7 +26,8 @@ export function readFinalScore(match) {
       && fullTime.home === officialGoals.home && fullTime.away === officialGoals.away) {
       return { kind: 'extra_time', officialGoals, penalties: null, gameScoreCandidate: officialGoals };
     }
-    if (score.duration === 'PENALTY_SHOOTOUT' && penalties && penalties.home !== penalties.away) {
+    if (score.duration === 'PENALTY_SHOOTOUT' && penalties && penalties.home !== penalties.away && fullTime
+      && fullTime.home === officialGoals.home + penalties.home && fullTime.away === officialGoals.away + penalties.away) {
       return { kind: 'penalties', officialGoals, penalties, gameScoreCandidate: penalties };
     }
   }

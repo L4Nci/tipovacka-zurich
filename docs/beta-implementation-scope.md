@@ -22,6 +22,16 @@ Veřejné sponzorované akce, ceny, obchod, platby a samostatné enterprise rozh
 
 ## Stav realizace
 
+**Navazující cron a play-off 5. 11.:** vlastník ukázal skutečné uložené tipy na
+Netlify a schválil uložení klíče a aktivaci cron-job.org. Úloha 8799825 běží každých
+15 minut; dry-run, zapisovací test a první plánovaný běh prošly. RPC migrace
+`20261105141718_football_data_knockout_sync.sql` je aplikovaná. Adaptér připravený
+v tomto releasu přidává podporované play-off s konkrétními účastníky/časem podle
+API, jinak záznam odloží. Současná sezona zatím vrací pouze 144 ligových zápasů.
+Pevný kontrakt je `football-final-shootout-v1`; volba/verzování pravidel podle lobby
+ani jejich změny v průběhu tím ještě nejsou implementované. Ověření a ochrany jsou
+v [runbooku](football-data-cron.md); testovací data se do soutěže nepřidávají.
+
 **Release 5. 11. ověřen:** [PR #16](https://github.com/L4Nci/tipovacka-zurich/pull/16),
 commit `0e6aece`, je publikovaný na existujícím Netlify webu. Přihlašovací obrazovka
 Clerk a API ochrany fungují. Přihlášený sync dry-run vrátil 200, všech 144 zápasů
