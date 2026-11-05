@@ -8,7 +8,8 @@ export const HOCKEY_COMPETITIONS = {
 export type HockeyCompetition = keyof typeof HOCKEY_COMPETITIONS;
 export type HockeyCache = Map<string, any>;
 export const NHL_CLUBS = 'ANA BOS BUF CAR CBJ CGY CHI COL DAL DET EDM FLA LAK MIN MTL NJD NSH NYI NYR OTT PHI PIT SEA SJS STL TBL TOR UTA VAN VGK WPG WSH'.split(' ');
-const fail = (message: string): never => { throw new Error(message); };
+export class HockeyProviderError extends Error {}
+const fail = (message: string): never => { throw new HockeyProviderError(message); };
 const positive = (n: unknown) => Number.isSafeInteger(n) && Number(n) > 0;
 const goals = (n: unknown) => Number.isSafeInteger(n) && Number(n) >= 0 && Number(n) <= 99;
 const utc = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T.+Z$/.test(s) && Number.isFinite(Date.parse(s));
@@ -22,8 +23,11 @@ export async function readHockeySource(url: string, transport: typeof fetch = fe
     const u = new URL(url);
     if (u.protocol !== 'https:' || !['api-web.nhle.com', 'www.hokej.cz'].includes(u.hostname)
       || u.origin !== origin || u.port || u.username || u.password) fail('Unexpected hockey source.');
-    const response = await transport(u.href, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(12000),
-      headers: { accept: u.hostname === 'api-web.nhle.com' ? 'application/json' : 'text/html,application/json', 'user-agent': 'Tipovacka/1.0 (private prediction pilot)' }, cache: 'no-store' });
+    let response: Response;
+    try {
+      response = await transport(u.href, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(12000),
+        headers: { accept: u.hostname === 'api-web.nhle.com' ? 'application/json' : 'text/html,application/json', 'user-agent': 'Tipovacka/1.0 (private prediction pilot)' }, cache: 'no-store' });
+    } catch { return fail(`Hockey source connection failed (${u.hostname}).`); }
     if ([301, 302, 303, 307, 308].includes(response.status) && response.headers.get('location')) {
       url = new URL(response.headers.get('location')!, u).href;
       continue;
@@ -100,7 +104,11 @@ export function pragueKickoff(day: string, time: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time)) fail('Hockey kickoff is unresolved.');
   const base = Date.parse(`${day}T${time}:00Z`);
   const formatter = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Prague', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-  const candidates = [1, 2].map(offset => new Date(base - offset * 3600000)).filter(d => Number.isFinite(+d) && formatter.format(d) === `${day} ${time}`);
+  const candidates = [1, 2].map(offset => new Date(base - offset * 3600000)).filter(d => {
+    if (!Number.isFinite(+d)) return false;
+    const parts = Object.fromEntries(formatter.formatToParts(d).map(p => [p.type, p.value]));
+    return `${parts.year}-${parts.month}-${parts.day}` === day && `${parts.hour}:${parts.minute}` === time;
+  });
   if (candidates.length !== 1) fail('Hockey kickoff is ambiguous or invalid.');
   return candidates[0].toISOString();
 }

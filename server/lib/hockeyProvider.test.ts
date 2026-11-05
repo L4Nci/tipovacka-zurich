@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { NHL_CLUBS, normalizeNhlSchedules, normalizeElhSeason, parseElhDetail, pragueKickoff, readHockeySource } from './hockeyProvider.ts';
+import { NHL_CLUBS, normalizeNhlSchedules, normalizeElhSeason, parseElhDetail, pragueKickoff, readHockeySource, HockeyProviderError } from './hockeyProvider.ts';
 
 const now = new Date('2026-11-05T20:00:00Z');
 function nhl() {
@@ -79,4 +79,10 @@ test('hockey fetcher follows only bounded same-origin redirects without credenti
   await assert.rejects(() => readHockeySource('https://www.hokej.cz/tipsport-extraliga/zapasy', transport));
   assert.equal(calls,1);
   await assert.rejects(() => readHockeySource('http://www.hokej.cz/no', transport));
+});
+test('source diagnostics expose only controlled status messages, never reflected response or transport text', async () => {
+  await assert.rejects(() => readHockeySource('https://www.hokej.cz/tipsport-extraliga/zapasy', async () => new Response('reflected-private-value',{status:403})),
+    (e: any) => e instanceof HockeyProviderError && e.message === 'Hockey source unavailable (403).');
+  await assert.rejects(() => readHockeySource('https://www.hokej.cz/tipsport-extraliga/zapasy', async () => { throw new Error('reflected-private-value'); }),
+    (e: any) => e instanceof HockeyProviderError && !e.message.includes('reflected-private-value'));
 });
