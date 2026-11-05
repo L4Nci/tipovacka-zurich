@@ -128,9 +128,9 @@ See [verified season coverage and score semantics](docs/champions-league-data-so
 for the Champions League pilot and the later Premier League expansion.
 The Champions League catalog is imported and active in the existing DB, linked
 to Testovací rodeo. Testing covers the whole season; there is no three-round limit.
-The 144 league-phase games are available now; knockout support is pending. The protected local/Netlify sync endpoint and cron-job.org configuration
+The 144 league-phase games are available now; the adapter supports automatic addition of up to 45 knockout fixtures when the API publishes their participants and kickoff. The protected local/Netlify sync endpoint and cron-job.org configuration
 are described in the [import and cron runbook](docs/football-data-cron.md).
-The endpoint is deployed on the working Netlify site; the external job is not scheduled yet. `npm run football-data:import` previews DB
+The endpoint is deployed on the working Netlify site; cron-job.org task 8799825 runs every 15 minutes, with failure notifications. `npm run football-data:import` previews DB
 changes; explicit `-- --write` backs up the public tables and imports the catalog.
 
 The repository is linked to the owner's existing Clerk application **Tipovačka**
@@ -155,7 +155,11 @@ on 5 November 2026 (app commit `0e6aece`). The Clerk sign-in screen and API guar
 were verified there. Authenticated sync dry-run returned 200, 144 unchanged matches,
 no conflicts and no DB writes. The owner still needs to verify the signed-in game
 flow on this hostname. The existing Clerk development instance remains in use for
-this working test; external cron scheduling is a separate next step.
+this working test. The owner subsequently confirmed real saved predictions on the
+working site. Cron dry-run/write tests and the first scheduled run succeeded.
+The Champions League scoring contract is final goals after extra time, or the
+shootout score alone when penalties decide the game; provider facts stay separate.
+Configurable per-lobby scoring and mid-season rule changes remain future work.
 
 Migration `20261104193538_prediction_result_write_guard.sql` closes a reproduced
 direct-API gap: a recorded result or finished match now blocks prediction writes

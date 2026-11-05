@@ -20,6 +20,12 @@ function season() {
 const now = new Date('2026-11-05T09:00:00Z');
 const secret = 'test-only-sync-secret-with-at-least-32-characters';
 const request = (body: any = {}) => ({ httpMethod: 'POST', headers: { authorization: `Bearer ${secret}` }, body: JSON.stringify(body) });
+const knockout = (stage = 'FINAL', id = 1000): any => ({
+  ...structuredClone(season().matches[0]), id, stage, matchday: stage === 'FINAL' ? null : 1,
+});
+const withKnockouts = (...games: any[]) => {
+  const data = season(); data.matches.push(...games); data.resultSet.count = data.matches.length; return data;
+};
 
 test('normalization produces stable scoped identities without inventing results or selecting pilot rounds', () => {
   const data = season();
@@ -84,4 +90,77 @@ test('HTTP reports conflicts/busy state and hides reflected upstream secrets', a
   }
   const result = await handleFootballDataSyncRequest(request(), { ...deps, sync: async () => { throw new Error(secret); } });
   assert.equal(result.statusCode, 502); assert(!result.body.includes(secret));
+});
+
+test('all 45 knockout fixtures extend the same 36-club catalog with stable identities', () => {
+  let id = 1000;
+  const games = Object.entries({ PLAYOFFS: 16, LAST_16: 16, QUARTER_FINALS: 8, SEMI_FINALS: 4, FINAL: 1 })
+    .flatMap(([stage, count]) => Array.from({ length: count }, () => knockout(stage, id++)));
+  const batch = normalizeFootballDataSeason(withKnockouts(...games), now);
+  assert.equal(batch.matches.length, 189); assert.equal(batch.clubs.length, 36);
+  assert.equal(batch.matches.at(-1)?.stage, 'Final'); assert.equal(batch.matches.at(-1)?.matchday, null);
+  assert.equal(batch.scoring_rule, 'football-final-shootout-v1');
+  for (const match of batch.matches.slice(144)) assert.equal(isFootballKnockoutStage(match.stage, 'uefa-champions-league-2026-27'), true);
+});
+
+test('future unknown teams or kickoff are deferred and later resolved without invented clubs or matches', () => {
+  const game = knockout(); game.homeTeam = { id: null, name: null }; game.utcDate = null; game.status = 'SCHEDULED';
+  const data = withKnockouts(game);
+  const pending = normalizeFootballDataSeason(data, now);
+  assert.equal(pending.matches.length, 144); assert.deepEqual(pending.awaiting_fixtures, [1000]);
+  data.matches[data.matches.length - 1] = knockout();
+  const ready = normalizeFootballDataSeason(data, now);
+  assert.equal(ready.matches.length, 145); assert.deepEqual(ready.awaiting_fixtures, []);
+  assert.equal(ready.matches.at(-1)?.id, 'football-data-match-1000');
+});
+
+test('knockouts use final extra-time goals or shootout-only score, preserving all provider facts', () => {
+  const extra = { ...knockout('LAST_16'), status: 'FINISHED', utcDate: '2026-10-01T20:00:00Z', score: {
+    duration: 'EXTRA_TIME', regularTime: { home: 3, away: 0 }, extraTime: { home: 0, away: 2 }, fullTime: { home: 3, away: 2 },
+  } };
+  const penalties = { ...knockout('FINAL', 1001), status: 'FINISHED', utcDate: '2026-10-02T20:00:00Z', score: {
+    duration: 'PENALTY_SHOOTOUT', regularTime: { home: 1, away: 1 }, extraTime: { home: 0, away: 0 }, fullTime: { home: 5, away: 4 }, penalties: { home: 4, away: 3 },
+  } };
+  const batch = normalizeFootballDataSeason(withKnockouts(extra, penalties), now);
+  assert.equal(batch.matches[144].home_score, 3); assert.equal(batch.matches[144].away_score, 2);
+  assert.equal(batch.matches[145].home_score, 4); assert.equal(batch.matches[145].away_score, 3);
+  assert.deepEqual(batch.matches[145].provider_score.fullTime, { home: 5, away: 4 });
+  assert.deepEqual(batch.matches[145].provider_score.regularTime, { home: 1, away: 1 });
+});
+
+test('a two-leg match can draw while a finished final needs a winning game score', () => {
+  const game = { ...knockout('LAST_16'), status: 'FINISHED', utcDate: '2026-10-01T20:00:00Z', score: { duration: 'REGULAR', fullTime: { home: 1, away: 1 } } };
+  assert.equal(normalizeFootballDataSeason(withKnockouts(game), now).matches.at(-1)?.home_score, 1);
+  game.stage = 'FINAL'; assert.throws(() => normalizeFootballDataSeason(withKnockouts(game), now));
+});
+
+test('invalid knockout identities, excessive fixtures and inconsistent shootouts stop the batch', () => {
+  for (const modify of [
+    (m: any) => { m.id = 1; }, (m: any) => { m.season.id = 2; },
+    (m: any) => { m.competition.code = 'PL'; }, (m: any) => { m.homeTeam.id = 123456; },
+    (m: any) => { m.matchday = 3; }, (m: any) => { m.utcDate = 'invalid'; },
+    (m: any) => { m.status = 'FINISHED'; m.utcDate = null; },
+    (m: any) => { m.status = 'FINISHED'; m.utcDate = '2026-10-01T20:00:00Z'; m.score = {
+      duration: 'PENALTY_SHOOTOUT', regularTime: { home: 1, away: 1 }, extraTime: { home: 0, away: 0 }, fullTime: { home: 6, away: 4 }, penalties: { home: 4, away: 3 },
+    }; },
+  ]) { const game = knockout(); modify(game); assert.throws(() => normalizeFootballDataSeason(withKnockouts(game), now)); }
+  assert.throws(() => normalizeFootballDataSeason(withKnockouts(knockout(), knockout('FINAL', 1001)), now));
+});
+
+test('extra time and ongoing shootouts stay live with no final score or premature points', () => {
+  for (const status of ['EXTRA_TIME', 'PENALTY_SHOOTOUT']) {
+    const game = knockout(); game.status = status; game.score.fullTime = { home: 1, away: 1 };
+    const match = normalizeFootballDataSeason(withKnockouts(game), now).matches.at(-1)!;
+    assert.equal(match.status, 'live'); assert.equal(match.home_score, null); assert.equal(match.away_score, null);
+  }
+});
+
+test('shootout prediction points use 4:3 rather than the API combined 5:4 or the 1:1 after play', async () => {
+  const game = { ...knockout(), status: 'FINISHED', utcDate: '2026-10-01T20:00:00Z', score: {
+    duration: 'PENALTY_SHOOTOUT', regularTime: { home: 1, away: 1 }, extraTime: { home: 0, away: 0 }, fullTime: { home: 5, away: 4 }, penalties: { home: 4, away: 3 },
+  } };
+  const rows = [[4, 3], [1, 1], [5, 4]].map(([home, away], i) => ({ match_id: 'football-data-match-1000', user_id: `u${i}`, lobby_id: 'l', predicted_home_score: home, predicted_away_score: away }));
+  const query: any = { select: () => query, in: () => query, order: () => query, range: async () => ({ data: rows, error: null }) };
+  const batch = await prepareFootballDataBatch({ from: () => query } as any, withKnockouts(game), now);
+  assert.deepEqual(batch.matches.at(-1)?.scores.map(row => row.points_earned), [5, 0, 3]);
 });

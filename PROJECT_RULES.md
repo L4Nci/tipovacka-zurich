@@ -1,5 +1,14 @@
 # Kompletní checklist pro další vývoj Tipovačky
 
+**Cron a play-off — 5. 11. 2026:** vlastník potvrdil funkční uložené tipy na Netlify
+a schválil uložení klíče syncu do cron-job.org a zapnutí zápisů každých 15 minut.
+Úloha 8799825 je aktivní; testy i první naplánovaný běh prošly. Adaptér a RPC
+podporují postupné doplnění play-off LM podle API, bez vymýšlení účastníků a časů.
+Pevný kontrakt používá góly po prodloužení nebo samotné skóre rozstřelu, se stejnými
+body 5/3/2/2; dvojutkání může mít remízový zápas. Detailní stav je v
+[runbooku](docs/football-data-cron.md). Volitelné/verzované pravidlo pro každou lobby
+a jeho úprava během soutěže zůstávají samostatnou prací.
+
 **Release 5. 11. 2026:** vlastník zadal push a publikování aktuální pracovní verze na stávající `https://tipovacka-fotbal.netlify.app` a potvrdil Netlify CLI. Potřebný merge do `main`, nastavení tohoto webu a nasazení jsou pro tento balík schválené. Stav předchozích etap níže je historický; externí cron ani odložené Official Events/ceny se automaticky nezapínají.
 
 **Ověřený výsledek releasu:** PR #16 je sloučený a commit `0e6aece` publikovaný.

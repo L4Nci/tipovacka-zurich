@@ -8,6 +8,14 @@ It is not a feature backlog, TODO list, sprint plan, GitHub Issue list, technica
 
 ## Planning update — 2026-11-03
 
+**Cron and full-season sync — 2026-11-05:** the owner confirmed saved predictions
+on Netlify. Cron-job.org task 8799825 is enabled every 15 minutes; dry-run, write
+test and first scheduled execution succeeded. The full-season adapter/RPC accept
+known knockout fixtures as they are published, up to the 45 main knockout matches.
+Unknown participants/time remain deferred. Final goals or shootout-only scores
+use the existing point values; per-lobby configurable/versioned rules remain future
+work. See the [runbook](football-data-cron.md) for current verification and scope.
+
 **Release verified — 2026-11-05:** PR #16 published the new Clerk frontend and
 football-data sync to the existing working Netlify site. The sign-in screen and
 API guards work; authenticated sync dry-run returned 144 unchanged matches,

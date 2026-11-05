@@ -1,19 +1,33 @@
 # Liga mistrů — import a cron-job.org
 
+**Aktuální stav — 5. 11. 2026:** [úloha 8799825](https://console.cron-job.org/jobs/8799825)
+je zapnutá každých 15 minut (`*/15 * * * *`, Europe/Prague), POST s tělem
+`{"dryRun":false}`, timeout 30 s. Vlastník výslovně schválil uložení klíče syncu
+do svého cron-job.org účtu a aktivaci. Dry-run i zapisovací test ze služby vrátily
+200; první naplánovaný běh v 15:15 také skončil úspěšně (3,75 s).
+Ukládají se odpovědi; upozornění jsou zapnutá po dvou neúspěších, při obnovení
+funkce a automatickém vypnutí. Dvě původní TheSportsDB úlohy zůstávají vypnuté.
+
+Navazující adaptér a RPC přijímají 144 zápasů ligové fáze a postupně až 45 zápasů
+play-off. Současné API sezony 2026/27 zatím vrací jen ligovou fázi. Jakmile přibude
+podporovaná fáze s konkrétními účastníky a UTC časem, stejný job ji přidá do stejné
+soutěže a všech jejích lobby. Neznámé týmy/čas se nevymýšlejí: položka se odloží
+do `awaiting_fixtures` a při dalším běhu se znovu načte.
+
 **Nasazení ověřeno 5. 11. 2026:** [PR #16](https://github.com/L4Nci/tipovacka-zurich/pull/16),
 aplikační commit `0e6aece`, je publikovaný na [pracovním webu](https://tipovacka-fotbal.netlify.app).
 Clerk přihlášení se vykresluje. API vrací správně 405 pro GET syncu, 401 bez
 přihlášení/klíče a 404 pro neznámé API. Autentizovaný sync s `{"dryRun":true}`
 vrátil 200, 144 nezměněných zápasů, žádné konflikty a `wrote_to_db=false`.
-Externí cron **není zapnutý**; přihlášený herní průchod na Netlify ověří vlastník.
+Vlastník následně potvrdil přihlášený průchod a ukázal uložené tipy obou účtů.
 Starší validační poznámky níže popisují jednotlivé etapy před tímto releasem.
 
 Stav 5. 11. 2026: do jediné stávající DB byl skutečně importován katalog LM
 2026/27: **36 klubů a 144 zápasů ligové fáze**, z toho 72 hotových a 72 budoucích.
 Na následný pokyn vlastníka je soutěž `uefa-champions-league-2026-27` aktivní
 a připojená do **Testovacího rodea**. Tříkolový limit je zrušený; cílem je
-průběžně hrát celou sezonu. Katalog zatím obsahuje ligovou fázi, import a pravidla
-play-off ještě zbývají. K tipování je nyní 72 budoucích zápasů; 72 hotových je historie.
+průběžně hrát celou sezonu. API zatím obsahuje jen ligovou fázi. K tipování je nyní
+72 budoucích zápasů; 72 hotových je historie. Podpora budoucího play-off je popsaná níže.
 Aktivace byla ověřena katalogovým RPC pod emulovanou Clerk identitou vlastníka;
 transakční zkouška uložení i editace vlastního tipu prošla s ROLLBACK.
 SQL sada syncu byla upravena tak, aby její dočasný skrytý stav byl nezávislý
@@ -66,8 +80,7 @@ Pro běžný běh změnit tělo na:
 V [cron-job.org](https://cron-job.org/) zvolit metodu POST, vlastní hlavičky,
 JSON tělo a upozornění na neúspěšný běh. Vlastní hlavičky a tělo podporuje
 [oficiální konfigurace jobu](https://docs.cron-job.org/rest-api.html#jobextendeddata).
-Pro začátek stačí **jednou za hodinu** (`0 * * * *`); kolem pilotních hracích
-dnů lze zkrátit na 15 minut (`*/15 * * * *`). Zvolit časové pásmo Europe/Prague
+Aktuální úloha běží **každých 15 minut** (`*/15 * * * *`). Zvolit časové pásmo Europe/Prague
 a timeout 30 sekund. Free provider má zpožděné výsledky, nejde o live-score službu.
 
 Jeden běh používá jeden požadavek na sezonu; počet lobby a hráčů jej nenásobí.
@@ -76,8 +89,9 @@ Tajný klíč patří do hlavičky, nikoli URL.
 
 ## Kontroly a chování
 
-- Adapter ověří všech 144 zápasů a 36 klubů, celá kola, stabilní ID, UTC časy,
-  revize a finální skóre. ID používají namespace `football-data-team-*` a
+- Adapter ověří všech 144 zápasů a 36 klubů ligové fáze, celá kola, stabilní ID,
+  UTC časy, revize a finální skóre. Nad nimi přijímá postupně play-off, osmifinále,
+  čtvrtfinále, semifinále a finále, nejvýše 16/16/8/4/1 zápasů. ID používají namespace `football-data-team-*` a
   `football-data-match-*`; mapování nezávisí na názvu klubu.
 - Zápasy mají fázi `League Phase` a samostatné `matchday`. Nový klient v ní
   správně umožňuje remízu. Skrytá soutěž je z výběru klienta vynechána a DB
@@ -93,9 +107,15 @@ Tajný klíč patří do hlavičky, nikoli URL.
   dotčených lobby. Jiný výsledek se stejnou revizí nebo odvolaný stav se odloží
   jako konflikt. Případný historický ruční zápis má samostatný původ a sync jej
   přeskakuje; ruční obsluha není součástí běžného vyhodnocování.
-- Importér podporuje pouze ligovou fázi LM 2026/27. Play-off, rozstřely a další
-  soutěže vyžadují vlastní navazující kontrakt. API fakta jsou uložená zvlášť
-  v `provider_score`; tento krok nezavádí novou verzi herních pravidel.
+- Importér podporuje hlavní soutěž LM 2026/27 včetně play-off. Kvalifikace a jiné
+  soutěže do tohoto jobu nepatří. Pravidlo `football-final-shootout-v1` používá
+  výsledek po případném prodloužení; při rozstřelu pouze skóre penalt. Například
+  1:1 po hře, penalty 4:3 a API `fullTime=5:4` znamenají herní výsledek **4:3**.
+  Oficiální periodická skóre zůstávají v `provider_score`. SQL nezávisle ověřuje
+  součet složek a shodu herního výsledku. Bodové hodnoty 5/3/2/2 se nemění.
+  Remíza v jednotlivém zápase dvojutkání je možná; dokončené finále musí mít vítěze.
+  Výběr/verzování odlišných pravidel na úrovni lobby a změny během soutěže jsou
+  nadále samostatný navazující krok; preview v založení lobby pravidla neukládá.
 - Official Events se nezapínají. Pokud by jejich tipy později používaly stejný
   zápas, sync odmítne neúplné bodování. Historický TheSportsDB provoz se nemění.
 
@@ -105,6 +125,24 @@ HTTP: `200` = dokončeno, `400` = neplatné tělo, `401` = chybný klíč,
 Při konfliktu mohou být jiné bezpečné zápasy ve stejné transakci aktualizované;
 problémový výsledek se zachová. Při chybě spojení nelze tvrdit, že DB nic
 nezapsala — opakování je idempotentní. Chyby nevracejí token ani tělo API chyby.
+
+## Ověření rozšíření play-off
+
+Migrace `20261105141718_football_data_knockout_sync.sql` je aplikovaná v jediné
+stávající DB. Privátní helper nemá veřejný EXECUTE; sync RPC zůstává service-only.
+Před ní vznikla další soukromá záloha veřejných tabulek. Původní i nová rollback
+SQL sada prošly: odlišné tipy ve dvou lobby, atomické body za penalty, opakování
+bez duplikací, odmítnutí remízového finále a rozporu mezi výsledkem a API fakty.
+Přísnější kontrola si vyžádala opravit starou testovací fixture: změna výsledku
+musí měnit i odpovídající `provider_score`, ne pouze herní skóre.
+
+24 Node testů providera/syncu, 4 testy prezentace, typecheck a oba buildy prošly.
+Historických 189 skutečných API zápasů včetně 45 play-off bylo navíc převedeno jen
+v paměti jako regresní fixture s upraveným štítkem sezony; do DB se neposílaly.
+Výsledek historického finále vyšel 4:3 na penalty. Aktuální sezonní dry-run vrátil
+144 nezměněných zápasů a žádné konflikty. SQL fixtures nezůstaly v DB; stav po
+ověření je 1 034 tipů a součet bodů 1 667. Stávající bezpečnostní advisories se
+nezměnily. Názvy fází jsou v CZ/EN; návrh a ovládání karet zůstávají stejné.
 
 ## Vypnutí a dohled
 

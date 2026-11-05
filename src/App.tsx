@@ -29,7 +29,7 @@ import {
 } from './types.ts';
 import { useClerkGameSession } from './lib/clerkSession.tsx';
 import { supabase } from './lib/supabase.ts';
-import { isDrawPrediction, requiresFootballWinner } from './lib/matchRules.ts';
+import { isDrawPrediction, requiresFootballWinner, formatStageLabel } from './lib/matchRules.ts';
 import { clubCrestUrl } from './lib/teamAssets.ts';
 import { formatMatchKickoff, MATCH_TIME_ZONE } from './lib/matchTime.ts';
 import { ScoringRulesPreview } from './components/ScoringRulesPreview.tsx';
@@ -253,12 +253,6 @@ const UserAvatar = ({ player, size = 'md' }: { player?: Pick<Player, 'username' 
       <span aria-hidden="true">{player?.avatar_emoji || '😀'}</span>
     </div>
   );
-};
-
-const formatStageLabel = (stage: string, lang: 'cz' | 'en') => {
-  if (/^league[ _](phase|stage)$/i.test(stage.trim())) return lang === 'cz' ? 'Ligová fáze' : 'League phase';
-  if (lang === 'cz') return stage.replace(/^Group\s+/i, 'Skupina ');
-  return stage;
 };
 
 const getGroupCode = (stage: string) => {
