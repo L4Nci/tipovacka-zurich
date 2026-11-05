@@ -5,6 +5,20 @@ Používáme stejnou DB, aplikaci, `.env`, Netlify web a chráněný cron. Nová
 služba ani API klíč se nezakládají. Každá soutěž má samostatný katalog a pořadí;
 tipy zůstávají oddělené pro každou lobby.
 
+**Stav nasazeného ověření:** CL, PL a NHL fungují z Netlify. Hokej.cz z Netlify
+vrací 403, přestože lokální import funguje. Extraliga je proto dočasně skrytá
+a její vazba na Testovací rodeo archivovaná; všech 363 zápasů zůstává zachovaných.
+`ELH_SYNC_ENABLED` je ve výchozím stavu false: pozastavený zdroj se vůbec nevolá
+a nekazí úspěšný běh ostatních lig. Zapnutí vyžaduje ověřený funkční zdroj a jeho
+adaptér, následně opětovnou aktivaci katalogu. Žádný klíč ani účet se nekupuje.
+
+V existujícím API-Sports účtu byl ověřen Free plán (100 volání/den), česká
+Extraliga má league ID 10. Dotaz na sezonu 2026 však vrací chybu plánu a dovoluje
+jen roky 2022–2024. Možný další kandidát je [Ice Hockey API](https://icehockeyapi.com/documentation),
+který uvádí českou extraligu a free klíč s 50 voláními/den; aktuální data, přesnost
+časů, úplnost a skutečný rozsah free plánu je nutné ověřit s klíčem. Zatím to není
+implementovaný nový provider. Vlastník rozhoduje o další cestě; placení není schválené.
+
 ## Ověřené katalogy
 
 | Soutěž | Zdroj | Zápasy v DB | Hotové / budoucí při importu |
@@ -16,7 +30,8 @@ tipy zůstávají oddělené pro každou lobby.
 
 Extraligový zdroj obsahuje všech 364 zápasů základní části. Jeden nemá potvrzený
 čas a zůstává v `awaiting_fixtures`; nic nevymýšlíme. Další sync jej přidá, až bude
-čas známý. Všechny nové soutěže jsou aktivní a připojené do Testovacího rodea.
+čas známý a zdroj bude znovu aktivovaný. PL a NHL jsou aktivní v Testovacím rodeu;
+extraligový import je zatím podklad pro obnovení integrace.
 Nové lobby vybírají z DB katalogu; správce může soutěž přidat i do své stálé lobby.
 Původních 1 034 tipů a jejich součet 1 667 bodů se importem nezměnily.
 
@@ -52,10 +67,11 @@ Content-Type: application/json
 {"dryRun":false}
 ```
 
-Název endpointu zůstává kvůli kompatibilitě. Zpracuje CL, PL, NHL a ELH v oddělených
-transakcích; výpadek jedné soutěže nezastaví ostatní. Odpověď má
+Název endpointu zůstává kvůli kompatibilitě. Zpracuje CL, PL a NHL v oddělených
+transakcích; ELH je explicitně přeskočená do vyřešení zdroje. Výpadek jedné soutěže nezastaví ostatní. Odpověď má
 `competitions.CL`, `.PL`, `.NHL`, `.ELH`. Konflikt/busy vrací 409, chyba některé
-soutěže 502. Stav každé soutěže je uložený v neveřejných sync-state tabulkách.
+soutěže 502; úmyslně pozastavená ELH vrací `skipped=true, disabled=true`.
+Stav každé soutěže je uložený v neveřejných sync-state tabulkách.
 Kill switch `enabled=false` zůstává dostupný pro každou soutěž zvlášť.
 Lokální integrační dry-run všech čtyř soutěží: HTTP 200, 4,3 s, žádné konflikty
 ani DB zápisy. První Netlify dry-run po PR #20 potvrdil CL, PL a NHL; ELH selhala.

@@ -5,10 +5,12 @@ Tipovačka is currently being rebuilt and tested in the existing Supabase projec
 ## Product Context
 
 **Expansion, 5 November evening:** the owner requested Premier League, then NHL
-and Czech Extraliga. The same DB now contains those active catalogs, linked to
-Testovací rodeo. The existing protected cron endpoint is extended to all four
-competitions (CL/PL/NHL/ELH). NHL supports published playoffs; Extraliga currently
-supports the regular season only. See [docs/multi-sport-sync.md](docs/multi-sport-sync.md)
+and Czech Extraliga. PL and NHL are active in Testovací rodeo. ELH's 363 imported
+games are preserved, but its catalog is hidden/relationship archived: Hokej.cz
+returns 403 from Netlify and the existing API-Sports Free key refuses season 2026.
+The shared cron runs CL/PL/NHL; ELH is explicitly skipped by default unless
+`ELH_SYNC_ENABLED=true` after source verification. NHL supports published playoffs;
+ELH parsing currently supports the regular season only. See [docs/multi-sport-sync.md](docs/multi-sport-sync.md)
 for validated data sources, score semantics, checks and operational boundaries.
 
 Tipovačka is a private sports prediction league app for groups of friends, colleagues, or family. Users join a lobby, predict match scores, pick a long-term tournament winner, and compare points in a leaderboard.

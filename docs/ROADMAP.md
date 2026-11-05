@@ -9,11 +9,14 @@ It is not a feature backlog, TODO list, sprint plan, GitHub Issue list, technica
 ## Planning update — 2026-11-03
 
 **Multi-sport expansion — 2026-11-05:** the owner chose Premier League, then NHL
-and Czech Extraliga. All catalogs are imported into the same DB and Testovací rodeo.
+and Czech Extraliga. PL/NHL are active in the same DB and Testovací rodeo. Imported
+ELH data are preserved but temporarily hidden/archived because Hokej.cz refuses
+hosted requests (403) and the existing API-Sports Free plan excludes season 2026.
 The shared 15-minute endpoint supports isolated per-competition reconciliation;
 new lobbies read the actual catalog. NHL playoffs are supported as published;
-Extraliga currently covers its regular season, with playoff structure awaiting
-verification. See [the current runbook](multi-sport-sync.md). Each competition
+ELH sync is skipped by default pending an accessible source; its parser covers
+only the regular season, with playoff structure awaiting verification.
+See [the current runbook](multi-sport-sync.md). Each competition
 has one source; cross-source voting is still future work.
 
 **Result authority — 2026-11-05:** the owner accepted self-healing from the same
