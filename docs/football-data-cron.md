@@ -197,6 +197,16 @@ Náhled ukládání neposílal tip do DB. Plný přihlášený průchod nové ve
 nebyl ověřený: vlastník testuje starší nasazený klient, web je připojený k GitHubu.
 Pro nové UI je nutný nový deployment, včetně konzistentní Clerk konfigurace.
 
+Příprava releasu 5. 11.: původní Netlify proměnné `VITE_SUPABASE_URL` a
+`VITE_SUPABASE_ANON_KEY` byly chybně označené jako tajemství. První PR build
+proto zastavil scanner na veřejné URL v SQL kontraktu. Tyto dvě veřejné klientské
+hodnoty se obnovují jako běžná konfigurace; kontrola tajemství se nevypíná a žádný
+serverový klíč se nezařazuje mezi veřejné proměnné. Netlify neumožňuje příznak
+`is_secret` pouze zrušit aktualizací, proto je nutné dané dvě proměnné znovu
+vytvořit. Skutečná serverová tajemství mají jen production kontext. Současný tarif
+neumožňuje užší rozsah Functions; frontend dostává pouze proměnné `VITE_`.
+Externí cron se zapne samostatně po ověření nasazeného endpointu.
+
 Změněné soubory této etapy: `server/lib/footballDataSync.ts` a jeho test,
 `src/App.tsx`, `src/types.ts`, `src/lib/db.ts`, `src/lib/matchRules.ts`,
 nové `src/lib/teamAssets.ts`, `src/lib/matchTime.ts`, `src/lib/rulePreview.ts`,
