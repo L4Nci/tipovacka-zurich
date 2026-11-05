@@ -58,7 +58,10 @@ transakcích; výpadek jedné soutěže nezastaví ostatní. Odpověď má
 soutěže 502. Stav každé soutěže je uložený v neveřejných sync-state tabulkách.
 Kill switch `enabled=false` zůstává dostupný pro každou soutěž zvlášť.
 Lokální integrační dry-run všech čtyř soutěží: HTTP 200, 4,3 s, žádné konflikty
-ani DB zápisy. Naplánovaný Netlify běh se ověřuje po vydání.
+ani DB zápisy. První Netlify dry-run po PR #20 potvrdil CL, PL a NHL; ELH selhala.
+Rozšířené bezpečné hlášení chyb rozlišuje HTTP/transport/validaci/DB bez odrazu
+zdrojového těla nebo tajných hodnot. ELH nelze označit za provozně ověřenou,
+dokud se čtení z nasazeného serveru nepotvrdí.
 
 Žádný klíč nepatří do URL ani frontendu. Hockey zdroje neposílají žádný náš klíč;
 povolujeme pouze GET a omezená přesměrování na stejný HTTPS origin.
