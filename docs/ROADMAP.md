@@ -8,6 +8,13 @@ It is not a feature backlog, TODO list, sprint plan, GitHub Issue list, technica
 
 ## Planning update — 2026-11-03
 
+**Result authority — 2026-11-05:** the owner accepted self-healing from the same
+verified provider revision and rejection of older data. Finished CL points are
+reconciled even when scores are unchanged. A future layer should decide results
+from normalized fresh independent observations (for example 2 matching sources
+out of 3); newer timestamps alone do not establish cross-provider consensus.
+Only one provider is connected today. See the [result-source policy](result-source-policy.md).
+
 **Cron and full-season sync — 2026-11-05:** the owner confirmed saved predictions
 on Netlify. Cron-job.org task 8799825 is enabled every 15 minutes; dry-run, write
 test and first scheduled execution succeeded. The full-season adapter/RPC accept

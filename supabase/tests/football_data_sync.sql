@@ -83,8 +83,10 @@ BEGIN
   IF (SELECT result_source FROM public.matches WHERE id='football-data-match-900001')<>'manual-admin'
     THEN RAISE EXCEPTION 'Manual result provenance was not recorded.'; END IF;
   report := public.sync_football_data_catalog(batch,false,false);
-  IF report->>'manual_skipped'<>'1' OR (SELECT home_score FROM public.matches WHERE id='football-data-match-900001')<>4
-    THEN RAISE EXCEPTION 'Manual result was overwritten.'; END IF;
+  IF report->>'manual_skipped'<>'0' OR report->>'local_repairs'<>'1'
+    OR (SELECT home_score FROM public.matches WHERE id='football-data-match-900001')<>3
+    OR (SELECT result_source FROM public.matches WHERE id='football-data-match-900001')<>'football-data.org'
+    THEN RAISE EXCEPTION 'Verified API snapshot did not repair the local result.'; END IF;
 
   -- Once a lock has passed, a later kickoff cannot reopen predictions.
   UPDATE public.matches SET lock_time_utc=now()-interval '1 minute' WHERE id='football-data-match-900002';

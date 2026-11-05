@@ -55,6 +55,10 @@ The earlier live-production warning is historical and superseded by this authori
 
 Release authorization, 5 November: the owner explicitly requested push and publication of the current working version at `https://tipovacka-fotbal.netlify.app` and authorized Netlify CLI access. The necessary merge into `main`, configuration of that existing site and deployment of this package are authorized. Paid services and deferred Official Events/prize activation remain outside this release.
 
+Result authority update, 5 November: the owner approved repairing local API-managed results from the same verified provider revision while ignoring older snapshots. The CL sync also reconciles stale finished-match points. `manual-admin` provenance is not an automatic permanent override in this API catalog; contradictory provider facts under the same finished-result revision remain conflicts. Future independent-source consensus (for example 2 of 3) is an accepted direction, not an implemented provider integration. See [docs/result-source-policy.md](docs/result-source-policy.md).
+
+Unfinished API games earn zero points. A verified pending snapshot can clear a locally fabricated final, but a different pending snapshot cannot retract an API-confirmed final. Player predictions and elapsed locks remain protected.
+
 Outside the owner's already authorized scope, an agent must not:
 
 - change production data,
