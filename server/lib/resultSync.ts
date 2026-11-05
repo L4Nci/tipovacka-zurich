@@ -2,6 +2,7 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { fetchTheSportsDbFixturesForLocalMatches } from "./resultProviders/theSportsDb.ts";
 import type { TheSportsDbFixtureSummary } from "./resultProviders/theSportsDb.ts";
 import { calculatePoints } from "../../src/lib/scoring.ts";
+import { isHockeyTournament } from "../../src/lib/matchRules.ts";
 
 const WORLD_CUP_TOURNAMENT_ID = "fifa-world-cup-2026";
 
@@ -390,7 +391,7 @@ export async function applyMatchResult({
     return { statusCode: 404, body: { error: "Zapas nenalezen v Supabase." } };
   }
 
-  const sport = match.tournament_id === "ms-hockey-2026" ? "hockey" : "football";
+  const sport = isHockeyTournament(match.tournament_id) ? "hockey" : "football";
 
   if (sport === "hockey" && homeScore === awayScore) {
     return { statusCode: 400, body: { error: "V hokeji neni remiza povolena. Vysledek po prodlouzeni nebo najezdech musi urcit viteze!" } };

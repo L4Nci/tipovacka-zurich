@@ -2,14 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { clubCrestUrl } from './teamAssets.ts';
 import { formatMatchKickoff, pragueCalendarDay } from './matchTime.ts';
-import { isFootballKnockoutStage, isGroupStage, requiresFootballWinner } from './matchRules.ts';
+import { isFootballKnockoutStage, isGroupStage, requiresFootballWinner, isHockeyTournament } from './matchRules.ts';
 import { previewScore } from './rulePreview.ts';
 import { calculatePoints } from './scoring.ts';
 
 test('club crests accept only the provider CDN and cannot become API URLs or script sources', () => {
+  assert.equal(clubCrestUrl('https://assets.nhle.com/logos/nhl/svg/BOS_light.svg'), 'https://assets.nhle.com/logos/nhl/svg/BOS_light.svg');
+  assert.equal(clubCrestUrl('https://www.hokej.cz/files/logos/PCE-2x.png'), 'https://www.hokej.cz/files/logos/PCE-2x.png');
+  assert.equal(clubCrestUrl('https://www.hokej.cz/min.php?file=/etc/passwd'), null);
   assert.equal(clubCrestUrl('https://crests.football-data.org/610.png'), 'https://crests.football-data.org/610.png');
   for (const value of [null, 'javascript:alert(1)', 'http://crests.football-data.org/610.png', 'https://evil.invalid/610.png',
     'https://crests.football-data.org/610.png?token=x', 'https://user:secret@crests.football-data.org/610.png']) assert.equal(clubCrestUrl(value), null);
+});
+test('new hockey catalogs use hockey rules without applying football knockout rules', () => {
+  for (const id of ['ms-hockey-2026', 'nhl-2026-27', 'czech-extraliga-2026-27']) {
+    assert.equal(isHockeyTournament(id), true);
+    assert.equal(requiresFootballWinner('Final', id), false);
+  }
+  assert.equal(isHockeyTournament('premier-league-2026-27'), false);
+  assert.equal(calculatePoints(2, 1, 3, 2, 'hockey'), 2);
 });
 test('league phase variants and regular seasons allow draws; only known knockout stages require a winner', () => {
   for (const phase of ['League Phase', 'LEAGUE_STAGE', 'league phase', 'REGULAR_SEASON', 'Group A']) {

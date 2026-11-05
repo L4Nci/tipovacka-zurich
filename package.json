@@ -17,6 +17,8 @@
     "football-data:dry-run": "node --import dotenv/config scripts/football-data-dry-run.mjs",
     "test:football-data": "node --test scripts/football-data-dry-run.test.mjs && node --import tsx --test server/lib/footballDataSync.test.ts",
     "football-data:import": "node --import tsx scripts/football-data-import.ts",
+    "hockey:import": "node --import tsx scripts/hockey-import.ts",
+    "test:hockey": "node --import tsx --test server/lib/hockeyProvider.test.ts",
     "test:match-presentation": "node --import tsx --test src/lib/matchPresentation.test.ts"
   },
   "dependencies": {
@@ -24,6 +26,7 @@
     "@supabase/supabase-js": "^2.106.2",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
+    "cheerio": "1.1.2",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",

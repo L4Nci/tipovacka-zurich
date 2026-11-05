@@ -1,5 +1,11 @@
 # Liga mistrů — import a cron-job.org
 
+**Rozšíření 5. 11. večer:** stejný endpoint/job nově obsluhuje Ligu mistrů,
+Premier League, NHL a základní část české extraligy. Formát odpovědi je rozdělený
+pod `competitions`; konfigurace a klíč se nemění. Aktuální počty, ověření,
+rozlišení hokejového skóre a omezení extraligového play-off jsou v
+[multi-sport runbooku](multi-sport-sync.md). Níže je historie původního LM releasu.
+
 **Samoopravy — 5. 11. 2026:** API katalog je autoritativní. Stejná již ověřená revize
 se stejnými API fakty opraví lokálně chybné skóre i nesedící body dokončených zápasů.
 Ruční zápis už sám o sobě neznamená trvalé přeskočení. Starší data se ignorují;

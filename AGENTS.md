@@ -4,6 +4,13 @@ Tipovačka is currently being rebuilt and tested in the existing Supabase projec
 
 ## Product Context
 
+**Expansion, 5 November evening:** the owner requested Premier League, then NHL
+and Czech Extraliga. The same DB now contains those active catalogs, linked to
+Testovací rodeo. The existing protected cron endpoint is extended to all four
+competitions (CL/PL/NHL/ELH). NHL supports published playoffs; Extraliga currently
+supports the regular season only. See [docs/multi-sport-sync.md](docs/multi-sport-sync.md)
+for validated data sources, score semantics, checks and operational boundaries.
+
 Tipovačka is a private sports prediction league app for groups of friends, colleagues, or family. Users join a lobby, predict match scores, pick a long-term tournament winner, and compare points in a leaderboard.
 
 Current repository scope, based on the app and docs:

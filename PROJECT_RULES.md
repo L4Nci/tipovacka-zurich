@@ -1,5 +1,13 @@
 # Kompletní checklist pro další vývoj Tipovačky
 
+**Více lig — 5. 11. večer:** na pokyn vlastníka jsou importované a aktivní Premier
+League, NHL a základní část české extraligy, připojené do Testovacího rodea.
+Společný chráněný endpoint rozšiřujeme na CL/PL/NHL/ELH se stejným cronem a klíčem.
+Hokej počítá oficiální konečné skóre (po nájezdech s jedním rozhodujícím gólem),
+5 bodů přesně / 2 za vítěze; předchozí fotbalové pravidlo se nemění.
+Aktuální rozsah, validace a neověřené extraligové play-off viz
+[multi-sport runbook](docs/multi-sport-sync.md). Starší stavové poznámky níže jsou historie.
+
 **Cron a play-off — 5. 11. 2026:** vlastník potvrdil funkční uložené tipy na Netlify
 a schválil uložení klíče syncu do cron-job.org a zapnutí zápisů každých 15 minut.
 Úloha 8799825 je aktivní; testy i první naplánovaný běh prošly. Adaptér a RPC

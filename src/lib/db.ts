@@ -2,7 +2,7 @@ import { supabase } from "./supabase.ts";
 import { getClerkAccessToken } from "./clerkSupabase.ts";
 import { normalizeAccountProfile, type AccountProfile } from "./clerkAccount.ts";
 import { calculatePoints } from "./scoring.ts";
-import { isDrawPrediction, requiresFootballWinner } from "./matchRules.ts";
+import { isDrawPrediction, requiresFootballWinner, isHockeyTournament } from "./matchRules.ts";
 import {
   Player,
   Team,
@@ -77,11 +77,14 @@ const fetchPredictionCountsByMatchId = async (
   const statsMap = new Map<string, number>();
   if (matchIds.length === 0) return statsMap;
 
-  const { data: groupedCounts, error: groupedCountsError } = await supabase
-    .rpc("get_lobby_tournament_prediction_counts", {
+  let groupedCounts: {match_id: string; prediction_count: number}[] | undefined;
+  let groupedCountsError: any;
+  try {
+    groupedCounts = await fetchAllSupabaseRows(supabase.rpc("get_lobby_tournament_prediction_counts", {
       lobby_id_param: lobbyId,
       tournament_id_param: tournamentId || null
-    });
+    }).order('match_id'), 'Grouped tournament prediction counts');
+  } catch (error) { groupedCountsError = error; }
 
   if (!groupedCountsError && groupedCounts) {
     groupedCounts.forEach((row: any) => {
@@ -101,17 +104,18 @@ const fetchPredictionCountsByMatchId = async (
 
   let countQuery = supabase
     .from("predictions")
-    .select("match_id")
+    .select("match_id, match:matches!inner(tournament_id)")
     .eq("lobby_id", lobbyId)
-    .in("match_id", matchIds)
-    .order("match_id", { ascending: true });
+    .order("match_id", { ascending: true }).order('user_id');
+  if (tournamentId) countQuery = countQuery.eq('match.tournament_id', tournamentId);
 
   const countRows = await fetchAllSupabaseRows<{ match_id: string }>(
     countQuery,
     "fetchPredictionCountsByMatchId fallback"
   );
 
-  countRows.forEach(pred => {
+  const allowed = new Set(matchIds);
+  countRows.filter(pred => allowed.has(pred.match_id)).forEach(pred => {
     statsMap.set(pred.match_id, (statsMap.get(pred.match_id) || 0) + 1);
   });
 
@@ -382,20 +386,17 @@ const fetchHomeDashboardBatchedFallback = async (
   const tournamentIds = Array.from(new Set(contexts.map(context => context.tournament_id)));
   if (tournamentIds.length === 0) return [];
 
-  const [{ data: tournamentRows, error: tournamentsError }, { data: matchRows, error: matchesError }] = await Promise.all([
-    supabase
+  const [tournamentRows, matchRows] = await Promise.all([
+    fetchAllSupabaseRows<any>(supabase
       .from('tournaments')
       .select('id, name, actual_tournament_winner_id')
-      .in('id', tournamentIds),
-    supabase
+      .in('id', tournamentIds).order('id'), 'Home tournaments'),
+    fetchAllSupabaseRows<any>(supabase
       .from('matches')
       .select('id, tournament_id, home_participant_id, away_participant_id, lock_time_utc, status, home_score, away_score')
       .in('tournament_id', tournamentIds)
-      .order('lock_time_utc', { ascending: true })
+      .order('lock_time_utc', { ascending: true }).order('id'), 'Home tournament matches')
   ]);
-
-  if (tournamentsError) throw tournamentsError;
-  if (matchesError) throw matchesError;
 
   const matches = (matchRows || []) as HomeDashboardMatchInput[];
   const matchIds = matches.map(match => match.id);
@@ -405,10 +406,10 @@ const fetchHomeDashboardBatchedFallback = async (
   if (matchIds.length > 0 && lobbyIds.length > 0) {
     const predictionsQuery = supabase
       .from('predictions')
-      .select('lobby_id, match_id')
+      .select('lobby_id, match_id, match:matches!inner(tournament_id)')
       .eq('user_id', userId)
       .in('lobby_id', lobbyIds)
-      .in('match_id', matchIds)
+      .in('match.tournament_id', tournamentIds)
       .order('lobby_id', { ascending: true })
       .order('match_id', { ascending: true });
     predictionRows = await fetchAllSupabaseRows(predictionsQuery, 'fetchHomeDashboard fallback predictions');
@@ -869,13 +870,11 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
   }
 
   // 2. Fetch matches for this tournament
-  const { data: matches, error: matchesErr } = await supabase
+  const matches = await fetchAllSupabaseRows<any>(supabase
     .from("matches")
     .select("*")
     .eq("tournament_id", tournamentId)
-    .order("start_time_utc", { ascending: true });
-
-  if (matchesErr) throw matchesErr;
+    .order("start_time_utc", { ascending: true }).order('id'), 'Tournament matches');
 
   // 3. Fetch participants to get details like flags and full names
   const { data: participants, error: pErr } = await supabase
@@ -888,13 +887,11 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
   participants?.forEach(p => participantsMap.set(p.id, p));
 
   // 4. Fetch predictions made by this user in this lobby
-  const { data: userPreds, error: predsErr } = await supabase
+  const userPreds = await fetchAllSupabaseRows<any>(supabase
     .from("predictions")
     .select("*")
     .eq("lobby_id", lobbyId)
-    .eq("user_id", userId);
-
-  if (predsErr) throw predsErr;
+    .eq("user_id", userId).order('match_id'), 'My lobby predictions');
   const predictionsMap = new Map();
   userPreds?.forEach(p => predictionsMap.set(p.match_id, p));
 
@@ -976,7 +973,7 @@ export const savePrediction = async (userId: string, lobbyId: string, matchId: s
     throw new Error("Zápas už má uložený výsledek, tip nelze změnit.");
   }
 
-  if (home === away && match.tournament_id === "ms-hockey-2026") {
+  if (home === away && isHockeyTournament(match.tournament_id)) {
     throw new Error("V hokeji není remíza povolena. Vyberte vítěze zápasu v základní době / po prodloužení!");
   }
 
@@ -1113,7 +1110,7 @@ export const fetchLobbyLeaderboard = async (
         match_id,
         predicted_home_score,
         predicted_away_score,
-        match:matches (
+        match:matches!inner (
           home_score,
           away_score,
           tournament_id
@@ -1125,17 +1122,7 @@ export const fetchLobbyLeaderboard = async (
       .order("match_id", { ascending: true });
 
     if (tournamentId) {
-      const { data: tMatches } = await supabase
-        .from("matches")
-        .select("id")
-        .eq("tournament_id", tournamentId);
-
-      if (tMatches && tMatches.length > 0) {
-        const matchIds = tMatches.map(m => m.id);
-        predsQuery = predsQuery.in("match_id", matchIds);
-      } else if (tMatches) {
-        predsQuery = predsQuery.in("match_id", ["none"]); // force empty if no matches
-      }
+      predsQuery = predsQuery.eq('match.tournament_id', tournamentId);
     }
 
     preds = await fetchAllSupabaseRows<any>(predsQuery, "fetchLobbyLeaderboard predictions");
@@ -1180,7 +1167,7 @@ export const fetchLobbyLeaderboard = async (
           p.predicted_away_score,
           match.home_score,
           match.away_score,
-          match.tournament_id === "ms-hockey-2026" ? "hockey" : "football"
+          isHockeyTournament(match.tournament_id) ? "hockey" : "football"
         )
       : (p.points_earned || 0);
 
@@ -1372,19 +1359,19 @@ const fetchFormattedLobbyPredictions = async (
 
   let predsQuery = supabase
     .from("predictions")
-    .select("user_id, lobby_id, match_id, predicted_home_score, predicted_away_score, points_earned")
+    .select("user_id, lobby_id, match_id, predicted_home_score, predicted_away_score, points_earned, match:matches!inner(tournament_id)")
     .eq("lobby_id", lobbyId)
     .order("user_id", { ascending: true })
     .order("lobby_id", { ascending: true })
     .order("match_id", { ascending: true });
 
-  if (matchIds.length > 0) {
-    predsQuery = predsQuery.in("match_id", matchIds);
+  if (tournamentId) {
+    predsQuery = predsQuery.eq('match.tournament_id', tournamentId);
   }
 
   const allPreds = await fetchAllSupabaseRows<any>(predsQuery, label);
 
-  return (allPreds || []).map(p => {
+  return (allPreds || []).filter(p => matchById.has(p.match_id)).map(p => {
     const match = matchById.get(p.match_id);
     return {
       player_id: p.user_id,
