@@ -25,6 +25,15 @@ authoritative deployment record.
 
 ## Write boundary
 
+Legacy tournament-winner picks freeze `id`, `user_id`, `lobby_id`,
+`tournament_id` and `prediction_type` for authenticated clients. Both the old
+and new row must satisfy active membership, the attached tournament and the
+first-kickoff deadline. No fixtures still means open, as before. The participant
+may change before that deadline; earned points remain server-managed. The
+service-role champion confirmation path may score locked picks. See migration
+`20261106165806_longterm_prediction_context_guard.sql` and the matching
+transactional test in `supabase/tests`.
+
 `create_lobby_secure(...)` performs one atomic database operation:
 
 1. derives the owner from `public.current_player_id()`,

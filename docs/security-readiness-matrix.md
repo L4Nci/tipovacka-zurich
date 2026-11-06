@@ -15,7 +15,7 @@ penetrační test ani certifikace veřejného provozu.
 | RLS tabulek | Hostovaná metadata: všech 20 tehdejších public tabulek zapnuté RLS | Správnost každé policy a všech SECURITY DEFINER cest, ne jen zapnutí |
 | Cizí lobby / odebraný člen | Existující kontroly členství a rollback sady z předchozí práce | Průchod se skutečnými účty a záměrně cizími ID napříč všemi RPC |
 | Staré zápasové tipy/uzávěrky | Kontroly starého i nového řádku a výsledku v DB | Hraniční souběhy a kompletní kontrola každé alternativní cesty |
-| Starý tip na vítěze turnaje | Potvrzený podmíněný nález přesunu kontextu, P3 | Kontext zmrazit, kontrolovat původní uzávěrku a přidat negativní test; oprava dosud neprovedena |
+| Starý tip na vítěze turnaje | Opraveno v hostované DB migrací `20261106165806`; útok potvrzen před opravou, po opravě odmítnut; rollback sada a nezávislá revize | Skutečné prohlížečové relace a hraniční souběhy nejsou touto SQL sadou pokryté |
 | Nový MMA pilot | 7 zdrojových/sync testů, skutečně prošlá bootstrap DB/RLS sada s ROLLBACK; ověřeno odstranění fixtures | Nasazená cesta se skutečným Clerk účtem a souběhy/živé výsledky |
 | Klíče | Server-only proměnné, žádný server-secret env název ve frontendu při čtecí kontrole | Finální bundle, nastavení Netlify, logy a přístupová práva/rotace |
 | Historické přihlášení | Kompatibilita Supabase UUID je záměrně stále v DB | Rozhodnutí o vyřazení, revokaci a obnově admin účtu; nespoléhat na skrytý starý formulář |
@@ -32,3 +32,24 @@ To nezavršuje nezávislý audit celé aplikace ani přijetí produktu vlastník
 
 Kvantifikace pokrytí se nesmí nahrazovat tvrzením „všechny možné i nemožné
 scénáře“. Před kampaní se tato matice uzavírá po konkrétních řádcích.
+
+## Oprava sezonního vítěze, 6. 11. 2026
+
+`supabase/tests/longterm_prediction_context_guard.sql` skutečně prošla v jediné
+transakci zakončené ROLLBACK po nasazení opravy. Ověřuje přesun zamčeného tipu
+s 10 i 0 body, přesuny otevřeného tipu mezi lobby/soutěžemi, změnu identity,
+podvržení bodů, přesnou uzávěrku, cizího hráče i v rolích owner/admin, odebrané
+a odešlé členy, čekajícího žadatele a zákaz mazání. Běžný insert, opakovaný upsert,
+změna volby před uzávěrkou a serverové bodování 10 → 0 → 10 zůstaly funkční.
+Nezávislý read-only reviewer nenašel obcházení ani regresi této opravy.
+
+Znovu prošla `supabase/tests/clerk_identity_bridge.sql` a `npm run test:clerk`
+(17 testů a autorizační scénáře endpointu sezonního vítěze). SQL sady emulují
+ověřené claims; samy neověřují podpis JWT ani skutečný OAuth průchod.
+Otisky všech řádků `predictions`, `matches`, `profiles` a obsah
+`longterm_predictions` před a po zásahu byly stejné. Testovací fixtures nezůstaly.
+
+Supabase advisor stále hlásí záměrně veřejné feature flags, klientská SECURITY
+DEFINER RPC a vypnutou ochranu kompromitovaných hesel historického Supabase Auth.
+Pouhá přítomnost těchto upozornění nedokazuje chybu ani jejich bezpečnost;
+u dalších RPC a zbývajících řádků matice práce pokračuje.
