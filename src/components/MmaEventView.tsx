@@ -1,71 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, CheckCircle2, RefreshCw, Trophy } from 'lucide-react';
-import { canPredictMmaFight, MMA_PILOT_EVENTS, type MmaFight, type MmaPrediction, type MmaFighter } from '../lib/mma.ts';
-import { fetchMmaLobby, saveMmaPrediction, type MmaLobbyData } from '../lib/mmaDb.ts';
-import { MATCH_TIME_ZONE } from '../lib/matchTime.ts';
-
-const dateLabel = (value: string, lang: 'cz' | 'en') => new Intl.DateTimeFormat(lang === 'cz' ? 'cs-CZ' : 'en-GB', {
-  day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: MATCH_TIME_ZONE,
-}).format(new Date(value));
-const stateLabel = (fight: MmaFight, lang: 'cz' | 'en') => {
-  const cs = lang === 'cz';
-  if (fight.status === 'cancelled') return cs ? 'Zrušeno · bez bodů' : 'Cancelled · no points';
-  if (fight.status === 'draw') return cs ? 'Remíza · bez bodů' : 'Draw · no points';
-  if (fight.status === 'void') return 'No contest · ' + (cs ? 'bez bodů' : 'no points');
-  if (fight.status === 'awaiting_result') return cs ? 'Čekáme na ověřený výsledek' : 'Awaiting verified result';
-  return fight.status === 'finished' ? (cs ? 'Výsledek' : 'Result') : (cs ? 'Připraveno k tipu' : 'Ready to predict');
-};
-
-export function MmaFightCard({ fight, fighters, prediction, open, busy, lang, onSave }: {
-  key?: string; fight: MmaFight; fighters: Map<number, MmaFighter>; prediction?: MmaPrediction;
-  open: boolean; busy: boolean; lang: 'cz' | 'en'; onSave: (winner: number) => Promise<void>;
-}) {
-  const validPick = prediction?.lineup_version === fight.lineup_version;
-  const [selected, setSelected] = useState<number | null>(validPick ? prediction!.predicted_winner_id : null);
-  useEffect(() => {
-    setSelected(prediction?.lineup_version === fight.lineup_version ? prediction.predicted_winner_id : null);
-  }, [fight.id, fight.lineup_version, prediction?.predicted_winner_id, prediction?.lineup_version]);
-  const cs = lang === 'cz';
-  const a = fight.fighter_a_id === null ? undefined : fighters.get(fight.fighter_a_id);
-  const b = fight.fighter_b_id === null ? undefined : fighters.get(fight.fighter_b_id);
-  const winner = fight.winner_fighter_id === null ? undefined : fighters.get(fight.winner_fighter_id);
-  const saved = validPick && prediction?.predicted_winner_id === selected;
-  const section = fight.card_section === 'main' ? (cs ? 'Hlavní karta' : 'Main card')
-    : fight.card_section === 'early_prelims' ? 'Early prelims' : fight.card_section === 'prelims' ? 'Prelims'
-      : (cs ? 'Zařazení se upřesňuje' : 'Card section to be confirmed');
-  return <article className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-      <span>{section} · {fight.weight_class || 'MMA'}</span>
-      <span>{fight.scheduled_rounds ? fight.scheduled_rounds + (cs ? (fight.scheduled_rounds === 3 ? ' kola' : ' kol') : ' rounds') : ''}</span>
-    </div>
-    <fieldset disabled={!open || busy} className="grid grid-cols-2 gap-3">
-      <legend className="sr-only">{cs ? 'Vyber vítěze duelu' : 'Pick the bout winner'}</legend>
-      {[a, b].map((person, index) => <button key={index} type="button" aria-pressed={Boolean(person && selected === person.id)}
-        onClick={() => person && setSelected(person.id)}
-        className={'min-h-24 rounded-xl border-2 p-3 text-center transition-colors disabled:cursor-default ' +
-          (person && selected === person.id ? 'border-red-600 bg-red-50 text-slate-950' : 'border-slate-100 bg-slate-50 text-slate-700')}>
-        {person?.country_code && <span className="mb-2 block text-[10px] font-bold text-slate-400">{person.country_code}</span>}
-        <span className="block text-sm font-black leading-snug">{person?.name || (cs ? 'Soupeř bude potvrzen' : 'Opponent to be confirmed')}</span>
-      </button>)}
-    </fieldset>
-    {fight.status !== 'scheduled' ? <p className="mt-4 text-sm font-bold text-slate-700">
-      {winner ? (cs ? 'Vítěz: ' : 'Winner: ') + winner.name : stateLabel(fight, lang)}
-      {fight.method && <span className="mt-1 block text-xs font-normal text-slate-500">{fight.method}{fight.finish_round ? ' · ' + fight.finish_round + (cs ? '. kolo' : ' round') : ''}</span>}
-    </p> : open ? <>
-      {prediction && !validPick && <p className="mt-3 text-xs font-bold text-amber-700">{cs ? 'Změnilo se obsazení duelu. Vyber znovu.' : 'The bout lineup changed. Pick again.'}</p>}
-      <button type="button" disabled={selected === null || busy || saved} onClick={() => selected !== null && void onSave(selected)}
-        className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white disabled:bg-slate-100 disabled:text-slate-400">
-        {saved && <CheckCircle2 className="h-4 w-4" />}
-        {busy ? (cs ? 'Ukládám…' : 'Saving…') : saved ? (cs ? 'Tip uložen' : 'Prediction saved')
-          : prediction ? (cs ? 'Aktualizovat tip' : 'Update prediction') : (cs ? 'Uložit tip' : 'Save prediction')}
-      </button>
-    </> : <p className="mt-4 text-xs font-semibold text-slate-500">{cs ? 'Tipování je uzamčené.' : 'Predictions are locked.'}</p>}
-    {prediction && fight.status !== 'scheduled' && <p className="mt-3 text-xs font-bold text-slate-500">
-      {cs ? 'Tvůj tip: ' : 'Your pick: '}{fighters.get(prediction.predicted_winner_id)?.name || '—'}
-      {' · ' + prediction.points_earned + (cs ? ' b.' : ' pts')}
-    </p>}
-  </article>;
-}
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Clock, Info, RefreshCw, Trophy } from 'lucide-react';
+import { canPredictMmaFight, MMA_PILOT_EVENTS, type MmaFighter, type MmaFight, type MmaPrediction } from '../lib/mma.ts';
+import { fetchMmaLobby, saveMmaPrediction, type MmaLobbyData, type MmaStanding } from '../lib/mmaDb.ts';
+import { summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
+import { MmaFightCard } from './MmaFightCard.tsx';
+import { MmaRulesDialog, formatMmaEventTime } from './MmaRulesDialog.tsx';
 
 export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId, lang, initialFilter = 'all', onBack, onPredictionSaved }: {
   lobbyId: string; lobbyName: string; tournamentId: string; userId: string; lang: 'cz' | 'en';
@@ -78,6 +17,7 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
   const [saving, setSaving] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'missing' | 'results'>(initialFilter);
   const [now, setNow] = useState(Date.now());
+  const [showRules, setShowRules] = useState(false);
   const requests = useRef(0);
   const cs = lang === 'cz';
   const load = useCallback(async () => {
@@ -94,8 +34,19 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
     return () => { requests.current++; };
   }, [load]);
   useEffect(() => { const interval = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(interval); }, []);
-  const people = new Map<number, MmaFighter>((data?.fighters ?? []).map(person => [person.id, person] as const));
-  const picks = new Map<string, MmaPrediction>((data?.predictions ?? []).map(pick => [pick.fight_id, pick] as const));
+  const people = useMemo(() => new Map<number, MmaFighter>((data?.fighters ?? []).map(person => [person.id, person] as const)), [data?.fighters]);
+  const picks = useMemo(() => new Map<string, MmaPrediction>((data?.predictions ?? []).map(pick => [pick.fight_id, pick] as const)), [data?.predictions]);
+  const members = useMemo(() => new Map<string, MmaStanding>((data?.standings ?? []).map(person => [person.user_id, person] as const)), [data?.standings]);
+  const communityByFight = useMemo(() => {
+    const grouped = new Map<string, MmaPrediction[]>();
+    for (const pick of data?.lobbyPredictions ?? []) {
+      const rows = grouped.get(pick.fight_id) ?? [];
+      rows.push(pick); grouped.set(pick.fight_id, rows);
+    }
+    const active = new Set<string>(members.keys());
+    return new Map<string, ReturnType<typeof summarizeMmaPredictions>>((data?.fights ?? []).map(fight =>
+      [fight.id, summarizeMmaPredictions(lobbyId, fight, grouped.get(fight.id) ?? [], active)] as const));
+  }, [data?.lobbyPredictions, data?.fights, members, lobbyId]);
   const missing = (fight: MmaFight) => data && canPredictMmaFight(data.event, fight, now)
     && picks.get(fight.id)?.lineup_version !== fight.lineup_version;
   const rows = (data?.fights ?? []).filter(fight => filter === 'missing' ? missing(fight)
@@ -109,26 +60,29 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
       : (cs ? 'Tip se neuložil. Obnov data a zkontroluj uzávěrku.' : 'The pick was not saved. Refresh and check the deadline.')); }
     finally { setSaving(null); }
   };
-  return <div className="mx-auto min-h-screen max-w-lg bg-slate-50 pb-12 shadow-xl">
-    <header className="sticky top-0 z-30 border-b border-slate-100 bg-white p-4">
+  return <div className="mx-auto min-h-screen max-w-lg bg-slate-50 pb-24 shadow-2xl">
+    <header className="sticky top-0 z-50 border-b border-slate-100 bg-white p-6">
       <button onClick={onBack} className="mb-3 flex min-h-10 items-center gap-2 text-xs font-bold text-slate-500">
         <ArrowLeft className="h-4 w-4" />{lobbyName}
       </button>
-      <h1 className="text-2xl font-black italic tracking-tight text-slate-950">{title}</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="min-w-0 text-2xl font-black italic tracking-tight text-slate-950">{title}</h1>
+        <button type="button" onClick={() => setShowRules(true)} aria-haspopup="dialog" aria-expanded={showRules}
+          aria-label={cs ? 'Pravidla a bodování' : 'Rules and scoring'}
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-400 shadow-sm transition-colors hover:border-slate-200 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+          <Info className="h-5 w-5" />
+        </button>
+      </div>
     </header>
+    <MmaRulesDialog open={showRules} event={data?.event} lang={lang} onClose={() => setShowRules(false)} />
     <main className="space-y-4 p-4">
-      <section className="rounded-2xl border border-slate-100 bg-white p-4 text-xs leading-relaxed text-slate-600">
-        <p className="font-black text-slate-900">{cs ? 'Tipuj vítěze každého duelu. Správný tip = 1 bod.' : 'Pick each bout winner. Correct pick = 1 point.'}</p>
-        <p className="mt-1">{cs ? 'Remíza, no contest a zrušený duel jsou bez bodů. Celá karta se zamyká při prvním zápase.' : 'Draws, no contests and cancelled bouts award no points. All picks lock at the first bout.'}</p>
-        {data && <div className="mt-3 space-y-1">
-          <p className="font-bold text-red-600">{cs ? 'Uzávěrka karty: ' : 'Card deadline: '}{dateLabel(data.event.lock_time_utc, lang)}</p>
-          {data.event.main_card_at && <p>{cs ? 'Hlavní karta: ' : 'Main card: '}{dateLabel(data.event.main_card_at, lang)}</p>}
-          <p className="text-[10px] text-slate-400">{cs ? 'Časy jsou uvedené pro Prahu.' : 'Times are shown in Prague time.'}</p>
-        </div>}
-      </section>
+      {data && <p className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+        <Clock className="h-3 w-3 shrink-0" />
+        <span>{cs ? 'Uzávěrka karty: ' : 'Card deadline: '}{formatMmaEventTime(data.event.lock_time_utc, lang)}</span>
+      </p>}
       <div className="flex flex-wrap items-center gap-2">
         {(['all', 'missing', 'results'] as const).map(value => <button key={value} onClick={() => setFilter(value)}
-          className={'min-h-10 rounded-full px-4 text-xs font-bold ' + (filter === value ? 'bg-red-600 text-white' : 'border border-slate-200 bg-white text-slate-500')}>
+          className={'min-h-10 rounded-full px-4 py-1.5 text-[10px] font-black transition-colors ' + (filter === value ? 'bg-red-600 text-white shadow-lg shadow-red-100' : 'border border-slate-100 bg-white text-slate-400 hover:border-slate-200')}>
           {value === 'all' ? (cs ? 'Vše' : 'All') : value === 'results' ? (cs ? 'Výsledky' : 'Results')
             : (cs ? 'Bez tipu' : 'Missing') + (data ? ' (' + data.fights.filter(missing).length + ')' : '')}
         </button>)}
@@ -143,6 +97,7 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
           : (cs ? 'Zatím tu nejsou výsledky.' : 'No results yet.')}
       </p>}
       {data && rows.map(fight => <MmaFightCard key={fight.id} fight={fight} fighters={people} prediction={picks.get(fight.id)}
+        community={communityByFight.get(fight.id)} members={members} userId={userId}
         open={canPredictMmaFight(data.event, fight, now)} busy={saving !== null} lang={lang} onSave={winner => save(fight, winner)} />)}
       {data && <section className="rounded-2xl border border-slate-100 bg-white p-4">
         <h2 className="mb-4 flex items-center gap-2 text-sm font-black text-slate-900"><Trophy className="h-4 w-4" />{cs ? 'Pořadí této lobby' : 'This lobby’s standings'}</h2>

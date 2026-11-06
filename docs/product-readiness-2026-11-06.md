@@ -137,10 +137,12 @@ agent převzal validaci a report. Měření spotřeby skenu nebylo dostupné.
 Výsledek se vztahuje k původnímu snapshotu; souběžně vznikala plánovací dokumentace.
 
 Nález: starý tip na vítěze turnaje lze při existenci vhodného budoucího/prázdného
-cíle přesunout změnou kontextu a zachovat dřívější body. V aktuálních metadatech
-je počet takových cílových turnajů nula. Oprava má zmrazit identitu kontextu a
+cíle přesunout změnou kontextu a zachovat dřívější body. Před MMA importem byl
+v metadatech počet takových cílových turnajů nula. Po přidání MMA
+existují dva katalogy bez legacy zápasů; samostatné MMA pořadí long-term tipy
+nepoužívá, ale stará mezera vyžaduje opravu před širším provozem. Oprava má zmrazit identitu kontextu a
 kontrolovat uzávěrku původního řádku. Hráč tím nezískává cizí členství ani roli.
-Žádný útok ani opravný zápis v DB nebyl proveden.
+Žádný útok ani opravný zápis této legacy mezery v DB nebyl proveden.
 
 Před širším provozem zbývá samostatně projít další RPC/sync zdroje, negativní
 scénáře se skutečnými účty, historické přihlášení, produkční Clerk, admin MFA a
