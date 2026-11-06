@@ -2,6 +2,7 @@ import {StrictMode, Suspense, lazy} from 'react';
 import {createRoot} from 'react-dom/client';
 import { AppClerkProvider } from './lib/clerkSession.tsx';
 import './index.css';
+import { LocaleProvider, LocalizedText } from './i18n/LocaleProvider.tsx';
 
 // Do not evaluate data modules or start requests before configuration is explicit.
 const App = lazy(() => import('./App.tsx'));
@@ -12,20 +13,21 @@ const configurationReady = Boolean(clerkKey && /^pk_(test|live)_/.test(clerkKey)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <LocaleProvider>
     {configurationReady ? (
       <AppClerkProvider publishableKey={clerkKey!}>
-        <Suspense fallback={<div className="flex min-h-screen items-center justify-center" role="status">Načítám Tipovačku… / Loading…</div>}>
+        <Suspense fallback={<div className="flex min-h-screen items-center justify-center" role="status"><LocalizedText message="app.loading" /></div>}>
           <App />
         </Suspense>
       </AppClerkProvider>
     ) : (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
         <div className="max-w-md space-y-3 rounded-3xl bg-white p-8 shadow-sm" role="alert">
-          <h1 className="text-xl font-black text-slate-900">Přihlášení zatím není nakonfigurované</h1>
-          <p className="text-sm text-slate-600">Přihlášení bude dostupné po dokončení nastavení aplikace.</p>
-          <p className="text-sm text-slate-600" lang="en">Sign-in is not configured yet. Clerk and Supabase configuration is required.</p>
+          <h1 className="text-xl font-black text-slate-900"><LocalizedText message="app.configurationTitle" /></h1>
+          <p className="text-sm text-slate-600"><LocalizedText message="app.configurationBody" /></p>
         </div>
       </main>
     )}
+    </LocaleProvider>
   </StrictMode>,
 );

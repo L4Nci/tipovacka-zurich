@@ -1,3 +1,4 @@
+import { translate, locales, supportedLocales, type Locale } from '../i18n/index.ts';
 import React, { Dispatch, SetStateAction, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Flame, LogOut, Pencil, X } from 'lucide-react';
@@ -26,7 +27,7 @@ type ProfileStats = Player & {
 
 type ProfileScreenProps = {
   t: any;
-  lang: 'cz' | 'en';
+  lang: Locale;
   user: Player;
   accountEmail: string | null;
   onManageAccount: () => void;
@@ -43,7 +44,7 @@ type ProfileScreenProps = {
   avatarError: string;
   onSaveAvatar: (emoji?: string, bg?: string) => Promise<void>;
   onLogout: () => Promise<void>;
-  onChangeLanguage: (language: 'cz' | 'en') => Promise<void>;
+  onChangeLanguage: (language: Locale) => Promise<void>;
   UserAvatar: UserAvatarComponent;
   communityEnabled: boolean;
   badgesEnabled: boolean;
@@ -78,13 +79,13 @@ export default function ProfileScreen({
   const profileSavingRef = useRef(false);
   const [profileMessage, setProfileMessage] = useState('');
   const [profileError, setProfileError] = useState('');
-  const changeLanguage = async (language: 'cz' | 'en') => {
+  const changeLanguage = async (language: Locale) => {
     if (profileSavingRef.current) return;
     profileSavingRef.current = true;
     setProfileSaving(true);
     setProfileError('');
     try { await onChangeLanguage(language); }
-    catch (failure: unknown) { setProfileError(failure instanceof Error ? failure.message : 'Jazyk se nepodařilo uložit. / Unable to save language.'); }
+    catch (failure: unknown) { setProfileError(failure instanceof Error ? failure.message : translate(lang, "profileScreen.unableToSaveTheLanguage")); }
     finally { profileSavingRef.current = false; setProfileSaving(false); }
   };
   const saveAvatar = async (emoji: string, bg: string) => {
@@ -110,7 +111,7 @@ export default function ProfileScreen({
             disabled={profileSaving}
             onClick={() => setShowAvatarEditor(true)}
             className="absolute -right-1 -bottom-1 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-white shadow-lg ring-4 ring-white active:scale-95 transition-all"
-            aria-label={lang === 'cz' ? 'Upravit avatar' : 'Edit avatar'}
+            aria-label={translate(lang, "profileScreen.editAvatar")}
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
@@ -125,15 +126,15 @@ export default function ProfileScreen({
           setProfileMessage('');
           try {
             await onSaveProfileName(displayName);
-            setProfileMessage(lang === 'cz' ? 'Jméno uloženo.' : 'Name saved.');
+            setProfileMessage(translate(lang, "profileScreen.nameSaved"));
           } catch (failure: unknown) {
-            setProfileError(failure instanceof Error ? failure.message : (lang === 'cz' ? 'Jméno se nepodařilo uložit.' : 'Unable to save name.'));
+            setProfileError(failure instanceof Error ? failure.message : (translate(lang, "profileScreen.unableToSaveName")));
           } finally { profileSavingRef.current = false; setProfileSaving(false); }
         }}>
-          <label className="block text-xs font-bold text-slate-500">{lang === 'cz' ? 'Zobrazované jméno' : 'Display name'}
+          <label className="block text-xs font-bold text-slate-500">{translate(lang, "authScreen.displayName")}
             <input required minLength={2} maxLength={40} autoComplete="nickname" value={displayName} onChange={event => setDisplayName(event.target.value)} className="mt-2 w-full rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-red-600" />
           </label>
-          <button type="submit" disabled={profileSaving} className="min-h-11 w-full rounded-2xl bg-slate-900 text-xs font-bold text-white disabled:opacity-60">{profileSaving ? (lang === 'cz' ? 'Ukládám…' : 'Saving…') : (lang === 'cz' ? 'Uložit jméno' : 'Save name')}</button>
+          <button type="submit" disabled={profileSaving} className="min-h-11 w-full rounded-2xl bg-slate-900 text-xs font-bold text-white disabled:opacity-60">{profileSaving ? (translate(lang, "authScreen.saving")) : (translate(lang, "profileScreen.saveName"))}</button>
           {profileMessage ? <p className="text-center text-xs text-green-700" role="status">{profileMessage}</p> : null}
           {profileError ? <p className="text-center text-xs text-red-600" role="alert">{profileError}</p> : null}
         </form>
@@ -165,13 +166,13 @@ export default function ProfileScreen({
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                  {lang === 'cz' ? 'Avatar' : 'Avatar'}
+                  {translate(lang, "profileScreen.avatar")}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setShowAvatarEditor(false)}
                   className="w-8 h-8 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center hover:bg-slate-100"
-                  aria-label={lang === 'cz' ? 'Zavřít avatar editor' : 'Close avatar editor'}
+                  aria-label={translate(lang, "profileScreen.closeAvatarEditor")}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -223,10 +224,10 @@ export default function ProfileScreen({
       {!communityEnabled && currentUserRank !== null && (
         <>
           <p className="px-1 text-[10px] font-black uppercase tracking-widest text-slate-400">
-            {lang === 'cz' ? 'Aktuální soutěž' : 'Current competition'}
+            {translate(lang, "profileScreen.currentCompetition")}
           </p>
       <div className="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 transition-colors">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">{lang === 'cz' ? 'Historie (posledních 10)' : 'History (last 10)'}</h3>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">{translate(lang, "profileScreen.historyLast10")}</h3>
         <div className="grid grid-cols-10 gap-1">
           {(currentUserStats.history ?? []).map((h, idx) => (
             <div key={idx} className="min-w-0 flex flex-col items-center gap-0.5">
@@ -242,7 +243,7 @@ export default function ProfileScreen({
               </span>
             </div>
           ))}
-          {(currentUserStats.history ?? []).length === 0 && <p className="col-span-10 text-center text-[10px] text-slate-400 italic">Zatím žádná historie</p>}
+          {(currentUserStats.history ?? []).length === 0 && <p className="col-span-10 text-center text-[10px] text-slate-400 italic">{translate(lang, "profileScreen.noHistoryYet")}</p>}
         </div>
       </div>
 
@@ -252,11 +253,11 @@ export default function ProfileScreen({
           <p className="mt-1 text-2xl font-black leading-none text-red-600 transition-colors">{currentUserStats.total_points}</p>
         </div>
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-          <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Pořadí' : 'Rank'}</p>
+          <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{translate(lang, "rank")}</p>
           <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">#{currentUserRank ?? '-'}</p>
         </div>
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-          <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Na lídra' : 'To Leader'}</p>
+          <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{translate(lang, "profileScreen.toLeader")}</p>
           <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">{currentUserLeaderGap}</p>
         </div>
       </div>
@@ -284,11 +285,11 @@ export default function ProfileScreen({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-          <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Nejlepší série' : 'Best Streak'}</p>
+          <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{translate(lang, "bestStreak")}</p>
           <p className="mt-1 text-2xl font-black leading-none text-slate-900 transition-colors">{currentUserStats.bestStreak}</p>
         </div>
         <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col items-center transition-colors">
-          <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{lang === 'cz' ? 'Aktuální série' : 'Current Streak'}</p>
+          <p className="text-[9px] font-bold text-slate-400 uppercase whitespace-nowrap">{translate(lang, "currentStreak")}</p>
           <div className="flex items-center gap-2">
             <p className="mt-1 text-2xl font-black leading-none text-orange-500 transition-colors">{currentUserStats.currentStreak}</p>
             <Flame className={`w-4 h-4 ${(currentUserStats.currentStreak ?? 0) >= 3 ? 'text-orange-500 fill-current' : 'text-slate-100'}`} />
@@ -300,18 +301,18 @@ export default function ProfileScreen({
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-          {lang === 'cz' ? 'Účet' : 'Account'}
+          {translate(lang, "profileScreen.account")}
         </h3>
         <div className="space-y-3">
           <div className="rounded-2xl bg-slate-50 px-4 py-3">
             <p className="text-[9px] font-black uppercase text-slate-400">E-mail</p>
             <p className="mt-1 truncate text-xs font-semibold text-slate-700">
-              {accountEmail || (lang === 'cz' ? 'Není dostupný' : 'Not available')}
+              {accountEmail || (translate(lang, "profileScreen.notAvailable"))}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 px-4 py-3">
             <p className="text-[9px] font-black uppercase text-slate-400">
-              {lang === 'cz' ? 'Přihlášení' : 'Sign-in methods'}
+              {translate(lang, "profileScreen.signInMethods")}
             </p>
             <p className="mt-1 text-xs font-semibold text-slate-700">
               Clerk
@@ -321,26 +322,18 @@ export default function ProfileScreen({
       </div>
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">{lang === 'cz' ? 'Zabezpečení účtu' : 'Account security'}</h3>
-        <p className="mb-4 text-xs leading-relaxed text-slate-500">{lang === 'cz' ? 'E-mail, heslo a přihlášená zařízení spravuješ ve svém účtu.' : 'Manage your email, password and signed-in devices in your account.'}</p>
-        <button type="button" onClick={onManageAccount} className="min-h-12 w-full rounded-2xl bg-slate-900 text-xs font-black text-white">{lang === 'cz' ? 'Spravovat účet' : 'Manage account'}</button>
+        <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">{translate(lang, "profileScreen.accountSecurity")}</h3>
+        <p className="mb-4 text-xs leading-relaxed text-slate-500">{translate(lang, "profileScreen.manageYourEmailPasswordAndSignedInDevicesIn")}</p>
+        <button type="button" onClick={onManageAccount} className="min-h-12 w-full rounded-2xl bg-slate-900 text-xs font-black text-white">{translate(lang, "profileScreen.manageAccount")}</button>
       </div>
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{t.langSelect}</h3>
         <div className="grid grid-cols-2 gap-4">
-          <button
-            disabled={profileSaving} onClick={() => void changeLanguage('cz')}
-            className={`py-3 rounded-2xl font-black border-2 transition-all ${lang === 'cz' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}
-          >
-            Čeština
-          </button>
-          <button
-            disabled={profileSaving} onClick={() => void changeLanguage('en')}
-            className={`py-3 rounded-2xl font-black border-2 transition-all ${lang === 'en' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}
-          >
-            English
-          </button>
+          {supportedLocales.map(locale => <button key={locale} type="button" lang={locale} aria-pressed={lang === locale}
+            disabled={profileSaving} onClick={() => void changeLanguage(locale)}
+            className={`py-3 rounded-2xl font-black border-2 transition-all ${lang === locale ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}
+          >{locales[locale].label}</button>)}
         </div>
       </div>
 
@@ -351,8 +344,8 @@ export default function ProfileScreen({
       >
         <LogOut className="w-4 h-4" />
         {isLoggingOut
-          ? (lang === 'cz' ? 'Odhlašuji...' : 'Logging out...')
-          : (lang === 'cz' ? 'Odhlásit se' : 'Logout')}
+          ? (translate(lang, "profileScreen.loggingOut"))
+          : (translate(lang, "logout"))}
       </button>
       {logoutError && (
         <p className="rounded-2xl bg-red-50 px-4 py-3 text-center text-[10px] font-bold text-red-600">

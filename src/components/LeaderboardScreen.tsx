@@ -1,3 +1,4 @@
+import { translate, type Locale } from '../i18n/index.ts';
 import React, { Dispatch, SetStateAction, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, ChevronDown, ChevronUp, Trophy, Trophy as TrophyIcon, X } from 'lucide-react';
@@ -22,7 +23,7 @@ type LeaderboardPlayer = Player & {
 
 type LeaderboardScreenProps = {
   t: any;
-  lang: 'cz' | 'en';
+  lang: Locale;
   user: Player;
   leaderboardWithStreaks: LeaderboardPlayer[];
   teams: Team[];
@@ -74,7 +75,7 @@ export default function LeaderboardScreen({
           type="button"
           onClick={() => setShowScoringInfo(true)}
           className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white border border-slate-100 text-slate-400 hover:text-slate-600 hover:border-slate-200 transition-colors shadow-sm"
-          aria-label={lang === 'cz' ? 'Informace o bodování' : 'Scoring information'}
+          aria-label={translate(lang, "leaderboardScreen.scoringInformation")}
         >
           <span className="text-sm font-black normal-case tracking-normal" aria-hidden="true">ⓘ</span>
         </button>
@@ -99,24 +100,24 @@ export default function LeaderboardScreen({
             >
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h3 className="text-xs font-black uppercase tracking-widest text-slate-500">
-                  {lang === 'cz' ? 'Bodování' : 'Scoring'}
+                  {translate(lang, "leaderboardScreen.scoring")}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setShowScoringInfo(false)}
                   className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100"
-                  aria-label={lang === 'cz' ? 'Zavřít informace o bodování' : 'Close scoring information'}
+                  aria-label={translate(lang, "leaderboardScreen.closeScoringInformation")}
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
               <div className="space-y-1.5">
                 {[
-                  ['Přesný výsledek', '5 b'],
-                  ['Vítěz + rozdíl', '3 b'],
-                  ['Správný vítěz', '2 b'],
-                  ['Správná remíza', '2 b'],
-                  ['Vítěz turnaje', '10 b']
+                  [translate(lang, "leaderboardScreen.exactScore"), '5 b'],
+                  [translate(lang, "leaderboardScreen.winnerGoalDifference"), '3 b'],
+                  [translate(lang, "mmaRulesDialog.correctWinner"), '2 b'],
+                  [translate(lang, "leaderboardScreen.correctDraw"), '2 b'],
+                  [translate(lang, "leaderboardScreen.tournamentWinner"), '10 b']
                 ].map(([label, points]) => (
                   <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
                     <span className="text-xs font-bold text-slate-700">{label}</span>
@@ -174,7 +175,7 @@ export default function LeaderboardScreen({
                     onClick={() => setSelectedPlayerId(p.id)}
                     className="flex min-w-0 items-center gap-3 text-left disabled:cursor-default"
                     aria-label={communityProfilesEnabled
-                      ? (lang === 'cz' ? `Otevřít profil ${p.username}` : `Open ${p.username}'s profile`)
+                      ? (translate(lang, "leaderboardScreen.openSProfile", { value1: p.username }))
                       : undefined}
                   >
                     <div className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black shadow-sm ${rankTone}`}>
@@ -184,7 +185,7 @@ export default function LeaderboardScreen({
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="font-black text-slate-800 truncate">{p.username}</span>
-                        {p.lobby_role === 'owner' && <span title="Správce lobby">👑</span>}
+                        {p.lobby_role === 'owner' && <span title={translate(lang, "leaderboardScreen.lobbyAdministrator")}>👑</span>}
                         {(p.currentStreak ?? 0) >= 3 && (
                           <span className="text-xs">
                             {(p.currentStreak ?? 0) >= 7 ? '🐐' : (p.currentStreak ?? 0) >= 5 ? '🔥🔥' : '🔥'}
@@ -212,8 +213,7 @@ export default function LeaderboardScreen({
                         {hasCorrectChampionPick && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
                             <CheckCircle2 className="w-3 h-3 stroke-[3]" />
-                            Správný tip · +10 bodů
-                          </span>
+                            {translate(lang, "leaderboardScreen.correctPick10Points")}</span>
                         )}
                       </div>
                     </div>
@@ -226,29 +226,29 @@ export default function LeaderboardScreen({
                 <div className="mt-2.5 grid grid-cols-4 gap-1.5">
                   <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
                     <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                      <span className="block">{lang === 'cz' ? 'Přesné' : 'Exact'}</span>
-                      <span className="block">{lang === 'cz' ? 'skóre' : 'score'}</span>
+                      <span className="block">{translate(lang, "leaderboardScreen.exact")}</span>
+                      <span className="block">{translate(lang, "leaderboardScreen.score")}</span>
                     </p>
                     <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.exact_hits ?? 0}</p>
                   </div>
                   <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
                     <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                      <span className="block">{lang === 'cz' ? 'Rozdíl' : 'Goal'}</span>
-                      <span className="block">{lang === 'cz' ? 'gólů' : 'difference'}</span>
+                      <span className="block">{translate(lang, "leaderboardScreen.goal")}</span>
+                      <span className="block">{translate(lang, "leaderboardScreen.difference")}</span>
                     </p>
                     <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.goal_difference_hits ?? 0}</p>
                   </div>
                   <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
                     <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                      <span className="block">{lang === 'cz' ? 'Správný' : 'Correct'}</span>
-                      <span className="block">{lang === 'cz' ? 'vítěz' : 'winner'}</span>
+                      <span className="block">{translate(lang, "leaderboardScreen.correct")}</span>
+                      <span className="block">{translate(lang, "winner")}</span>
                     </p>
                     <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.winner_hits ?? 0}</p>
                   </div>
                   <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
                     <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                      <span className="block">{lang === 'cz' ? 'Tip na' : 'Inexact'}</span>
-                      <span className="block">{lang === 'cz' ? 'remízu' : 'draw'}</span>
+                      <span className="block">{translate(lang, "leaderboardScreen.inexact")}</span>
+                      <span className="block">{translate(lang, "leaderboardScreen.draw")}</span>
                     </p>
                     <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.draw_hits ?? 0}</p>
                   </div>

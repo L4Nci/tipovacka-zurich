@@ -1,3 +1,4 @@
+import { translate, type Locale } from '../i18n/index.ts';
 type PredictionDistributionProps = {
   homeLabel: string;
   awayLabel: string;
@@ -5,16 +6,16 @@ type PredictionDistributionProps = {
   awayPercent: number;
   drawPercent?: number;
   loading?: boolean;
-  lang: 'cz' | 'en';
+  lang: Locale;
 };
 
 /** Saved lobby picks, not betting odds or an editable slider. */
 export function PredictionDistribution({ homeLabel, awayLabel, homePercent, awayPercent, drawPercent,
   loading = false, lang }: PredictionDistributionProps) {
   const showDraw = drawPercent !== undefined;
-  const drawLabel = lang === 'cz' ? 'Remíza' : 'Draw';
-  const description = loading ? (lang === 'cz' ? 'Načítám poměr tipů' : 'Loading prediction distribution')
-    : (lang === 'cz' ? 'Poměr tipů: ' : 'Saved predictions: ') + [homeLabel + ': ' + homePercent + '%', ...(showDraw ? [drawLabel + ': ' + drawPercent + '%'] : []),
+  const drawLabel = translate(lang, "predictionDistribution.draw");
+  const description = loading ? (translate(lang, "predictionDistribution.loadingPredictionDistribution"))
+    : (translate(lang, "predictionDistribution.savedPredictions")) + [homeLabel + ': ' + homePercent + '%', ...(showDraw ? [drawLabel + ': ' + drawPercent + '%'] : []),
       awayLabel + ': ' + awayPercent + '%'].join(', ');
   return <div className="px-1 mb-1" role="img" aria-label={description}>
     <div className={`grid ${showDraw ? 'grid-cols-3' : 'grid-cols-2'} items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase`}>

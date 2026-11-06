@@ -1,3 +1,5 @@
+import { translate, getMessages, type Locale } from './i18n/index.ts';
+import { LocalizedText, useLocale } from './i18n/LocaleProvider.tsx';
 import React, { Component, Suspense, lazy, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -95,154 +97,6 @@ const LazyProfileScreen = lazy(() => import('./components/ProfileScreen.tsx'));
 const LazyOfficialEventView = lazy(() => import('./components/OfficialEventView.tsx'));
 const LazyMmaEventView = lazy(() => import('./components/MmaEventView.tsx'));
 
-const translations = {
-  cz: {
-    matches: "Zápasy",
-    results: "Výsledky",
-    rank: "Pořadí",
-    admin: "Admin",
-    profile: "Profil",
-    winnerTab: "Vítěz",
-    upcoming: "Nadcházející zápasy",
-    finished: "Odehrané zápasy",
-    pts: "body",
-    exact: "přesné",
-    exactHit: "Přesně!",
-    goalDiff: "rozdíl",
-    winner: "vítěz",
-    draw: "remíza",
-    saveTip: "Uložit tip",
-    updateTip: "Aktualizovat tip",
-    yourPrediction: "Tvůj tip",
-    noUpcoming: "Teď není co tipovat.",
-    noResults: "Výsledky se objeví po prvním odehraném zápase.",
-    globalStandings: "Celkové pořadí",
-    pos: "Poz",
-    player: "Hráč",
-    tournamentWinner: "Tvůj vítěz turnaje",
-    pickWinner: "Vyber vítěze turnaje",
-    currentStreak: "Aktuální série",
-    bestStreak: "Nejlepší série",
-    totalPoints: "Celkem bodů",
-    exactScores: "Přesné skóre",
-    langSelect: "Jazyk / Language",
-    logout: "Odhlásit se",
-    loginTitle: "FAN TIPOVAČKA",
-    signin: "Přihlásit se",
-    register: "Registrovat se",
-    noAccount: "Nemáš účet? Registruj se",
-    hasAccount: "Máš účet? Přihlas se",
-    username: "Uživatelské jméno",
-    password: "Heslo",
-    worldChampionship: "ZURICH & FRIBOURG, SWITZERLAND",
-    othersTip: "tipy ostatních",
-    hide: "Skrýt",
-    show: "Zobrazit",
-    locked: "Méně než 5 min do zápasu",
-    noPredictions: "Zatím žádné tipy.",
-    notPicked: "Zatím nevybráno",
-    lockedWinner: "Uzamčeno 5 min před prvním zápasem",
-    adminControls: "Administrace",
-    setFinalWinner: "Nastavit vítěze turnaje",
-    setFinalChampion: "Potvrdit šampiona",
-    updateResult: "Uložit výsledek a přepočítat",
-    loading: "Načítání...",
-    all: "Vše",
-    tipsCount: "tipů",
-    createUser: "Vytvořit nového hráče",
-    newUsername: "Nové uživatelské jméno",
-    newPassword: "Heslo pro nového hráče",
-    create: "Vytvořit účet",
-    userCreated: "Hráč byl úspěšně vytvořen!",
-    officialWinner: "Skutečný šampion turnaje",
-    noDraws: "Remíza není povolena. Jeden tým musí vyhrát!",
-    playoffNoDraws: "V play-off nelze tipovat remízu.",
-    playoffWinnerRequired: "V play-off musíš vybrat vítěze.",
-    pickMatchWinner: "Vyber vítěze zápasu",
-    tipSaved: "Tip je uložen",
-    notTipped: "Bez tipu",
-    locksIn: "Zamyká se za",
-    locksAt: "Zamyká se",
-    changePass: "Změnit heslo",
-    newPass: "Nové heslo",
-    passUpdated: "Heslo aktualizováno! ✅",
-    confirmPass: "Potvrďte nové heslo",
-    passMismatch: "Hesla se neshodují!",
-  },
-  en: {
-    matches: "Matches",
-    results: "Results",
-    rank: "Rank",
-    admin: "Admin",
-    profile: "Profile",
-    winnerTab: "Winner",
-    upcoming: "Upcoming Matches",
-    finished: "Finished Matches",
-    pts: "pts",
-    exact: "exact",
-    exactHit: "Exact!",
-    goalDiff: "diff",
-    winner: "winner",
-    draw: "draw",
-    saveTip: "Save Prediction",
-    updateTip: "Update Prediction",
-    yourPrediction: "Your Prediction",
-    noUpcoming: "No upcoming matches.",
-    noResults: "No results.",
-    globalStandings: "Global Standings",
-    pos: "Pos",
-    player: "Player",
-    tournamentWinner: "Your Tournament Winner",
-    pickWinner: "Pick Tournament Winner",
-    currentStreak: "Current Streak",
-    bestStreak: "Best Streak",
-    totalPoints: "Total Points",
-    exactScores: "Exact Scores",
-    langSelect: "Language",
-    logout: "Logout",
-    loginTitle: "FAN PREDICTOR",
-    signin: "Sign In",
-    register: "Register",
-    noAccount: "No account? Register here",
-    hasAccount: "Have an account? Sign in",
-    username: "Username",
-    password: "Password",
-    worldChampionship: "World Championship",
-    othersTip: "other users' predictions",
-    hide: "Hide",
-    show: "Show",
-    locked: "Less than 5 min to game",
-    noPredictions: "No predictions yet.",
-    notPicked: "Not picked yet",
-    lockedWinner: "Locked 5 min before first game",
-    adminControls: "Admin Controls",
-    setFinalWinner: "Set Tournament Winner",
-    setFinalChampion: "Set Final Champion",
-    updateResult: "Update Final Result & Recalculate",
-    loading: "Loading...",
-    all: "All",
-    tipsCount: "tips",
-    createUser: "Create New Player",
-    newUsername: "New Username",
-    newPassword: "New User Password",
-    create: "Create Account",
-    userCreated: "Player created successfully!",
-    officialWinner: "Official Tournament Winner",
-    noDraws: "Draws are not allowed. One team must win!",
-    playoffNoDraws: "Draw predictions are not allowed in playoffs.",
-    playoffWinnerRequired: "Pick a winner in playoffs.",
-    pickMatchWinner: "Pick match winner",
-    tipSaved: "Tip saved! ✅",
-    notTipped: "You didn't predict :(",
-    locksIn: "Locks in",
-    locksAt: "Locks at",
-    changePass: "Change Password",
-    newPass: "New Password",
-    confirmPass: "Confirm New Password",
-    passUpdated: "Password updated! ✅",
-    passMismatch: "Passwords do not match!",
-  }
-};
 
 // --- Components ---
 
@@ -291,7 +145,7 @@ export const TeamFlag = ({ code, logoUrl, name, className = "w-6 h-4" }: { code:
   const isoFromEmoji = emojiToIso(code);
   
   const map: Record<string, string> = {
-    'cze': 'cz', 'svk': 'sk', 'can': 'ca', 'usa': 'us',
+    'cze': 'cs', 'svk': 'sk', 'can': 'ca', 'usa': 'us',
     'fin': 'fi', 'swe': 'se', 'sui': 'ch', 'ger': 'de',
     'lat': 'lv', 'den': 'dk', 'nor': 'no', 'kaz': 'kz',
     'aut': 'at', 'fra': 'fr', 'slo': 'si', 'hun': 'hu',
@@ -360,7 +214,7 @@ interface MatchCardProps {
   matchPredictions?: Prediction[];
   matchPredictionsLoading?: boolean;
   isHockey?: boolean;
-  lang?: 'cz' | 'en';
+  lang?: Locale;
 }
 
 export const MatchCard: React.FC<MatchCardProps> = ({
@@ -373,7 +227,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
   matchPredictions = [],
   matchPredictionsLoading = false,
   isHockey = false,
-  lang = 'cz' as const
+  lang = 'cs' as const
 }) => {
   const [home, setHome] = useState(match.predicted_home_score ?? 0);
   const [away, setAway] = useState(match.predicted_away_score ?? 0);
@@ -516,7 +370,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
       <div className="p-4">
         <div className="flex justify-between items-center mb-3">
           <div className="flex flex-col">
-            <span title={`${MATCH_TIME_ZONE} · ${lang === 'cz' ? 'český čas' : 'Czech time'}`} className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
+            <span title={`${MATCH_TIME_ZONE} · ${translate(lang, "app.czechTime")}`} className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase">
               <Clock className="w-3 h-3" />
               {formatMatchKickoff(match.start_time_utc, lang)}
             </span>
@@ -563,7 +417,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                 <div className="flex items-center gap-1.5">
                   <button 
                     onClick={() => setHome(h => Math.max(0, h - 1))}
-                    aria-label={lang === 'cz' ? 'Snížit tip domácích' : 'Decrease home prediction'}
+                    aria-label={translate(lang, "app.decreaseHomePrediction")}
                     disabled={isLocked}
                     className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
@@ -574,7 +428,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                   </div>
                   <button 
                     onClick={() => setHome(h => Math.max(0, h + 1))}
-                    aria-label={lang === 'cz' ? 'Zvýšit tip domácích' : 'Increase home prediction'}
+                    aria-label={translate(lang, "app.increaseHomePrediction")}
                     disabled={isLocked}
                     className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
@@ -587,7 +441,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                 <div className="flex items-center gap-1.5">
                   <button 
                     onClick={() => setAway(h => Math.max(0, h - 1))}
-                    aria-label={lang === 'cz' ? 'Snížit tip hostů' : 'Decrease away prediction'}
+                    aria-label={translate(lang, "app.decreaseAwayPrediction")}
                     disabled={isLocked}
                     className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
@@ -598,7 +452,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                   </div>
                   <button 
                     onClick={() => setAway(h => Math.max(0, h + 1))}
-                    aria-label={lang === 'cz' ? 'Zvýšit tip hostů' : 'Increase away prediction'}
+                    aria-label={translate(lang, "app.increaseAwayPrediction")}
                     disabled={isLocked}
                     className="w-8 h-8 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50 transition-colors"
                   >
@@ -708,7 +562,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                           }`}
                         >
                         <div className="flex items-center gap-1 mb-0.5">
-                          <UserAvatar player={{ username: p.username || 'Uživatel', avatar_emoji: p.avatar_emoji, avatar_bg: p.avatar_bg }} size="sm" />
+                          <UserAvatar player={{ username: p.username || translate(lang, "app.player"), avatar_emoji: p.avatar_emoji, avatar_bg: p.avatar_bg }} size="sm" />
                           <span className={`text-[9px] font-black uppercase truncate max-w-[55px] ${p.player_id === userId ? 'text-red-600' : ''}`}>
                             {p.player_id === userId ? 'VY' : p.username}
                           </span>
@@ -774,13 +628,13 @@ const AuthenticatedAppSkeleton = ({ t, error, onRetry }: { t: any, error: string
 
       {error ? (
         <div className="mt-6 p-4 bg-white rounded-2xl border border-red-100 shadow-sm text-center">
-          <p className="text-red-600 text-xs font-bold uppercase mb-2">Error</p>
+          <p className="text-red-600 text-xs font-bold uppercase mb-2"><LocalizedText message="common.error" /></p>
           <p className="text-slate-600 text-sm mb-4">{error}</p>
           <button
             onClick={onRetry}
             className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-transform"
           >
-            Try Again
+            <LocalizedText message="authScreen.tryAgain" />
           </button>
         </div>
       ) : (
@@ -859,7 +713,7 @@ class LazyScreenErrorBoundary extends (Component as any) {
     if (this.state.hasError) {
       return this.props.fallback ?? (
         <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-center text-xs font-bold text-red-600">
-          Obrazovku se nepodařilo načíst. Zkus aplikaci obnovit.
+          <LocalizedText message="app.screenError" />
         </div>
       );
     }
@@ -893,7 +747,9 @@ const LobbyContextFallback = ({
   error: string;
   onRetry: () => void;
   onHome: () => void;
-}) => (
+}) => {
+  const { locale: lang } = useLocale();
+  return (
   <div className="min-h-screen bg-slate-50 pb-24 max-w-lg mx-auto shadow-2xl transition-colors duration-300">
     <header className="bg-white p-6 sticky top-0 z-50 border-b border-slate-100">
       <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tighter italic uppercase">
@@ -904,7 +760,7 @@ const LobbyContextFallback = ({
       <DeferredScreenSkeleton />
       <div className={`mt-4 rounded-2xl border bg-white p-4 text-center shadow-sm ${error ? 'border-red-100' : 'border-slate-100'}`}>
         <p className={`text-sm font-bold ${error ? 'text-red-600' : 'text-slate-600'}`}>
-          {error || 'Připravuji lobby...'}
+          {error || translate(lang, "app.preparingYourLobby")}
         </p>
         {error ? (
           <div className="mt-4 grid grid-cols-2 gap-2">
@@ -913,25 +769,24 @@ const LobbyContextFallback = ({
               onClick={onHome}
               className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 text-[10px] font-black uppercase tracking-wider text-slate-600"
             >
-              Zpět na Home
-            </button>
+              {translate(lang, "officialEventView.backToHome")}</button>
             <button
               type="button"
               onClick={onRetry}
               className="min-h-10 rounded-xl bg-slate-900 px-3 text-[10px] font-black uppercase tracking-wider text-white"
             >
-              Zkusit znovu
-            </button>
+              {translate(lang, "authScreen.tryAgain")}</button>
           </div>
         ) : null}
       </div>
     </main>
   </div>
-);
+  );
+};
 
 type TournamentWinnerScreenProps = {
   t: any;
-  lang: 'cz' | 'en';
+  lang: Locale;
   winnerPickerTeams: Team[];
   currentUserPickId?: string;
   isWinnerPickerLocked: boolean;
@@ -959,8 +814,8 @@ const TournamentWinnerScreen = ({
     </h2>
     <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
       <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
-        {t.pickWinner} ({winnerPickerTeams.length} TEAMS AVAILABLE)
-        {isWinnerPickerLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">Locked</span> : null}
+        {t.pickWinner} ({winnerPickerTeams.length} {translate(lang, 'common.teamsAvailable')})
+        {isWinnerPickerLocked ? <span className="bg-slate-100 text-[8px] px-2 py-0.5 rounded-full text-slate-500 uppercase transition-colors">{translate(lang, 'common.locked')}</span> : null}
       </h3>
       <div className="grid grid-cols-4 gap-2">
         {winnerPickerTeams.map(tm => {
@@ -1015,10 +870,9 @@ export default function App() {
   
   const [tab, setTab] = useState<'matches' | 'results' | 'leaderboard' | 'winner' | 'admin' | 'profile'>('matches');
   const [matchFilter, setMatchFilter] = useState('all');
-  const [lang, setLang] = useState<'cz' | 'en'>(() => {
-    const saved = localStorage.getItem('lang');
-    return saved === 'en' || saved === 'cz' ? saved : (navigator.language.startsWith('cs') ? 'cz' : 'en');
-  });
+  const { locale: lang, setLocale: setLang } = useLocale();
+  const languageRef = useRef(lang);
+  useEffect(() => { languageRef.current = lang; }, [lang]);
   
   const [matches, setMatches] = useState<Match[]>([]);
   const [visibleMatchCount, setVisibleMatchCount] = useState(30);
@@ -1102,7 +956,7 @@ export default function App() {
       setCatalogError('');
       setNewLobbyTournament(previous => items.some(item => item.id === previous) ? previous
         : items.find(item => item.id === 'uefa-champions-league-2026-27')?.id || items[0]?.id || '');
-    }).catch(() => { if (!cancelled) setCatalogError(lang === 'cz' ? 'Soutěže se nepodařilo načíst. Obnov stránku.' : 'Could not load competitions. Refresh the page.'); });
+    }).catch(() => { if (!cancelled) setCatalogError(translate(lang, "app.couldNotLoadCompetitionsRefreshThePage")); });
     return () => { cancelled = true; };
   }, [authStatus, lang]);
 
@@ -1213,10 +1067,6 @@ export default function App() {
   );
 
   useEffect(() => {
-    localStorage.setItem('lang', lang);
-  }, [lang]);
-
-  useEffect(() => {
     let current = true;
     if (authStatus !== 'authenticated') {
       setProductFeatureFlags({});
@@ -1282,8 +1132,8 @@ export default function App() {
         console.error('Optional lobby prize metadata could not be loaded.', prizeError);
         setLobbyPrizeLoadError(
           prizeError instanceof LobbyPrizeSchemaUnavailableError
-            ? 'Ceny lobby nejsou v tomto rollout stavu databáze dostupné. Tvoje lobby zůstávají beze změny.'
-            : 'Ceny lobby se nepodařilo načíst. Tvoje lobby zůstávají dostupné.'
+            ? translate(languageRef.current, "app.lobbyPrizesAreNotAvailableYetYourLobbiesAre")
+            : translate(languageRef.current, "app.unableToLoadLobbyPrizesYourLobbiesRemainAvailable")
         );
       });
   }, [
@@ -1334,7 +1184,7 @@ export default function App() {
     } catch (contextError: any) {
       if (officialProductRequestRef.current !== requestId) return null;
       setOfficialProductError(
-        contextError?.message || 'Oficiální event se nepodařilo načíst.'
+        contextError?.message || translate(languageRef.current, "app.unableToLoadTheOfficialEvent")
       );
       setOfficialEventCard(null);
       return null;
@@ -1363,11 +1213,11 @@ export default function App() {
       .then(eventId => {
         if (officialEventDeepLinkRequestRef.current !== requestId) return;
         if (eventId) setActiveOfficialEventId(eventId);
-        else setOfficialProductError('Oficiální turnaj není dostupný.');
+        else setOfficialProductError(translate(languageRef.current, "app.thisOfficialTournamentIsUnavailable"));
       })
       .catch(eventError => {
         if (officialEventDeepLinkRequestRef.current !== requestId) return;
-        setOfficialProductError(eventError?.message || 'Oficiální turnaj se nepodařilo načíst.');
+        setOfficialProductError(eventError?.message || translate(languageRef.current, "app.unableToLoadTheOfficialTournament"));
       })
       .finally(() => {
         if (officialEventDeepLinkRequestRef.current === requestId) {
@@ -1399,7 +1249,7 @@ export default function App() {
     }
   }, [activeTournamentId]);
 
-  const t = (translations as any)[lang];
+  const t = getMessages(lang);
 
   const stageFilters = useMemo(() => {
     const byStage = new Map<string, number>();
@@ -1433,7 +1283,7 @@ export default function App() {
 
   const matchFilters = useMemo(() => [
     stageFilters[0],
-    { id: 'untipped', label: lang === 'cz' ? 'Bez tipu' : 'Missing' },
+    { id: 'untipped', label: translate(lang, "app.missing") },
     ...stageFilters.slice(1)
   ], [stageFilters, lang]);
 
@@ -1496,7 +1346,7 @@ export default function App() {
         finished: row.settled_match_count ?? 0, unresolved: (row.total_match_count ?? 0) - (row.settled_match_count ?? 0),
         isCompleted: row.is_completed, championName: null, championShortName: null, championFlag: null,
         nextStart: row.is_completed ? null : row.event_starts_at ?? null,
-        nextMatchLabel: lang === 'cz' ? 'Začátek karty · MMA' : 'First bell · MMA',
+        nextMatchLabel: translate(lang, "app.firstBellMma"),
       }]));
     const defaultTournamentId = activeTournamentId
       || activeLobby?.tournaments?.find(tournament => tournament.status === 'active')?.tournament_id
@@ -1617,13 +1467,13 @@ export default function App() {
       authenticatedUserIdRef.current = clerkSession.subject;
       setUser(profile);
       // An unfinished profile keeps the visitor's chosen language for onboarding.
-      if (!profile.needs_profile_completion) setLang(profile.locale === 'en' ? 'en' : 'cz');
+      if (!profile.needs_profile_completion) setLang(profile.locale === 'en' ? 'en' : 'cs');
       setAuthStatus(profile.needs_profile_completion ? 'profile_onboarding' : 'authenticated');
     }).catch((failure: unknown) => {
       if (!active || requestId !== authSyncRequestRef.current) return;
       authenticatedUserIdRef.current = null;
       setUser(null);
-      setError(failure instanceof Error ? failure.message : 'Účet se nepodařilo načíst. / Unable to load your account.');
+      setError(failure instanceof Error ? failure.message : translate(languageRef.current, "app.unableToLoadYourAccount"));
       setAuthStatus('auth_error');
       setLoading(false);
     });
@@ -1688,7 +1538,7 @@ export default function App() {
       }
     } catch (e: any) {
       console.error("fetchAll error:", e);
-      setError(e?.message || "Nepodařilo se synchronizovat data se Supabase.");
+      setError(e?.message || translate(lang, "app.unableToRefreshTheData"));
     } finally {
       setDeferredLoading(false);
       setLoading(false);
@@ -1756,7 +1606,7 @@ export default function App() {
       } catch (e: any) {
         if (deferredLoadRequestRef.current !== deferredRequestId) return;
         console.error("deferred data load error:", e);
-        setDeferredError(e?.message || "Nepodařilo se načíst žebříček a statistiky.");
+        setDeferredError(e?.message || translate(lang, "app.unableToLoadStandingsAndStatistics"));
       } finally {
         if (deferredLoadRequestRef.current === deferredRequestId) {
           setDeferredLoading(false);
@@ -1765,7 +1615,7 @@ export default function App() {
     } catch (e: any) {
       if (criticalLoadRequestRef.current !== criticalRequestId) return;
       console.error("critical data load error:", e);
-      setError(e?.message || "Nepodařilo se synchronizovat data se Supabase.");
+      setError(e?.message || translate(lang, "app.unableToRefreshTheData"));
       setLoading(false);
       setDeferredLoading(false);
     }
@@ -1835,7 +1685,7 @@ export default function App() {
       setHomeDashboardSummaries(dashboardResult.value.summaries);
     } else {
       console.error('home dashboard load error:', dashboardResult.reason);
-      setHomeDashboardError(dashboardResult.reason?.message || 'Akční přehled se nepodařilo načíst.');
+      setHomeDashboardError(dashboardResult.reason?.message || translate(languageRef.current, "app.unableToLoadPendingPredictions"));
     }
 
     if (membershipResult.status === 'fulfilled') {
@@ -1858,7 +1708,7 @@ export default function App() {
       }
     } else {
       console.error('membership dashboard load error:', membershipResult.reason);
-      setHomeMembershipError(membershipResult.reason?.message || 'Stav členství se nepodařilo načíst.');
+      setHomeMembershipError(membershipResult.reason?.message || translate(languageRef.current, "app.unableToLoadMembershipStatus"));
     }
 
     if (lobbyCollectionResult.status === 'fulfilled') {
@@ -1869,7 +1719,7 @@ export default function App() {
     } else {
       console.error('lobby collection refresh error:', lobbyCollectionResult.reason);
       setHomeDashboardError(currentError => (
-        currentError || 'Seznam lobby se nepodařilo obnovit.'
+        currentError || translate(languageRef.current, "app.unableToRefreshYourLobbies")
       ));
     }
 
@@ -2078,7 +1928,7 @@ export default function App() {
     try {
       await persistOnboardingState('skipped');
     } catch (onboardingError: any) {
-      setOfficialProductError(onboardingError?.message || 'Onboarding se nepodařilo přeskočit.');
+      setOfficialProductError(onboardingError?.message || translate(lang, "app.unableToSkipOnboarding"));
     } finally {
       setOfficialProductLoading(false);
     }
@@ -2094,7 +1944,7 @@ export default function App() {
       setLobbySuccess('');
       window.scrollTo({ top: 0 });
     } catch (onboardingError: any) {
-      setOfficialProductError(onboardingError?.message || 'Onboarding se nepodařilo dokončit.');
+      setOfficialProductError(onboardingError?.message || translate(lang, "app.unableToFinishOnboarding"));
     } finally {
       setOfficialProductLoading(false);
     }
@@ -2195,7 +2045,7 @@ export default function App() {
       setPendingLobbyNavigation(null);
       setLobbyFormActive('none');
       if (action === 'create') {
-        setLobbySuccess(`Lobby "${hydratedLobby.name}" vytvořena! Kód: ${hydratedLobby.join_code}`);
+        setLobbySuccess(translate(lang, 'lobby.created', { name: hydratedLobby.name, code: hydratedLobby.join_code }));
         setNewLobbyName('');
         setNewLobbyShortDescription('');
         setNewLobbyLongDescription('');
@@ -2207,7 +2057,7 @@ export default function App() {
           { position: 3, label: '' }
         ]);
       } else {
-        setLobbySuccess(`Úspěšně ses připojil k lobby "${hydratedLobby.name}"!`);
+        setLobbySuccess(translate(lang, 'lobby.joined', { name: hydratedLobby.name }));
         setJoinCodeInput('');
         clearInviteAddress();
       }
@@ -2222,7 +2072,7 @@ export default function App() {
         setLobbyFormActive('none');
         setJoinCodeInput('');
         clearInviteAddress();
-        setLobbySuccess(`Žádost o vstup do lobby "${navigationError.lobbyName}" čeká na schválení.`);
+        setLobbySuccess(translate(lang, 'lobby.requestPending', { name: navigationError.lobbyName }));
         setHomeMembershipLoading(true);
         void loadHomeDashboard({ refreshLobbyCollection: true });
         await completeOnboardingAfterLobbyPath('invite');
@@ -2231,8 +2081,8 @@ export default function App() {
 
       const message = navigationError?.message || (
         action === 'create'
-          ? 'Chyba při vytváření lobby.'
-          : 'Chyba při připojování k lobby.'
+          ? translate(lang, "app.unableToCreateTheLobby")
+          : translate(lang, "app.unableToJoinTheLobby")
       );
 
       if (targetLobby) {
@@ -2274,8 +2124,8 @@ export default function App() {
   };
 
   const handleCompleteProfileOnboarding = async (displayName: string) => {
-    const profile = await completeMyProfile(displayName, avatarData.emoji, avatarData.bg, lang === 'en' ? 'en' : 'cs');
-    if (profile.needs_profile_completion) throw new Error(lang === 'en' ? 'Please finish your profile.' : 'Dokonči prosím profil.');
+    const profile = await completeMyProfile(displayName, avatarData.emoji, avatarData.bg, lang);
+    if (profile.needs_profile_completion) throw new Error(translate(lang, "app.pleaseFinishYourProfile"));
     setUser(profile);
     setError('');
     setAuthStatus('authenticated');
@@ -2283,14 +2133,14 @@ export default function App() {
 
   const handleSaveProfileName = async (displayName: string) => {
     if (!user) return;
-    const profile = await completeMyProfile(displayName, user.avatar_emoji || '😀', user.avatar_bg || '#fee2e2', lang === 'en' ? 'en' : 'cs');
+    const profile = await completeMyProfile(displayName, user.avatar_emoji || '😀', user.avatar_bg || '#fee2e2', lang);
     setUser(previous => previous ? { ...previous, ...profile } : previous);
     setLeaderboard(previous => previous.map(player => player.id === profile.id ? { ...player, username: profile.username } : player));
   };
 
-  const handleChangeLanguage = async (nextLanguage: 'cz' | 'en') => {
+  const handleChangeLanguage = async (nextLanguage: Locale) => {
     if (!user) return;
-    const profile = await completeMyProfile(user.display_name || user.username, user.avatar_emoji || '😀', user.avatar_bg || '#fee2e2', nextLanguage === 'en' ? 'en' : 'cs');
+    const profile = await completeMyProfile(user.display_name || user.username, user.avatar_emoji || '😀', user.avatar_bg || '#fee2e2', nextLanguage);
     setUser(previous => previous ? { ...previous, ...profile } : previous);
     setLang(nextLanguage);
   };
@@ -2307,7 +2157,7 @@ export default function App() {
     } catch (logoutFailure: any) {
       setLogoutError(
         logoutFailure?.message ||
-        (lang === 'cz' ? 'Odhlášení se nezdařilo. Zkus to prosím znovu.' : 'Logout failed. Please try again.')
+        (translate(lang, "app.logoutFailedPleaseTryAgain"))
       );
     } finally {
       setIsLoggingOut(false);
@@ -2374,7 +2224,7 @@ export default function App() {
     try {
       const result = await updateMatchResDB(matchId, h, a);
       await fetchAll();
-      alert(`Výsledek uložen. Přepočteno ${result.updated_predictions_count}/${result.expected_predictions_count} tipů.`);
+      alert(translate(lang, 'admin.resultSaved', { count: `${result.updated_predictions_count}/${result.expected_predictions_count}` }));
     } catch (err: any) {
       alert(err.message);
     }
@@ -2390,11 +2240,11 @@ export default function App() {
       const preview = await setWinnerDB(teamId, tournamentId, { previewOnly: true });
       const summary = preview.summary || {};
       const confirmed = window.confirm(
-        `Potvrdit šampiona: ${champion?.name || preview.selected_champion?.name || teamId}?\n\n` +
-        `Tipů celkem: ${summary.longterm_predictions ?? 0}\n` +
-        `+10 bodů: ${summary.users_receiving_10 ?? 0}\n` +
-        `0 bodů: ${summary.users_receiving_0 ?? 0}\n` +
-        `Změněné řádky: ${summary.rows_that_would_change ?? 0}`
+        translate(lang, 'admin.confirmChampion', { name: champion?.name || preview.selected_champion?.name || teamId }) + '\n\n' +
+        translate(lang, 'admin.totalPicks', { count: summary.longterm_predictions ?? 0 }) + '\n' +
+        translate(lang, 'admin.tenPoints', { count: summary.users_receiving_10 ?? 0 }) + '\n' +
+        translate(lang, 'admin.zeroPoints', { count: summary.users_receiving_0 ?? 0 }) + '\n' +
+        translate(lang, 'admin.changedRows', { count: summary.rows_that_would_change ?? 0 })
       );
 
       if (!confirmed) return;
@@ -2402,8 +2252,8 @@ export default function App() {
       const result = await setWinnerDB(teamId, tournamentId, { confirm: true });
       await fetchAll();
       setChampionMsg(
-        `Šampion potvrzen: ${result.selected_champion?.name || champion?.name || teamId}. ` +
-        `+10 bodů získá ${result.summary?.users_receiving_10 ?? 0} hráčů.`
+        translate(lang, 'admin.championConfirmed', { name: result.selected_champion?.name || champion?.name || teamId }) + ' ' +
+        translate(lang, 'admin.championAwarded', { count: result.summary?.users_receiving_10 ?? 0 })
       );
       setSelectedWinner(null);
     } catch (err: any) {
@@ -2445,18 +2295,18 @@ export default function App() {
     setAvatarError('');
 
     try {
-      const profile = await completeMyProfile(user.display_name || user.username, nextEmoji, nextBg, lang === 'en' ? 'en' : 'cs');
+      const profile = await completeMyProfile(user.display_name || user.username, nextEmoji, nextBg, lang);
       const updatedUser = { ...user, ...profile };
       setUser(updatedUser);
       setAvatarData({ emoji: nextEmoji, bg: nextBg });
-      setAvatarMsg(lang === 'cz' ? 'Avatar uložen.' : 'Avatar saved.');
+      setAvatarMsg(translate(lang, "app.avatarSaved"));
       setLeaderboard(prev => prev.map(player => (
         player.id === user.id
           ? { ...player, avatar_emoji: nextEmoji, avatar_bg: nextBg }
           : player
       )));
     } catch (err: any) {
-      setAvatarError(err.message || (lang === 'cz' ? 'Avatar se nepodařilo uložit.' : 'Could not save avatar.'));
+      setAvatarError(err.message || (translate(lang, "app.couldNotSaveAvatar")));
     }
   };
 
@@ -2750,7 +2600,7 @@ export default function App() {
             await persistOnboardingState('started');
           } catch (onboardingError: any) {
             setOfficialProductError(
-              onboardingError?.message || 'Onboarding se nepodařilo zahájit.'
+              onboardingError?.message || translate(lang, "app.unableToStartOnboarding")
             );
             throw onboardingError;
           } finally {
@@ -2792,7 +2642,7 @@ export default function App() {
             const refreshedEvent = await loadOfficialProductContext();
             if (!shouldShowOfficialEventOnHome(refreshedEvent)) {
               throw new Error(
-                'Účast je potvrzená, ale Home se nepodařilo aktualizovat. Zkus to prosím znovu.'
+                translate(lang, "app.youHaveJoinedButHomeCouldNotRefreshPlease")
               );
             }
             setLobbyFormActive('none');
@@ -2802,7 +2652,7 @@ export default function App() {
           commercialEnabled={isProductFeatureEnabled(productFeatureFlags, 'official_event_commercial_enabled')}
           resultsEnabled={isProductFeatureEnabled(productFeatureFlags, 'official_event_results_enabled')}
           hasOwnedLobby={lobbies.some(lobby => lobby.owner_id === user.id)}
-          username={user.username || 'Tipér'}
+          username={user.username || translate(lang, "app.tipster")}
         />
       </Suspense>
     );
@@ -2817,14 +2667,14 @@ export default function App() {
               <button
                 onClick={returnFromProfile}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
-                title={lang === 'cz' ? 'Zpět' : 'Back'}
+                title={translate(lang, "app.back")}
               >
                 <ChevronRight className="w-4 h-4 rotate-180" />
               </button>
               <div>
                 <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tighter italic uppercase transition-colors">{t.profile}</h1>
                 <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-                  {lang === 'cz' ? 'Globální účet' : 'Global account'}
+                  {translate(lang, "app.globalAccount")}
                 </p>
               </div>
             </div>
@@ -2871,8 +2721,8 @@ export default function App() {
     lobbyNavigationViewState === 'missing-tournament'
   ) {
     const contextError = lobbyNavigationViewState === 'missing-lobby'
-      ? 'Lobby se nepodařilo načíst. Můžeš zkusit data obnovit nebo se vrátit na Home.'
-      : 'Turnaj se nepodařilo načíst. Můžeš zkusit data obnovit nebo se vrátit na Home.';
+      ? translate(lang, "app.unableToLoadTheLobbyRetryOrReturnHome")
+      : translate(lang, "app.unableToLoadTheTournamentRetryOrReturnHome");
 
     return (
       <LobbyContextFallback
@@ -2972,11 +2822,11 @@ export default function App() {
                     setLobbyError(""); setLobbySuccess("");
                     if (lobbyMutationInFlightRef.current) return;
                     if (!newLobbyName.trim()) {
-                      setLobbyError("Prosím zadejte název lobby.");
+                      setLobbyError(translate(lang, "app.enterALobbyName"));
                       return;
                     }
                     if (!tournamentCatalog.some(item => item.id === newLobbyTournament)) {
-                      setLobbyError(lang === 'cz' ? 'Vyber dostupnou soutěž.' : 'Select an available competition.');
+                      setLobbyError(translate(lang, "app.selectAnAvailableCompetition"));
                       return;
                     }
                     let prizeSelection: {
@@ -2990,7 +2840,7 @@ export default function App() {
                           entries: newLobbyPrizeEntries
                         });
                       } catch (prizeError: any) {
-                        setLobbyError(prizeError?.message || 'Zkontroluj nastavení cen.');
+                        setLobbyError(prizeError?.message || translate(lang, "app.checkThePrizeSettings"));
                         return;
                       }
                     }
@@ -3007,42 +2857,42 @@ export default function App() {
                       )
                     );
                   }} className="space-y-3">
-                    <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider">Vytvořit novou lobby</h4>
+                    <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider">{translate(lang, "app.createALobby")}</h4>
                     <div>
-                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Název lobby</label>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">{translate(lang, "app.lobbyName")}</label>
                       <input 
                         type="text" required value={newLobbyName} onChange={e => setNewLobbyName(e.target.value)}
                         disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
-                        placeholder="Třeba Kolegové z práce"
+                        placeholder={translate(lang, "app.forExampleWorkFriends")}
                       />
                     </div>
                     <div>
-                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">O lobby</label>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">{translate(lang, "app.aboutThisLobby")}</label>
                       <input 
                         type="text"
                         value={newLobbyShortDescription}
                         onChange={e => setNewLobbyShortDescription(e.target.value)}
                         disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-semibold"
-                        placeholder="Krátce: kdo spolu tipuje?"
+                        placeholder={translate(lang, "app.whoIsPlayingTogether")}
                         maxLength={120}
                       />
                     </div>
                     <div>
-                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Informace o lobby</label>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">{translate(lang, "app.lobbyInformation")}</label>
                       <textarea
                         value={newLobbyLongDescription}
                         onChange={e => setNewLobbyLongDescription(e.target.value)}
                         disabled={isLobbyMutationSubmitting}
                         className="w-full min-h-[88px] p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-1 focus:ring-red-600 font-medium resize-y"
-                        placeholder="Volitelné informace pro členy lobby."
+                        placeholder={translate(lang, "app.optionalInformationForLobbyMembers")}
                       />
                     </div>
                     <TournamentSetup catalog={tournamentCatalog} value={newLobbyTournament} onChange={setNewLobbyTournament}
                       disabled={isLobbyMutationSubmitting} lang={lang} error={catalogError} />
                     <fieldset disabled={isLobbyMutationSubmitting}>
-                      <legend className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Způsob vstupu</legend>
+                      <legend className="block text-[9px] text-slate-400 font-bold uppercase mb-1">{translate(lang, "app.joiningPolicy")}</legend>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <label className={`rounded-xl border p-3 ${newLobbyJoinPolicy === 'open' ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
                           <span className="flex items-center gap-2">
@@ -3053,11 +2903,10 @@ export default function App() {
                               checked={newLobbyJoinPolicy === 'open'}
                               onChange={() => setNewLobbyJoinPolicy('open')}
                             />
-                            <span className="text-[10px] font-black uppercase text-slate-700">Okamžitý vstup</span>
+                            <span className="text-[10px] font-black uppercase text-slate-700">{translate(lang, "app.joinImmediately")}</span>
                           </span>
                           <span className="mt-1 block text-[10px] font-medium leading-relaxed text-slate-500">
-                            Každý s kódem se připojí hned.
-                          </span>
+                            {translate(lang, "app.anyoneWithTheCodeCanJoinImmediately")}</span>
                         </label>
                         <label className={`rounded-xl border p-3 ${newLobbyJoinPolicy === 'approval_required' ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
                           <span className="flex items-center gap-2">
@@ -3068,11 +2917,10 @@ export default function App() {
                               checked={newLobbyJoinPolicy === 'approval_required'}
                               onChange={() => setNewLobbyJoinPolicy('approval_required')}
                             />
-                            <span className="text-[10px] font-black uppercase text-slate-700">Vstup po schválení</span>
+                            <span className="text-[10px] font-black uppercase text-slate-700">{translate(lang, "lobbyMembersDialog.approvalRequired")}</span>
                           </span>
                           <span className="mt-1 block text-[10px] font-medium leading-relaxed text-slate-500">
-                            Žádost musí potvrdit majitel nebo admin.
-                          </span>
+                            {translate(lang, "app.theOwnerOrAnAdminMustApproveTheRequest")}</span>
                         </label>
                       </div>
                     </fieldset>
@@ -3082,8 +2930,7 @@ export default function App() {
                         className="rounded-xl border border-slate-200 bg-slate-50/70 p-3"
                       >
                         <legend className="px-1 text-[9px] font-black uppercase tracking-wider text-slate-500">
-                          O co hrajeme?
-                        </legend>
+                          {translate(lang, "app.whatAreWePlayingFor")}</legend>
                         <div className="mt-1 grid grid-cols-2 gap-2">
                           {([
                             [false, 'Bez cen'],
@@ -3112,7 +2959,7 @@ export default function App() {
                           <div className="mt-3 space-y-2">
                             <div className="flex items-center gap-2 text-slate-700">
                               <Gift className="h-4 w-4 text-amber-700" aria-hidden="true" />
-                              <p className="text-[10px] font-black uppercase">Ceny podle umístění</p>
+                              <p className="text-[10px] font-black uppercase">{translate(lang, "app.prizesByPosition")}</p>
                             </div>
                             {newLobbyPrizeEntries.map((entry, index) => (
                               <label
@@ -3120,8 +2967,7 @@ export default function App() {
                                 className="grid grid-cols-[68px_1fr] items-center gap-2"
                               >
                                 <span className="text-[10px] font-black text-slate-500">
-                                  {index + 1}. místo
-                                </span>
+                                  {translate(lang, 'common.place', { position: index + 1 })}</span>
                                 <input
                                   type="text"
                                   value={entry.label}
@@ -3132,14 +2978,14 @@ export default function App() {
                                       : item
                                   ))}
                                   className="min-h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                                  placeholder={index === 0 ? 'Např. 500 Kč' : 'Volitelné'}
+                                  placeholder={index === 0 ? translate(lang, "app.forExampleAGiftVoucher") : translate(lang, "app.optional")}
                                 />
                               </label>
                             ))}
                             <div className="flex gap-2">
                               <button
                                 type="button"
-                                aria-label="Přidat další cenu"
+                                aria-label={translate(lang, "app.addAnotherPrize")}
                                 disabled={newLobbyPrizeEntries.length >= MAX_LOBBY_PRIZES}
                                 onClick={() => setNewLobbyPrizeEntries(previous => [
                                   ...previous,
@@ -3148,11 +2994,10 @@ export default function App() {
                                 className="flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[9px] font-black uppercase text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-40"
                               >
                                 <Plus className="h-4 w-4" aria-hidden="true" />
-                                Přidat další cenu
-                              </button>
+                                {translate(lang, "app.addAnotherPrize")}</button>
                               <button
                                 type="button"
-                                aria-label="Odebrat poslední cenu"
+                                aria-label={translate(lang, "app.removeLastPrize")}
                                 disabled={newLobbyPrizeEntries.length <= 1}
                                 onClick={() => setNewLobbyPrizeEntries(previous => previous.slice(0, -1))}
                                 className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-40"
@@ -3161,8 +3006,7 @@ export default function App() {
                               </button>
                             </div>
                             <p className="text-[9px] font-medium leading-relaxed text-slate-500">
-                              Ceny zajišťuje správce lobby. Tipovačka je nedrží, neověřuje ani negarantuje.
-                            </p>
+                              {translate(lang, "app.prizesAreProvidedByTheLobbyOrganizerFanPredictor")}</p>
                           </div>
                         )}
                       </fieldset>
@@ -3172,7 +3016,7 @@ export default function App() {
                       disabled={isLobbyMutationSubmitting}
                       className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 disabled:cursor-wait text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer"
                     >
-                      {isLobbyMutationSubmitting ? 'Zakládám lobby…' : 'Založit lobby'}
+                      {isLobbyMutationSubmitting ? translate(lang, "app.creatingLobby") : translate(lang, "app.createLobby")}
                     </button>
                   </form>
                 ) : (
@@ -3181,7 +3025,7 @@ export default function App() {
                     setLobbyError(""); setLobbySuccess("");
                     if (lobbyMutationInFlightRef.current) return;
                     if (!joinCodeInput.trim()) {
-                      setLobbyError("Zadej pozvánkový kód.");
+                      setLobbyError(translate(lang, "app.enterAnInvitationCode"));
                       return;
                     }
                     await navigateAfterLobbyMutation(
@@ -3189,14 +3033,14 @@ export default function App() {
                       () => joinLobbyByCode(joinCodeInput.trim())
                     );
                   }} className="space-y-3">
-                    <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider font-semibold">Připojit se k lobby</h4>
+                    <h4 className="text-[10px] font-black text-slate-700 uppercase tracking-wider font-semibold">{translate(lang, "app.joinALobby")}</h4>
                     <div>
-                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">Pozvánkový kód</label>
+                      <label className="block text-[9px] text-slate-400 font-bold uppercase mb-1">{translate(lang, "app.invitationCode")}</label>
                       <input 
                         type="text" required value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value)}
                         disabled={isLobbyMutationSubmitting}
                         className="w-full p-2.5 bg-slate-50 text-xs rounded-xl border border-slate-200 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-red-600 uppercase"
-                        placeholder="NAPŘ. 9YE6GWMR"
+                        placeholder={translate(lang, "app.eG9ye6gwmr")}
                       />
                     </div>
                     <button
@@ -3204,7 +3048,7 @@ export default function App() {
                       disabled={isLobbyMutationSubmitting}
                       className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-wait text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer"
                     >
-                      {isLobbyMutationSubmitting ? 'Připojuji…' : 'Připojit se'}
+                      {isLobbyMutationSubmitting ? translate(lang, "officialEventView.joining") : translate(lang, "app.join")}
                     </button>
                   </form>
                 )}
@@ -3234,7 +3078,7 @@ export default function App() {
                   }
                 }}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
-                title="Zpět do Lobby"
+                title={translate(lang, "app.backToLobby")}
               >
                 <ChevronRight className="w-4 h-4 rotate-180" />
               </button>
@@ -3242,7 +3086,7 @@ export default function App() {
               <button 
                 onClick={goHome}
                 className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
-                title={lang === 'cz' ? 'Zpět na Seznam Lobby' : 'Back to Lobbies'}
+                title={translate(lang, "app.backToLobbies")}
               >
                 <ChevronRight className="w-4 h-4 rotate-180" />
               </button>
@@ -3273,7 +3117,7 @@ export default function App() {
                 tournamentCatalog={tournamentCatalog}
                 lobby={activeLobby}
                 user={{ ...user, username: user.username || '' }}
-                lang={lang as 'cz' | 'en'}
+                lang={lang as Locale}
                 onSelectTournament={id => {
                   setEntryOrigin('lobby-detail');
                   setActiveTournamentId(id);
@@ -3355,7 +3199,7 @@ export default function App() {
               ))}
               {scheduledMatchesForView.length > visibleMatchCount && (
                 <button type="button" onClick={() => setVisibleMatchCount(n => n + 30)} className="mb-5 w-full rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-600">
-                  {lang === 'cz' ? 'Další zápasy' : 'More matches'} ({visibleMatchCount}/{scheduledMatchesForView.length})
+                  {translate(lang, "app.moreMatches")} ({visibleMatchCount}/{scheduledMatchesForView.length})
                 </button>
               )}
               {scheduledMatchesForView.length === 0 && (
@@ -3365,17 +3209,17 @@ export default function App() {
                   </span>
                   <h3 className="mt-4 text-base font-black text-slate-900">
                     {activeTournamentIsCompleted
-                      ? (lang === 'cz' ? 'Turnaj je ukončen' : 'Tournament completed')
+                      ? (translate(lang, "app.tournamentCompleted"))
                       : matchFilter === 'untipped'
-                        ? (lang === 'cz' ? 'Hotovo' : 'All done')
+                        ? (translate(lang, "app.allDone"))
                         : t.noUpcoming}
                   </h3>
                   <p className="mx-auto mt-2 max-w-[290px] text-sm font-medium leading-relaxed text-slate-500">
                     {activeTournamentIsCompleted
-                      ? (lang === 'cz' ? 'Všechny zápasy už mají výsledek. Podívej se, jak turnaj dopadl.' : 'All matches have results. See how the tournament finished.')
+                      ? (translate(lang, "app.allMatchesHaveResultsSeeHowTheTournamentFinished"))
                       : matchFilter === 'untipped'
-                        ? (lang === 'cz' ? 'Všechny otevřené zápasy máš tipnuté.' : 'You have predicted every open match.')
-                        : (lang === 'cz' ? 'Jakmile bude připravený další zápas, objeví se tady.' : 'The next match will appear here as soon as it is ready.')}
+                        ? (translate(lang, "app.youHavePredictedEveryOpenMatch"))
+                        : (translate(lang, "app.theNextMatchWillAppearHereAsSoonAs"))}
                   </p>
                   {(activeTournamentIsCompleted || matchFilter === 'untipped') && (
                     <button
@@ -3390,8 +3234,8 @@ export default function App() {
                       className="mt-5 min-h-11 rounded-xl bg-slate-900 px-4 text-[10px] font-black uppercase tracking-wider text-white transition-transform duration-150 active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none"
                     >
                       {activeTournamentIsCompleted
-                        ? (lang === 'cz' ? 'Zobrazit výsledky' : 'View results')
-                        : (lang === 'cz' ? 'Zobrazit všechny zápasy' : 'View all matches')}
+                        ? (translate(lang, "app.viewResults"))
+                        : (translate(lang, "app.viewAllMatches"))}
                     </button>
                   )}
                 </div>
@@ -3425,14 +3269,14 @@ export default function App() {
                ))}
               {finishedMatchesForView.length > visibleMatchCount && (
                 <button type="button" onClick={() => setVisibleMatchCount(n => n + 30)} className="mb-5 w-full rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold text-slate-600">
-                  {lang === 'cz' ? 'Další výsledky' : 'More results'} ({visibleMatchCount}/{finishedMatchesForView.length})
+                  {translate(lang, "app.moreResults")} ({visibleMatchCount}/{finishedMatchesForView.length})
                 </button>
               )}
                {finishedMatchesForView.length === 0 && (
                 <div className="rounded-3xl border border-slate-100 bg-white px-5 py-10 text-center shadow-sm">
                   <CheckCircle2 className="mx-auto h-10 w-10 text-slate-200" />
                   <h3 className="mt-4 text-base font-black text-slate-900">
-                    {lang === 'cz' ? 'Na první výsledek se čeká' : 'Waiting for the first result'}
+                    {translate(lang, "app.waitingForTheFirstResult")}
                   </h3>
                   <p className="mx-auto mt-2 max-w-[290px] text-sm font-medium leading-relaxed text-slate-500">{t.noResults}</p>
                 </div>

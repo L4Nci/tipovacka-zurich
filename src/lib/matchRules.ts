@@ -1,3 +1,4 @@
+import { translate, type Locale, type MessageKey } from '../i18n/index.ts';
 export const isGroupStage = (stage?: string | null): boolean => {
   const phase = (stage || "").trim().toLowerCase().replace(/[_\s-]+/g, ' ');
   return phase.startsWith('group') || ['league phase', 'league stage', 'regular season'].includes(phase);
@@ -31,12 +32,13 @@ export const requiresFootballWinner = (
   return tournamentId === 'fifa-world-cup-2026' || ['final', 'finals', 'third place'].includes(phase);
 };
 
-export const formatStageLabel = (stage: string, lang: 'cz' | 'en'): string => {
-  if (/^regular[ _]season$/i.test(stage.trim())) return lang === 'cz' ? 'Základní část' : 'Regular season';
-  if (/^league[ _](phase|stage)$/i.test(stage.trim())) return lang === 'cz' ? 'Ligová fáze' : 'League phase';
-  if (lang === 'en') return stage;
-  const labels: Record<string, string> = {
-    Playoffs: 'Play-off', 'Round of 16': 'Osmifinále', Quarterfinals: 'Čtvrtfinále', Semifinals: 'Semifinále', Final: 'Finále',
+export const formatStageLabel = (stage: string, lang: Locale): string => {
+  if (/^regular[ _]season$/i.test(stage.trim())) return translate(lang, "matchRules.regularSeason");
+  if (/^league[ _](phase|stage)$/i.test(stage.trim())) return translate(lang, "matchRules.leaguePhase");
+  const labels: Record<string, MessageKey> = {
+    Playoffs: 'stage.playoffs', 'Round of 16': 'stage.roundOf16', Quarterfinals: 'stage.quarterfinals', Semifinals: 'stage.semifinals', Final: 'stage.final',
   };
-  return Object.hasOwn(labels, stage) ? labels[stage] : stage.replace(/^Group\s+/i, 'Skupina ');
+  if (Object.hasOwn(labels, stage)) return translate(lang, labels[stage]);
+  const group = /^Group\s+(.+)$/i.exec(stage);
+  return group ? translate(lang, 'stage.group', { group: group[1] }) : stage;
 };

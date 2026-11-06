@@ -1,3 +1,4 @@
+import { translate, type Locale } from '../i18n/index.ts';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Award, BarChart3, Check, Eye, EyeOff, Save } from 'lucide-react';
 import type { BadgeOverview, CommunityProfile } from '../types.ts';
@@ -19,7 +20,7 @@ export default function ProfileCommunityPanel({
   badgesEnabled
 }: {
   userId: string;
-  lang: 'cz' | 'en';
+  lang: Locale;
   communityEnabled: boolean;
   badgesEnabled: boolean;
 }) {
@@ -48,7 +49,7 @@ export default function ProfileCommunityPanel({
     } catch (error: any) {
       setMessage({
         tone: 'error',
-        text: error?.message || (lang === 'cz' ? 'Profilové údaje se nepodařilo načíst.' : 'Profile data could not be loaded.')
+        text: error?.message || (translate(lang, "profileCommunityPanel.profileDataCouldNotBeLoaded"))
       });
     } finally {
       setLoading(false);
@@ -78,9 +79,9 @@ export default function ProfileCommunityPanel({
         is_public: saved.profile_visibility === 'public',
         profile: previous.profile ? { ...previous.profile, bio: saved.bio } : previous.profile
       } : previous);
-      setMessage({ tone: 'success', text: lang === 'cz' ? 'Profil byl uložen.' : 'Profile saved.' });
+      setMessage({ tone: 'success', text: translate(lang, "profileCommunityPanel.profileSaved") });
     } catch (error: any) {
-      setMessage({ tone: 'error', text: error?.message || (lang === 'cz' ? 'Profil se nepodařilo uložit.' : 'Profile could not be saved.') });
+      setMessage({ tone: 'error', text: error?.message || (translate(lang, "profileCommunityPanel.profileCouldNotBeSaved")) });
     } finally {
       setSaving(false);
     }
@@ -96,7 +97,7 @@ export default function ProfileCommunityPanel({
       await setFeaturedBadges(next);
       setBadges(await fetchUserBadges(userId));
     } catch (error: any) {
-      setMessage({ tone: 'error', text: error?.message || (lang === 'cz' ? 'Výběr odznaků se nepodařilo uložit.' : 'Badge selection could not be saved.') });
+      setMessage({ tone: 'error', text: error?.message || (translate(lang, "profileCommunityPanel.badgeSelectionCouldNotBeSaved")) });
     } finally {
       setSaving(false);
     }
@@ -109,7 +110,7 @@ export default function ProfileCommunityPanel({
           <div className="flex items-center justify-between gap-3">
             <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
               <Eye className="h-4 w-4" />
-              {lang === 'cz' ? 'Veřejný profil' : 'Public profile'}
+              {translate(lang, "profileCommunityPanel.publicProfile")}
             </h3>
             <span className="text-[10px] font-bold text-slate-400">{bio.length}/240</span>
           </div>
@@ -122,7 +123,7 @@ export default function ProfileCommunityPanel({
                 onChange={event => setBio(event.target.value.slice(0, 240))}
                 maxLength={240}
                 rows={3}
-                placeholder={lang === 'cz' ? 'Krátce o sobě. Bez odkazů a HTML.' : 'A short bio. No links or HTML.'}
+                placeholder={translate(lang, "profileCommunityPanel.aShortBioNoLinksOrHtml")}
                 className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed outline-none focus:border-red-300 focus:ring-2 focus:ring-red-100"
               />
               <button
@@ -133,8 +134,8 @@ export default function ProfileCommunityPanel({
                 <span className="flex items-center gap-2 text-xs font-bold text-slate-700">
                   {visibility === 'public' ? <Eye className="h-4 w-4 text-emerald-600" /> : <EyeOff className="h-4 w-4 text-slate-400" />}
                   {visibility === 'public'
-                    ? (lang === 'cz' ? 'Profil je veřejný' : 'Profile is public')
-                    : (lang === 'cz' ? 'Profil je soukromý' : 'Profile is private')}
+                    ? (translate(lang, "profileCommunityPanel.profileIsPublic"))
+                    : (translate(lang, "profileCommunityPanel.profileIsPrivate"))}
                 </span>
                 <span className={`h-6 w-11 rounded-full p-1 transition-colors ${visibility === 'public' ? 'bg-emerald-500' : 'bg-slate-300'}`}>
                   <span className={`block h-4 w-4 rounded-full bg-white transition-transform ${visibility === 'public' ? 'translate-x-5' : ''}`} />
@@ -142,17 +143,17 @@ export default function ProfileCommunityPanel({
               </button>
               <button type="button" onClick={saveProfile} disabled={saving} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 text-xs font-black uppercase text-white disabled:opacity-50">
                 <Save className="h-4 w-4" />
-                {saving ? (lang === 'cz' ? 'Ukládám…' : 'Saving…') : (lang === 'cz' ? 'Uložit profil' : 'Save profile')}
+                {saving ? (translate(lang, "authScreen.saving")) : (translate(lang, "profileCommunityPanel.saveProfile"))}
               </button>
             </div>
           )}
           {profile?.stats && (
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {[
-                [lang === 'cz' ? 'Tipy' : 'Predictions', profile.stats.predictions_total],
-                [lang === 'cz' ? 'Přesné' : 'Exact', profile.stats.exact_predictions],
-                [lang === 'cz' ? 'Body' : 'Points', profile.stats.match_points + profile.stats.longterm_points],
-                [lang === 'cz' ? 'Soutěže' : 'Competitions', profile.stats.completed_tournaments]
+                [translate(lang, "playerProfileDialog.predictions"), profile.stats.predictions_total],
+                [translate(lang, "leaderboardScreen.exact"), profile.stats.exact_predictions],
+                [translate(lang, "profileCommunityPanel.points"), profile.stats.match_points + profile.stats.longterm_points],
+                [translate(lang, "profileCommunityPanel.competitions"), profile.stats.completed_tournaments]
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-xl bg-slate-50 px-3 py-2">
                   <p className="text-[9px] font-black uppercase text-slate-400">{label}</p>
@@ -169,7 +170,7 @@ export default function ProfileCommunityPanel({
         <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
           <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
             <Award className="h-4 w-4" />
-            {lang === 'cz' ? 'Odznaky' : 'Badges'}
+            {translate(lang, "profileCommunityPanel.badges")}
           </h3>
           {loading ? (
             <div className="mt-4 grid grid-cols-3 gap-2">
@@ -177,7 +178,7 @@ export default function ProfileCommunityPanel({
             </div>
           ) : badges.badges.length === 0 ? (
             <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-5 text-center text-xs font-semibold text-slate-500">
-              {lang === 'cz' ? 'Začni tipovat. První odznak přijde s prvním krokem.' : 'Start predicting. Your first badge follows your first step.'}
+              {translate(lang, "profileCommunityPanel.startPredictingYourFirstBadgeFollowsYourFirstStep")}
             </p>
           ) : (
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -202,7 +203,7 @@ export default function ProfileCommunityPanel({
           )}
           <p className="mt-3 flex items-center gap-2 text-[10px] font-semibold text-slate-400">
             <BarChart3 className="h-3.5 w-3.5" />
-            {lang === 'cz' ? 'Klepnutím vyber až 3 odznaky do profilu.' : 'Tap to feature up to 3 badges.'}
+            {translate(lang, "profileCommunityPanel.tapToFeatureUpTo3Badges")}
           </p>
         </section>
       )}

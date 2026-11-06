@@ -1,3 +1,4 @@
+import { pluralMessage, type Locale } from '../i18n/index.ts';
 export const HOME_ACTION_WINDOW_HOURS = 48;
 
 export type HomeDashboardScheduleState =
@@ -71,12 +72,9 @@ export type HomeDashboardCardState =
   | 'completed'
   | 'inactive';
 
-export const formatTipsterCount = (count: number, lang: 'cz' | 'en') => {
+export const formatTipsterCount = (count: number, lang: Locale) => {
   const safeCount = Math.max(0, Math.trunc(count));
-  if (lang === 'en') return `${safeCount} ${safeCount === 1 ? 'tipster' : 'tipsters'}`;
-  if (safeCount === 1) return '1 tipér';
-  if (safeCount >= 2 && safeCount <= 4) return `${safeCount} tipéři`;
-  return `${safeCount} tipérů`;
+  return pluralMessage(lang, 'tipsters', safeCount);
 };
 
 export const isKnownParticipantId = (participantId: string | null | undefined) => {

@@ -1,3 +1,4 @@
+import { translate, normalizeLocale, type LocaleInput } from '../i18n/index.ts';
 import { useEffect, useState } from 'react';
 import { Gift, Minus, Plus, Save } from 'lucide-react';
 import { setLobbyPrizesSecure } from '../lib/productFeatures.ts';
@@ -14,7 +15,7 @@ type LobbyPrizePanelProps = {
   enabled: boolean;
   entries: LobbyPrizeEntry[];
   canEdit: boolean;
-  lang: 'cz' | 'en';
+  lang: LocaleInput;
   onSaved: (enabled: boolean, entries: LobbyPrizeEntry[]) => void;
   savePrizes?: (
     lobbyId: string,
@@ -28,10 +29,11 @@ export function LobbyPrizePanel({
   enabled,
   entries,
   canEdit,
-  lang,
+  lang: requestedLocale,
   onSaved,
   savePrizes = setLobbyPrizesSecure
 }: LobbyPrizePanelProps) {
+  const lang = normalizeLocale(requestedLocale);
   const [draftEnabled, setDraftEnabled] = useState(enabled);
   const [draftEntries, setDraftEntries] = useState<LobbyPrizeEntry[]>(
     entries.length ? normalizeLobbyPrizeEntries(entries) : [
@@ -72,10 +74,10 @@ export function LobbyPrizePanel({
       );
       onSaved(saved.enabled, saved.entries);
       setEditing(false);
-      setSuccess(lang === 'cz' ? 'Ceny jsou uložené.' : 'Prizes saved.');
+      setSuccess(translate(lang, "lobbyPrizePanel.prizesSaved"));
     } catch (saveError: any) {
       setError(saveError?.message || (
-        lang === 'cz' ? 'Ceny se nepodařilo uložit.' : 'Prizes could not be saved.'
+        translate(lang, "lobbyPrizePanel.prizesCouldNotBeSaved")
       ));
     } finally {
       setSaving(false);
@@ -93,12 +95,12 @@ export function LobbyPrizePanel({
           </span>
           <div>
             <p className="text-[9px] font-black uppercase text-slate-400">
-              {lang === 'cz' ? 'O co hrajeme' : 'What we play for'}
+              {translate(lang, "lobbyPrizePanel.whatWePlayFor")}
             </p>
             <h2 className="mt-1 text-base font-black text-slate-950">
               {enabled
-                ? (lang === 'cz' ? 'Ceny v této lobby' : 'Lobby prizes')
-                : (lang === 'cz' ? 'Ceny nejsou zapnuté' : 'Prizes are disabled')}
+                ? (translate(lang, "lobbyPrizePanel.lobbyPrizes"))
+                : (translate(lang, "lobbyPrizePanel.prizesAreDisabled"))}
             </h2>
           </div>
         </div>
@@ -108,7 +110,7 @@ export function LobbyPrizePanel({
             onClick={() => setEditing(true)}
             className="min-h-10 rounded-xl border border-slate-200 px-3 text-[10px] font-black uppercase text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
           >
-            {lang === 'cz' ? 'Upravit' : 'Edit'}
+            {translate(lang, "lobbyPrizePanel.edit")}
           </button>
         )}
       </div>
@@ -118,7 +120,7 @@ export function LobbyPrizePanel({
           {visibleEntries.map(entry => (
             <li key={entry.position} className="flex gap-3 text-sm">
               <span className="w-20 shrink-0 font-black text-slate-500">
-                {formatPrizePosition(entry.position)}
+                {formatPrizePosition(entry.position, lang)}
               </span>
               <span className="font-semibold text-slate-900">{entry.label}</span>
             </li>
@@ -130,7 +132,7 @@ export function LobbyPrizePanel({
         <div className="mt-5 space-y-4">
           <label className="flex min-h-11 items-center justify-between gap-4 rounded-xl bg-slate-50 px-4">
             <span className="text-xs font-black text-slate-800">
-              {lang === 'cz' ? 'Hrajeme o ceny' : 'We play for prizes'}
+              {translate(lang, "lobbyPrizePanel.wePlayForPrizes")}
             </span>
             <input
               type="checkbox"
@@ -145,7 +147,7 @@ export function LobbyPrizePanel({
               {draftEntries.map((entry, index) => (
                 <label key={entry.position} className="grid grid-cols-[76px_1fr] items-center gap-3">
                   <span className="text-[10px] font-black uppercase text-slate-500">
-                    {formatPrizePosition(index + 1)}
+                    {formatPrizePosition(index + 1, lang)}
                   </span>
                   <input
                     type="text"
@@ -155,14 +157,14 @@ export function LobbyPrizePanel({
                       itemIndex === index ? { ...item, label: event.target.value } : item
                     )))}
                     className="min-h-11 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                    placeholder={lang === 'cz' ? 'Např. poukaz do restaurace' : 'E.g. restaurant voucher'}
+                    placeholder={translate(lang, "lobbyPrizePanel.eGRestaurantVoucher")}
                   />
                 </label>
               ))}
               <div className="flex gap-2">
                 <button
                   type="button"
-                  aria-label={lang === 'cz' ? 'Přidat umístění' : 'Add placement'}
+                  aria-label={translate(lang, "lobbyPrizePanel.addPlacement")}
                   disabled={draftEntries.length >= MAX_LOBBY_PRIZES}
                   onClick={() => setDraftEntries(previous => [
                     ...previous,
@@ -174,7 +176,7 @@ export function LobbyPrizePanel({
                 </button>
                 <button
                   type="button"
-                  aria-label={lang === 'cz' ? 'Odebrat poslední umístění' : 'Remove last placement'}
+                  aria-label={translate(lang, "lobbyPrizePanel.removeLastPlacement")}
                   disabled={draftEntries.length <= 1}
                   onClick={() => setDraftEntries(previous => previous.slice(0, -1))}
                   className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-40"
@@ -191,7 +193,7 @@ export function LobbyPrizePanel({
               onClick={() => setEditing(false)}
               className="min-h-11 flex-1 rounded-xl border border-slate-200 text-[10px] font-black uppercase text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
             >
-              {lang === 'cz' ? 'Zrušit' : 'Cancel'}
+              {translate(lang, "lobbyPrizePanel.cancel")}
             </button>
             <button
               type="button"
@@ -200,16 +202,14 @@ export function LobbyPrizePanel({
               className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
             >
               <Save className="h-4 w-4" aria-hidden="true" />
-              {saving ? (lang === 'cz' ? 'Ukládám' : 'Saving') : (lang === 'cz' ? 'Uložit' : 'Save')}
+              {saving ? (translate(lang, "lobbyPrizePanel.saving")) : (translate(lang, "lobbyPrizePanel.save"))}
             </button>
           </div>
         </div>
       )}
 
       <p className="mt-4 text-[10px] font-medium leading-relaxed text-slate-400">
-        {lang === 'cz'
-          ? 'Ceny zajišťuje správce lobby. Tipovačka je nedrží, neověřuje ani negarantuje.'
-          : 'Prizes are provided by the lobby manager. Tipovacka does not hold, verify, or guarantee them.'}
+        {translate(lang, "lobbyPrizePanel.prizesAreProvidedByTheLobbyManagerTipovackaDoes")}
       </p>
       {error && <p role="alert" className="mt-3 text-xs font-semibold text-red-700">{error}</p>}
       {success && <p role="status" className="mt-3 text-xs font-semibold text-emerald-700">{success}</p>}

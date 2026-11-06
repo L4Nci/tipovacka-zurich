@@ -11,13 +11,14 @@ penetrační test ani certifikace veřejného provozu.
 | Hranice | Doložené ověření | Co zbývá |
 | --- | --- | --- |
 | Clerk podpis/issuer/origin | Čtecí revize verifieru, existující lokální testy z předchozí etapy | Produkční Clerk, platné/expirující/revokované skutečné session |
-| Platform admin vs. hráč/owner lobby | Server načítá autoritativní roli; role se nesmí přímo měnit klientem | Konkrétní negativní HTTP scénáře všech administrativních operací |
+| Platform admin vs. hráč/owner lobby | Autoritativní role, 17 Clerk testů; všech 7 nasazených admin endpointů odmítlo chybějící/neplatný token | HTTP průchody s platným skutečným hráčským a admin Clerk účtem napříč operacemi |
 | RLS tabulek | Hostovaná metadata: všech 20 tehdejších public tabulek zapnuté RLS | Správnost každé policy a všech SECURITY DEFINER cest, ne jen zapnutí |
 | Cizí lobby / odebraný člen | Existující kontroly členství a rollback sady z předchozí práce | Průchod se skutečnými účty a záměrně cizími ID napříč všemi RPC |
 | Staré zápasové tipy/uzávěrky | Kontroly starého i nového řádku a výsledku v DB | Hraniční souběhy a kompletní kontrola každé alternativní cesty |
 | Starý tip na vítěze turnaje | Opraveno v hostované DB migrací `20261106165806`; útok potvrzen před opravou, po opravě odmítnut; rollback sada a nezávislá revize | Skutečné prohlížečové relace a hraniční souběhy nejsou touto SQL sadou pokryté |
 | Nový MMA pilot | 7 zdrojových/sync testů, skutečně prošlá bootstrap DB/RLS sada s ROLLBACK; ověřeno odstranění fixtures | Nasazená cesta se skutečným Clerk účtem a souběhy/živé výsledky |
-| Klíče | Server-only proměnné, žádný server-secret env název ve frontendu při čtecí kontrole | Finální bundle, nastavení Netlify, logy a přístupová práva/rotace |
+| Klíče | Server-only proměnné; finální frontend bundle neobsahoval 6 kontrolovaných secret hodnot | Nastavení Netlify, logy a přístupová práva/rotace |
+| Závislosti | `npm audit`: 11 hlášených balíčků, včetně 1 critical a 6 high; nepřibyly instalací překladů | Dosah na aplikaci zatím není potvrzen; samostatná [triage #26](https://github.com/L4Nci/tipovacka-zurich/issues/26) |
 | Historické přihlášení | Kompatibilita Supabase UUID je záměrně stále v DB | Rozhodnutí o vyřazení, revokaci a obnově admin účtu; nespoléhat na skrytý starý formulář |
 | Cookies/analytics | Analytics SDK zatím nezapojené | Skutečný cookie/network inventář, souhlasy, odvolání, správce, retence, export/výmaz a procesory |
 | Zneužití a kapacita | Dílčí aplikační a provider limity | Rate/abuse test, zátěž před uzávěrkou, quota alerty, dohled |
@@ -48,6 +49,13 @@ Znovu prošla `supabase/tests/clerk_identity_bridge.sql` a `npm run test:clerk`
 ověřené claims; samy neověřují podpis JWT ani skutečný OAuth průchod.
 Otisky všech řádků `predictions`, `matches`, `profiles` a obsah
 `longterm_predictions` před a po zásahu byly stejné. Testovací fixtures nezůstaly.
+
+Sedm nasazených admin endpointů odmítlo všech 14 HTTP pokusů bez přihlášení
+nebo s neplatným Bearer tokenem (vždy 401). Použita neexistující ID a pouze
+preview/dry-run požadavky. To neověřuje každou akci platného přihlášeného účtu.
+Ve finálním statickém JS buildu nebyla nalezena žádná ze šesti neprázdných
+serverových secret hodnot kontrolovaných proti lokálnímu `.env`; hodnoty se
+nevypisovaly. Audit logů a rotace klíčů zůstávají samostatné úkoly.
 
 Supabase advisor stále hlásí záměrně veřejné feature flags, klientská SECURITY
 DEFINER RPC a vypnutou ochranu kompromitovaných hesel historického Supabase Auth.

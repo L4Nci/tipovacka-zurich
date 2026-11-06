@@ -79,11 +79,11 @@ assert.equal(classifyHomeDashboardSummary({
   requires_owner_attention: false,
   schedule_state: 'ready'
 }), 'ready');
-assert.equal(formatTipsterCount(1, 'cz'), '1 tipér');
-assert.equal(formatTipsterCount(2, 'cz'), '2 tipéři');
-assert.equal(formatTipsterCount(4, 'cz'), '4 tipéři');
-assert.equal(formatTipsterCount(5, 'cz'), '5 tipérů');
-assert.equal(formatTipsterCount(11, 'cz'), '11 tipérů');
+assert.equal(formatTipsterCount(1, 'cs'), '1 tipér');
+assert.equal(formatTipsterCount(2, 'cs'), '2 tipéři');
+assert.equal(formatTipsterCount(4, 'cs'), '4 tipéři');
+assert.equal(formatTipsterCount(5, 'cs'), '5 tipérů');
+assert.equal(formatTipsterCount(11, 'cs'), '11 tipérů');
 assert.deepEqual(
   getLobbyCompetitionStatus(
     context.lobby_id,
