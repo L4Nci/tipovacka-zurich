@@ -34,6 +34,7 @@ import { clubCrestUrl } from './lib/teamAssets.ts';
 import { formatMatchKickoff, MATCH_TIME_ZONE } from './lib/matchTime.ts';
 import { TournamentSetup } from './components/TournamentSetup.tsx';
 import { isMmaTournament } from './lib/mma.ts';
+import { PredictionDistribution } from './components/PredictionDistribution.tsx';
 import { 
   fetchAllData, 
   fetchCriticalAppData,
@@ -552,40 +553,10 @@ export const MatchCard: React.FC<MatchCardProps> = ({
 
         {!isFinished && (
           <div className="flex flex-col gap-3">
-            <div className="px-1 mb-1">
-              <div className={`grid ${isHockey || footballWinnerRequired ? 'grid-cols-2' : 'grid-cols-3'} items-end gap-2 mb-1.5 px-1 text-[9px] font-black uppercase`}>
-                <span className="text-left text-[#ce1126]">
-                  <span className="block text-[8px] text-slate-400 truncate">{homeOutcomeLabel}</span>
-                  {predictionStats.isLoading ? '…' : `${predictionStats.home}%`}
-                </span>
-                {!isHockey && !footballWinnerRequired && (
-                  <span className="text-center text-[#1f2937]">
-                    <span className="block text-[8px] text-slate-400">Remíza</span>
-                    {predictionStats.isLoading ? '…' : `${predictionStats.draw}%`}
-                  </span>
-                )}
-                <span className="text-right text-[#006847]">
-                  <span className="block text-[8px] text-slate-400 truncate">{awayOutcomeLabel}</span>
-                  {predictionStats.isLoading ? '…' : `${predictionStats.away}%`}
-                </span>
-              </div>
-              <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner ring-1 ring-slate-100">
-                <div 
-                  style={{ width: `${predictionStats.home}%` }} 
-                  className="h-full bg-[#ce1126] transition-[width] duration-700 ease-out" 
-                />
-                {!isHockey && !footballWinnerRequired && (
-                  <div
-                    style={{ width: `${predictionStats.draw}%` }}
-                    className="h-full bg-white shadow-[inset_0_0_0_1px_rgba(15,23,42,0.12)] transition-[width] duration-700 ease-out"
-                  />
-                )}
-                <div 
-                  style={{ width: `${predictionStats.away}%` }} 
-                  className="h-full bg-[#006847] transition-[width] duration-700 ease-out" 
-                />
-              </div>
-            </div>
+            <PredictionDistribution homeLabel={homeOutcomeLabel} awayLabel={awayOutcomeLabel}
+              homePercent={predictionStats.home} awayPercent={predictionStats.away}
+              drawPercent={!isHockey && !footballWinnerRequired ? predictionStats.draw : undefined}
+              loading={predictionStats.isLoading} lang={lang} />
 
             <div className="bg-slate-50 rounded-2xl p-3 flex flex-col items-center justify-center transition-colors">
               <div className="flex items-center justify-center gap-4">

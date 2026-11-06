@@ -2,8 +2,11 @@
 
 Aktualizace 6. 11. 2026. Dvě karty jsou importované v existujícím Supabase a
 připojené do **Testovacího rodea**. Migrace `20261106122607_mma_winner_pilot`
-je aplikovaná. Webový release a skutečný běh cronu se ověřují samostatně;
-import není důkaz jejich nasazení. Landing zůstává pouze zadáním.
+je aplikovaná. První MMA release z [PR #23](https://github.com/L4Nci/tipovacka-zurich/pull/23)
+je nasazený; skutečný plánovaný cron 6. 11. v 16:01 Praha vrátil HTTP 200 a
+zpracoval obě karty. Okamžité opakování obě MMA karty správně přeskočilo jako
+nesplatné. Historické tipy, zápasy a profily po importu i tomto běhu zůstaly
+shodné se zálohou. Landing zůstává pouze zadáním.
 
 ## Karty a pravidla
 
@@ -29,6 +32,30 @@ MMA používá vlastní tabulky `mma_events`, `mma_fights`, `mma_fighters`,
 `mma_predictions`. Nevytváří fiktivní fotbalové skóre 1:0. Pořadí je uvnitř
 konkrétního eventu/lobby; globální profilové statistiky a staré odznaky zatím
 MMA tipy nezahrnují. Různé sporty nemají společné bodové pořadí.
+
+## Rozhraní a poměr tipů
+
+Pravidla a časy hlavní karty jsou pod tlačítkem (i) v dialogu ve stylu ostatních
+částí aplikace. Dialog podporuje Escape, zavření mimo obsah a vrácení fokusu.
+Uzávěrka celé karty zůstává stručně viditelná nad filtry.
+
+Stejná komponenta pruhu jako ve fotbalu a hokeji zobrazuje podíl uložených
+platných tipů na oba bojovníky. Počítá jen členy této lobby, stejný duel a
+aktuální verzi obsazení, včetně vlastního uloženého tipu. Rozepsaný výběr poměr
+nemění. Bez tipů zůstává neutrální pruh a 0 % / 0 %. U nenulového počtu dávají
+obě zaokrouhlené strany dohromady 100 %. Nejde o pravděpodobnost výsledku.
+
+Rozbalení „Tipy ostatních“ ukáže jméno/avatar a vybraného bojovníka; vlastní tip
+je zvýrazněný. Počet u tlačítka označuje ostatní, otevřený seznam zahrnuje i
+vlastní platný tip stejně jako starší zápasové karty. Odebraní členové a tipy
+na staré obsazení nejsou součástí tohoto přehledu. Ostatní tipy jsou viditelné
+již před uzávěrkou, stejně jako v současných ostatních soutěžích.
+
+Čtení používá stávající RLS, přesný lobby/event kontext a stránkování tipů i
+pořadí; vlastní tipy zůstávají oddělené pro filtr Bez tipu a editační formulář.
+Není přidána nová policy, grant ani zápisová cesta. Tato klientská agregace je
+určená pro pilot; velké veřejné komunity budou potřebovat samostatné kapacitní
+ověření a případně serverovou agregaci.
 
 ## Zdroj, limity a automatizace
 
