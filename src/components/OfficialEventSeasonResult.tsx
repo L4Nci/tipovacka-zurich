@@ -1,3 +1,5 @@
+import { translate } from '../i18n/index.ts';
+import { useLocale } from '../i18n/LocaleProvider.tsx';
 import { useState } from 'react';
 import { Award, Download, Share2 } from 'lucide-react';
 import {
@@ -28,10 +30,11 @@ export function OfficialEventSeasonResultCard({
   result,
   username
 }: OfficialEventSeasonResultProps) {
+  const { locale: lang } = useLocale();
   const [sharing, setSharing] = useState(false);
   const [feedback, setFeedback] = useState('');
-  const tier = getSeasonResultTier(result);
-  const headline = getSeasonResultHeadline(result);
+  const tier = getSeasonResultTier(result, lang);
+  const headline = getSeasonResultHeadline(result, lang);
 
   const buildCard = () => renderShareCard({
     type: 'official_event_result',
@@ -41,12 +44,12 @@ export function OfficialEventSeasonResultCard({
     accentColor: result.accent_color,
     partnerName: result.partner_name || undefined,
     stats: [
-      ...(tier ? [{ label: 'Výsledek', value: tier }] : []),
-      { label: 'Body', value: String(result.total_points) },
-      { label: 'Přesné tipy', value: String(result.exact_hits) },
-      { label: 'Uložené tipy', value: String(result.saved_predictions) }
+      ...(tier ? [{ label: translate(lang, "officialEventSeasonResult.result"), value: tier }] : []),
+      { label: translate(lang, "profileCommunityPanel.points"), value: String(result.total_points) },
+      { label: translate(lang, "officialEventSeasonResult.exactPicks"), value: String(result.exact_hits) },
+      { label: translate(lang, "officialEventSeasonResult.savedPicks"), value: String(result.saved_predictions) }
     ],
-    context: 'Jsi lepší? Přidej se na Tipovačce.'
+    context: translate(lang, "officialEventSeasonResult.canYouDoBetterJoinFanPredictor")
   });
 
   const share = async () => {
@@ -55,13 +58,13 @@ export function OfficialEventSeasonResultCard({
     try {
       const outcome = await shareOrCopy({
         title: result.event_name,
-        text: `${headline} Jsi lepší?`,
+        text: translate(lang, 'official.better', { headline }),
         url: buildOfficialEventShareUrl(result.slug, window.location.origin)
       });
-      setFeedback(outcome === 'shared' ? 'Výsledek je sdílený.' : 'Odkaz je zkopírovaný.');
+      setFeedback(outcome === 'shared' ? translate(lang, "officialEventSeasonResult.resultShared") : translate(lang, "officialEventSeasonResult.linkCopied"));
     } catch (error: any) {
       if (error?.name !== 'AbortError') {
-        setFeedback('Sdílení se nepodařilo.');
+        setFeedback(translate(lang, "officialEventSeasonResult.unableToShare"));
       }
     } finally {
       setSharing(false);
@@ -74,9 +77,9 @@ export function OfficialEventSeasonResultCard({
     try {
       const blob = await buildCard();
       downloadBlob(blob, `tipovacka-${result.slug}-vysledek.png`);
-      setFeedback('Karta je stažená.');
+      setFeedback(translate(lang, "officialEventSeasonResult.cardDownloaded"));
     } catch {
-      setFeedback('Kartu se nepodařilo připravit.');
+      setFeedback(translate(lang, "officialEventSeasonResult.unableToPrepareTheCard"));
     } finally {
       setSharing(false);
     }
@@ -94,8 +97,7 @@ export function OfficialEventSeasonResultCard({
           </span>
           <div className="min-w-0">
             <p className="text-[9px] font-black uppercase text-slate-400">
-              Výsledek sezóny
-            </p>
+              {translate(lang, "officialEventSeasonResult.seasonResult")}</p>
             <h2 className="mt-1 text-xl font-black leading-tight text-slate-950">
               {headline}
             </h2>
@@ -105,9 +107,9 @@ export function OfficialEventSeasonResultCard({
 
         <dl className="mt-5 grid grid-cols-3 gap-2">
           {[
-            ['Body', result.total_points],
-            ['Přesné tipy', result.exact_hits],
-            ['Uložené', result.saved_predictions]
+            [translate(lang, "profileCommunityPanel.points"), result.total_points],
+            [translate(lang, "officialEventSeasonResult.exactPicks"), result.exact_hits],
+            [translate(lang, "officialEventSeasonResult.saved"), result.saved_predictions]
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl bg-slate-50 px-3 py-3 text-center">
               <dt className="text-[8px] font-black uppercase text-slate-400">{label}</dt>
@@ -118,8 +120,7 @@ export function OfficialEventSeasonResultCard({
 
         {result.better_than_percent !== null && result.participant_count > 1 && (
           <p className="mt-4 text-xs font-semibold text-slate-600">
-            Byl jsi lepší než {result.better_than_percent} % účastníků.
-          </p>
+            {translate(lang, 'official.betterThan', { percent: result.better_than_percent })}</p>
         )}
 
         {result.badges.length > 0 && (
@@ -135,23 +136,20 @@ export function OfficialEventSeasonResultCard({
         {result.qualifying_prizes.length > 0 && (
           <div className="mt-4 rounded-xl bg-amber-50 p-3">
             <p className="text-[9px] font-black uppercase text-amber-800">
-              Předběžný nárok na cenu
-            </p>
+              {translate(lang, "officialEventSeasonResult.provisionalPrizeEligibility")}</p>
             {result.qualifying_prizes.map(prize => (
               <p key={`${prize.rank_from}-${prize.title}`} className="mt-1 text-xs font-bold text-amber-950">
                 {prize.title}
               </p>
             ))}
             <p className="mt-2 text-[10px] font-medium text-amber-800">
-              Předání ceny podléhá kontrole způsobilosti a úplným pravidlům eventu.
-            </p>
+              {translate(lang, "officialEventSeasonResult.prizeDeliveryIsSubjectToEligibilityChecksAndThe")}</p>
           </div>
         )}
 
         {result.prize_eligibility === 'disqualified' && (
           <p role="status" className="mt-4 rounded-xl bg-red-50 p-3 text-xs font-semibold text-red-700">
-            Sportovní výsledek zůstává uložený, účast ale není způsobilá pro ceny.
-          </p>
+            {translate(lang, "officialEventSeasonResult.yourSportsResultIsSavedButThisEntryIs")}</p>
         )}
 
         <div className="mt-5 grid grid-cols-2 gap-2">
@@ -161,16 +159,14 @@ export function OfficialEventSeasonResultCard({
             onClick={() => void share()}
             className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 text-[10px] font-black uppercase text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
           >
-            <Share2 className="h-4 w-4" aria-hidden="true" /> Sdílet
-          </button>
+            <Share2 className="h-4 w-4" aria-hidden="true" /> {translate(lang, "inviteShareDialog.share")}</button>
           <button
             type="button"
             disabled={sharing}
             onClick={() => void download()}
             className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 text-[10px] font-black uppercase text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-50"
           >
-            <Download className="h-4 w-4" aria-hidden="true" /> Stáhnout
-          </button>
+            <Download className="h-4 w-4" aria-hidden="true" /> {translate(lang, "officialEventSeasonResult.download")}</button>
         </div>
         {feedback && <p role="status" className="mt-3 text-center text-[10px] font-semibold text-slate-500">{feedback}</p>}
       </div>

@@ -1,3 +1,4 @@
+import { translate, type Locale } from '../i18n/index.ts';
 import React, { Dispatch, SetStateAction, useState } from 'react';
 import { motion } from 'motion/react';
 import { ShieldCheck } from 'lucide-react';
@@ -30,7 +31,7 @@ type AdminScreenProps = {
   championMsg: string;
   championError: string;
   TeamFlag: TeamFlagComponent;
-  lang: 'cz' | 'en';
+  lang: Locale;
   operationsEnabled: boolean;
 };
 
@@ -40,7 +41,8 @@ const AdminMatchCard: React.FC<{
   t: any;
   isHockey?: boolean;
   TeamFlag: TeamFlagComponent;
-}> = ({ match, onUpdate, t, isHockey = false, TeamFlag }) => {
+  lang: Locale;
+}> = ({ match, onUpdate, t, isHockey = false, TeamFlag, lang }) => {
   const [adminH, setAdminH] = useState(match.home_score ?? 0);
   const [adminA, setAdminA] = useState(match.away_score ?? 0);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -101,14 +103,14 @@ const AdminMatchCard: React.FC<{
           }`}
         >
           {isUpdating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> :
-           showConfirm ? (t.lang === 'cz' ? 'Určitě?' : 'Are you sure?') : t.updateResult}
+           showConfirm ? translate(lang, 'common.confirm') : t.updateResult}
         </button>
         {showConfirm && (
           <button
             onClick={() => setShowConfirm(false)}
             className="w-full py-2 text-[10px] font-bold text-slate-400 uppercase"
           >
-            {t.lang === 'cz' ? 'Zrušit' : 'Cancel'}
+            {translate(lang, 'common.cancel')}
           </button>
         )}
       </div>
@@ -183,6 +185,7 @@ export default function AdminScreen({
           key={m.id}
           match={m}
           t={t}
+          lang={lang}
           onUpdate={(h, a) => onUpdateMatchResult(m.id, h, a)}
           isHockey={m.tournament_id === "ms-hockey-2026"}
           TeamFlag={TeamFlag}

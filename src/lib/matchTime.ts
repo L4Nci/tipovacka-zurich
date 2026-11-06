@@ -1,6 +1,7 @@
+import { intlLocale, type LocaleInput } from '../i18n/index.ts';
 export const MATCH_TIME_ZONE = 'Europe/Prague';
-export function formatMatchKickoff(value: string, lang: 'cz' | 'en' = 'cz') {
-  return new Intl.DateTimeFormat(lang === 'cz' ? 'cs-CZ' : 'en-GB', {
+export function formatMatchKickoff(value: string, lang: LocaleInput = 'cs') {
+  return new Intl.DateTimeFormat(intlLocale(lang), {
     timeZone: MATCH_TIME_ZONE, weekday: 'short', day: 'numeric', month: 'numeric',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).format(new Date(value));

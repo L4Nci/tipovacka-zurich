@@ -21,9 +21,11 @@
     "test:hockey": "node --import tsx --test server/lib/hockeyProvider.test.ts",
     "test:mma": "node --import tsx --test server/lib/mmaProvider.test.ts src/lib/mmaPredictions.test.ts src/lib/mmaLobbyData.test.ts",
     "mma:import": "node --import tsx scripts/mma-import.ts",
-    "test:match-presentation": "node --import tsx --test src/lib/matchPresentation.test.ts"
+    "test:match-presentation": "node --import tsx --test src/lib/matchPresentation.test.ts",
+    "test:i18n": "node --import tsx --test src/i18n/index.test.ts"
   },
   "dependencies": {
+    "@clerk/localizations": "4.24.6",
     "@clerk/react": "6.18.4",
     "@supabase/supabase-js": "^2.106.2",
     "@tailwindcss/vite": "^4.1.14",

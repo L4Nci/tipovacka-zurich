@@ -1,20 +1,20 @@
+import { translate, intlLocale, type Locale } from '../i18n/index.ts';
 import { useEffect, useId, useRef } from 'react';
 import { Info, X } from 'lucide-react';
 import type { MmaEvent } from '../lib/mma.ts';
 import { MATCH_TIME_ZONE } from '../lib/matchTime.ts';
 
-export function formatMmaEventTime(value: string, lang: 'cz' | 'en') {
-  return new Intl.DateTimeFormat(lang === 'cz' ? 'cs-CZ' : 'en-GB', {
+export function formatMmaEventTime(value: string, lang: Locale) {
+  return new Intl.DateTimeFormat(intlLocale(lang), {
     day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: MATCH_TIME_ZONE,
   }).format(new Date(value));
 }
 
 export function MmaRulesDialog({ open, event, lang, onClose }: {
-  open: boolean; event?: MmaEvent | null; lang: 'cz' | 'en'; onClose: () => void;
+  open: boolean; event?: MmaEvent | null; lang: Locale; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  const cs = lang === 'cz';
   useEffect(() => {
     if (!open) { if (dialog.current?.open) dialog.current.close(); return; }
     if (!dialog.current?.open) dialog.current?.showModal();
@@ -34,34 +34,30 @@ export function MmaRulesDialog({ open, event, lang, onClose }: {
     className="m-auto max-h-[calc(100dvh_-_2rem)] w-[calc(100%_-_2rem)] max-w-sm overflow-y-auto rounded-3xl border border-slate-100 bg-white p-5 text-slate-900 shadow-2xl backdrop:bg-slate-950/40 backdrop:backdrop-blur-sm">
     <div className="mb-4 flex items-center justify-between gap-3">
       <h2 id={titleId} className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-500">
-        <Info className="h-4 w-4" />{cs ? 'Pravidla a bodování' : 'Rules and scoring'}
+        <Info className="h-4 w-4" />{translate(lang, "mmaEventView.rulesAndScoring")}
       </h2>
-      <button type="button" onClick={onClose} autoFocus aria-label={cs ? 'Zavřít pravidla' : 'Close rules'}
+      <button type="button" onClick={onClose} autoFocus aria-label={translate(lang, "mmaRulesDialog.closeRules")}
         className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
         <X className="h-4 w-4" />
       </button>
     </div>
-    <p className="mb-4 text-sm font-semibold leading-relaxed text-slate-600">{cs ? 'Tipuješ vítěze každého duelu.' : 'Pick the winner of each bout.'}</p>
+    <p className="mb-4 text-sm font-semibold leading-relaxed text-slate-600">{translate(lang, "mmaRulesDialog.pickTheWinnerOfEachBout")}</p>
     <div className="space-y-2">
       {[
-        [cs ? 'Správný vítěz' : 'Correct winner', cs ? '1 bod' : '1 point'],
-        [cs ? 'Nesprávný vítěz' : 'Incorrect winner', cs ? '0 bodů' : '0 points'],
-        [cs ? 'Remíza, no contest, zrušený duel' : 'Draw, no contest, cancelled bout', cs ? '0 bodů' : '0 points'],
+        [translate(lang, "mmaRulesDialog.correctWinner"), translate(lang, "mmaRulesDialog.1Point")],
+        [translate(lang, "mmaRulesDialog.incorrectWinner"), translate(lang, "mmaRulesDialog.0Points")],
+        [translate(lang, "mmaRulesDialog.drawNoContestCancelledBout"), translate(lang, "mmaRulesDialog.0Points")],
       ].map(([label, points]) => <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
         <span className="text-xs font-bold text-slate-700">{label}</span>
         <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-black text-white">{points}</span>
       </div>)}
     </div>
-    <p className="mt-4 text-xs leading-relaxed text-slate-500">{cs
-      ? 'Celá karta se zamyká při prvním zápase, včetně prelims. Do té doby můžeš svůj tip měnit.'
-      : 'All picks lock at the first bout, including prelims. You can change your picks until then.'}</p>
-    <p className="mt-2 text-xs leading-relaxed text-slate-500">{cs
-      ? 'Při změně soupeře je potřeba vybrat znovu. Způsob ukončení ani kolo zatím netipujeme.'
-      : 'If the lineup changes, pick again. Method and finishing round are not part of this pilot.'}</p>
+    <p className="mt-4 text-xs leading-relaxed text-slate-500">{translate(lang, "mmaRulesDialog.allPicksLockAtTheFirstBoutIncludingPrelims")}</p>
+    <p className="mt-2 text-xs leading-relaxed text-slate-500">{translate(lang, "mmaRulesDialog.ifTheLineupChangesPickAgainMethodAndFinishing")}</p>
     {event && <div className="mt-4 space-y-2 rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
-      <p className="font-bold text-red-600">{cs ? 'Uzávěrka karty: ' : 'Card deadline: '}{formatMmaEventTime(event.lock_time_utc, lang)}</p>
-      {event.main_card_at && <p>{cs ? 'Hlavní karta: ' : 'Main card: '}{formatMmaEventTime(event.main_card_at, lang)}</p>}
-      <p className="text-[10px] text-slate-400">{cs ? 'Časy jsou uvedené pro Prahu.' : 'Times are shown in Prague time.'}</p>
+      <p className="font-bold text-red-600">{translate(lang, "mmaEventView.cardDeadline")}{formatMmaEventTime(event.lock_time_utc, lang)}</p>
+      {event.main_card_at && <p>{translate(lang, "mmaRulesDialog.mainCard")}{formatMmaEventTime(event.main_card_at, lang)}</p>}
+      <p className="text-[10px] text-slate-400">{translate(lang, "mmaRulesDialog.timesAreShownInPragueTime")}</p>
     </div>}
   </dialog>;
 }

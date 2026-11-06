@@ -8,6 +8,15 @@ It is not a feature backlog, TODO list, sprint plan, GitHub Issue list, technica
 
 ## Planning update — 2026-11-03
 
+**Localization foundation — 2026-11-06:** the owner approved consolidating Czech
+and English, including embedded Clerk UI, into shared typed catalogs and one
+canonical locale preference. The implementation accepts the historical `cz`
+preference as `cs`, uses Intl plurals and preserves Prague match times. Further
+languages require reviewed translations and an explicit profile-locale contract
+extension; see [the localization contract](localization.md). The targeted legacy
+tournament-winner context-transfer fix is applied in the existing DB; broader
+security readiness remains tracked in [the control matrix](security-readiness-matrix.md).
+
 **Owner direction — 2026-11-06:** add MMA as the next prediction format, with
 UFC as the first organization. UFC 334 on 14 November and the announced
 Procházka event on 21 November are candidate small-group tests, conditional on

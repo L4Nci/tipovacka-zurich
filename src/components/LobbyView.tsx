@@ -1,3 +1,4 @@
+import { translate, type Locale } from '../i18n/index.ts';
 import { formatMatchKickoff } from '../lib/matchTime.ts';
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
@@ -64,7 +65,7 @@ interface LobbyViewProps {
   lobby: Lobby;
   user: AppUser;
   onSelectTournament: (tournamentId: string) => void;
-  lang: 'cz' | 'en';
+  lang: Locale;
   onRefresh?: (updatedLobby?: Partial<Lobby>) => void;
   onLobbyDeleted?: () => void;
   onMembershipEnded?: (lobbyId: string) => void;
@@ -156,7 +157,7 @@ export function LobbyView({
       setActiveMemberCount(community.active_member_count);
       return community;
     } catch (err: any) {
-      setMembershipError(err?.message || (lang === 'cz' ? 'Správu komunity se nepodařilo načíst.' : 'Community management could not be loaded.'));
+      setMembershipError(err?.message || (translate(lang, "lobbyView.communityManagementCouldNotBeLoaded")));
     } finally {
       setMembersLoading(false);
     }
@@ -174,7 +175,7 @@ export function LobbyView({
       setPendingConfirmation(null);
       onMembershipEnded?.(lobby.id);
     } catch (err: any) {
-      setMembershipError(err?.message || (lang === 'cz' ? 'Lobby se nepodařilo opustit.' : 'Could not leave the lobby.'));
+      setMembershipError(err?.message || (translate(lang, "lobbyView.couldNotLeaveTheLobby")));
     } finally {
       setMembershipActionId(null);
     }
@@ -192,7 +193,7 @@ export function LobbyView({
         onRefresh?.({ member_count: community.active_member_count });
       }
     } catch (err: any) {
-      setMembershipError(err?.message || (lang === 'cz' ? 'Člena se nepodařilo odebrat.' : 'Could not remove the member.'));
+      setMembershipError(err?.message || (translate(lang, "lobbyView.couldNotRemoveTheMember")));
     } finally {
       setMembershipActionId(null);
     }
@@ -209,7 +210,7 @@ export function LobbyView({
         onRefresh?.({ member_count: community.active_member_count });
       }
     } catch (err: any) {
-      setMembershipError(err?.message || (lang === 'cz' ? 'Přístup se nepodařilo obnovit.' : 'Could not restore access.'));
+      setMembershipError(err?.message || (translate(lang, "lobbyView.couldNotRestoreAccess")));
     } finally {
       setMembershipActionId(null);
     }
@@ -228,8 +229,8 @@ export function LobbyView({
     } catch (err: any) {
       setMembershipError(err?.message || (
         decision === 'approved'
-          ? (lang === 'cz' ? 'Žádost se nepodařilo schválit.' : 'Could not approve the request.')
-          : (lang === 'cz' ? 'Žádost se nepodařilo zamítnout.' : 'Could not reject the request.')
+          ? (translate(lang, "lobbyView.couldNotApproveTheRequest"))
+          : (translate(lang, "lobbyView.couldNotRejectTheRequest"))
       ));
     } finally {
       setMembershipActionId(null);
@@ -246,7 +247,7 @@ export function LobbyView({
       await onMembershipMutation?.();
       onRefresh?.({ join_policy: savedPolicy });
     } catch (err: any) {
-      setMembershipError(err?.message || (lang === 'cz' ? 'Způsob vstupu se nepodařilo změnit.' : 'Could not change join policy.'));
+      setMembershipError(err?.message || (translate(lang, "lobbyView.couldNotChangeJoinPolicy")));
     } finally {
       setMembershipActionId(null);
     }
@@ -274,12 +275,12 @@ export function LobbyView({
       setEditingField(null);
       setFieldMessage({
         tone: 'success',
-        text: lang === 'cz' ? 'Změna byla uložena.' : 'Change saved.'
+        text: translate(lang, "lobbyView.changeSaved")
       });
     } catch (err: any) {
       setFieldMessage({
         tone: 'error',
-        text: err?.message || (lang === 'cz' ? 'Změnu se nepodařilo uložit.' : 'Change could not be saved.')
+        text: err?.message || (translate(lang, "lobbyTournamentManager.changeCouldNotBeSaved"))
       });
     } finally {
       setIsUpdatingField(false);
@@ -292,7 +293,7 @@ export function LobbyView({
       await deleteLobby(lobby.id);
       if (onLobbyDeleted) onLobbyDeleted();
     } catch (err: any) {
-      setMembershipError(err?.message || (lang === 'cz' ? 'Lobby se nepodařilo smazat.' : 'Lobby could not be deleted.'));
+      setMembershipError(err?.message || (translate(lang, "lobbyView.lobbyCouldNotBeDeleted")));
       setIsDeleting(false);
     }
   };
@@ -342,12 +343,12 @@ export function LobbyView({
     setAddSuccess('');
     try {
       await addTournamentToLobby(lobby.id, tournamentId);
-      setAddSuccess(lang === 'cz' ? 'Turnaj byl přidán.' : 'Tournament added.');
+      setAddSuccess(translate(lang, "lobbyTournamentManager.tournamentAdded"));
       if (onRefresh) {
         onRefresh();
       }
     } catch (err: any) {
-      setAddError(err.message || (lang === 'cz' ? 'Turnaj se nepodařilo přidat.' : 'Tournament could not be added.'));
+      setAddError(err.message || (translate(lang, "lobbyView.tournamentCouldNotBeAdded")));
     } finally {
       setIsAdding(false);
     }
@@ -369,7 +370,7 @@ export function LobbyView({
       <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors">
         <div className="flex-1 w-full">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-            {lang === 'cz' ? 'Tvoje lobby' : 'Your lobby'}
+            {translate(lang, "lobbyView.yourLobby")}
           </p>
           
           {editingField === 'name' ? (
@@ -383,7 +384,7 @@ export function LobbyView({
                 maxLength={80}
               />
               <div className="flex items-center gap-2">
-                <button type="button" disabled={isUpdatingField} onClick={() => void handleUpdateField()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white disabled:opacity-50" aria-label={lang === 'cz' ? 'Uložit název lobby' : 'Save lobby name'}>
+                <button type="button" disabled={isUpdatingField} onClick={() => void handleUpdateField()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white disabled:opacity-50" aria-label={translate(lang, "lobbyView.saveLobbyName")}>
                   <Check className="w-4 h-4" />
                 </button>
                 <button
@@ -391,7 +392,7 @@ export function LobbyView({
                   disabled={isUpdatingField}
                   onClick={() => setEditingField(null)}
                   className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-500 disabled:opacity-50"
-                  aria-label={lang === 'cz' ? 'Zrušit úpravu názvu' : 'Cancel name edit'}
+                  aria-label={translate(lang, "lobbyView.cancelNameEdit")}
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -403,7 +404,7 @@ export function LobbyView({
                 {lobby.name}
               </h1>
               {canEditLobby && (
-                <button type="button" onClick={() => startFieldEdit('name', lobby.name)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500" aria-label={lang === 'cz' ? 'Upravit název lobby' : 'Edit lobby name'}>
+                <button type="button" onClick={() => startFieldEdit('name', lobby.name)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500" aria-label={translate(lang, "lobbyView.editLobbyName")}>
                   <Pencil className="h-4 w-4" />
                 </button>
               )}
@@ -419,20 +420,20 @@ export function LobbyView({
                 maxLength={120}
                 autoFocus
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:ring-1 focus:ring-red-600"
-                placeholder={lang === 'cz' ? 'Krátký popis lobby' : 'Short lobby description'}
+                placeholder={translate(lang, "lobbyView.shortLobbyDescription")}
               />
               <div className="flex gap-2">
-                <button type="button" disabled={isUpdatingField} onClick={() => void handleUpdateField()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white disabled:opacity-50" aria-label={lang === 'cz' ? 'Uložit krátký popis' : 'Save short description'}><Check className="h-4 w-4" /></button>
-                <button type="button" disabled={isUpdatingField} onClick={() => setEditingField(null)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-500" aria-label={lang === 'cz' ? 'Zrušit úpravu popisu' : 'Cancel description edit'}><X className="h-4 w-4" /></button>
+                <button type="button" disabled={isUpdatingField} onClick={() => void handleUpdateField()} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white disabled:opacity-50" aria-label={translate(lang, "lobbyView.saveShortDescription")}><Check className="h-4 w-4" /></button>
+                <button type="button" disabled={isUpdatingField} onClick={() => setEditingField(null)} className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-slate-500" aria-label={translate(lang, "lobbyView.cancelDescriptionEdit")}><X className="h-4 w-4" /></button>
               </div>
             </div>
           ) : (
             <div className="mt-2 flex items-start gap-2">
               <p className={`min-w-0 flex-1 text-sm font-semibold ${lobby.short_description ? 'text-slate-500' : 'text-slate-300 italic'}`}>
-                {lobby.short_description || (lang === 'cz' ? 'Bez krátkého popisu' : 'No short description')}
+                {lobby.short_description || (translate(lang, "lobbyView.noShortDescription"))}
               </p>
               {canEditLobby && (
-                <button type="button" onClick={() => startFieldEdit('short_description', lobby.short_description || '')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500" aria-label={lang === 'cz' ? 'Upravit krátký popis' : 'Edit short description'}><Pencil className="h-3.5 w-3.5" /></button>
+                <button type="button" onClick={() => startFieldEdit('short_description', lobby.short_description || '')} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-500" aria-label={translate(lang, "lobbyView.editShortDescription")}><Pencil className="h-3.5 w-3.5" /></button>
               )}
             </div>
           )}
@@ -462,7 +463,7 @@ export function LobbyView({
             className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-[10px] font-black uppercase text-white transition-transform duration-150 active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none"
           >
             <Share2 className="h-4 w-4" />
-            {lang === 'cz' ? 'Pozvat' : 'Invite'}
+            {translate(lang, "lobbyView.invite")}
           </button>
         )}
       </div>
@@ -490,7 +491,7 @@ export function LobbyView({
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              {lang === 'cz' ? 'Aktivní soutěže' : 'Active Tournaments'}
+              {translate(lang, "lobbyView.activeTournaments")}
             </h2>
             <div className="space-y-3">
               {activeTournaments.length > 0 ? activeTournaments.map(t => {
@@ -498,10 +499,10 @@ export function LobbyView({
                 const isCompleted = Boolean(stats.isCompleted);
                 const progress = isCompleted ? 100 : (stats.total > 0 ? Math.round((stats.finished / stats.total) * 100) : 0);
                 const statusLabel = isCompleted
-                  ? (lang === 'cz' ? 'Ukončeno' : 'Completed')
+                  ? (translate(lang, "lobbyView.completed"))
                   : stats.nextStart
                   ? formatMatchKickoff(stats.nextStart, lang)
-                  : (lang === 'cz' ? 'Čeká na rozpis' : 'Schedule pending');
+                  : (translate(lang, "lobbyView.schedulePending"));
                 const statusDetail = isCompleted
                   ? (stats.championShortName || stats.championName || null)
                   : (stats.nextMatchLabel || null);
@@ -530,16 +531,16 @@ export function LobbyView({
 
                     <div className="relative z-10 mt-4 grid grid-cols-3 gap-2">
                       <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Zápasy' : 'Matches'}</p>
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{translate(lang, "matches")}</p>
                         <p className="text-sm font-black text-slate-800 group-hover:text-white">{stats.total}</p>
                       </div>
                       <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Hotovo' : 'Done'}</p>
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{translate(lang, "lobbyView.done")}</p>
                         <p className="text-sm font-black text-slate-800 group-hover:text-white">{progress}%</p>
                       </div>
                       <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10 min-w-0">
                         <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">
-                          {isCompleted ? (lang === 'cz' ? 'Stav' : 'Status') : (lang === 'cz' ? 'Další' : 'Next')}
+                          {isCompleted ? (translate(lang, "lobbyView.status")) : (translate(lang, "lobbyView.next"))}
                         </p>
                         {statusDetail && (
                           <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{statusDetail}</p>
@@ -561,12 +562,12 @@ export function LobbyView({
                     <CalendarClock className="h-6 w-6" />
                   </span>
                   <h3 className="mt-3 text-sm font-black text-slate-800">
-                    {lang === 'cz' ? 'Teď se netipuje' : 'Nothing to predict right now'}
+                    {translate(lang, "lobbyView.nothingToPredictRightNow")}
                   </h3>
                   <p className="mx-auto mt-1 max-w-[300px] text-xs font-medium leading-relaxed text-slate-500">
                     {canEditLobby
-                      ? (lang === 'cz' ? 'Vyber další podporovaný turnaj ve Správě lobby.' : 'Choose the next supported tournament in lobby management.')
-                      : (lang === 'cz' ? 'Jakmile správce spustí další turnaj, objeví se tady.' : 'The next tournament will appear here when an admin starts it.')}
+                      ? (translate(lang, "lobbyView.chooseTheNextSupportedTournamentInLobbyManagement"))
+                      : (translate(lang, "lobbyView.theNextTournamentWillAppearHereWhenAnAdmin"))}
                   </p>
                   {canEditLobby ? (
                     <button
@@ -574,7 +575,7 @@ export function LobbyView({
                       onClick={openAdminSection}
                       className="mt-4 min-h-10 rounded-xl bg-slate-900 px-4 text-[10px] font-black uppercase tracking-wider text-white transition-transform duration-150 active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none"
                     >
-                      {lang === 'cz' ? 'Vybrat turnaj' : 'Choose tournament'}
+                      {translate(lang, "lobbyView.chooseTournament")}
                     </button>
                   ) : completedTournaments.length > 0 ? (
                     <button
@@ -582,7 +583,7 @@ export function LobbyView({
                       onClick={() => document.getElementById('lobby-history')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                       className="mt-4 min-h-10 rounded-xl bg-white px-4 text-[10px] font-black uppercase tracking-wider text-slate-600 shadow-sm"
                     >
-                      {lang === 'cz' ? 'Prohlédnout historii' : 'View history'}
+                      {translate(lang, "lobbyView.viewHistory")}
                     </button>
                   ) : null}
                 </div>
@@ -593,7 +594,7 @@ export function LobbyView({
             {canEditLobby && isAdminExpanded && !tournamentManagementEnabled && availableToAdd.length > 0 && (
               <div className="mt-6 pt-4 border-t border-slate-100">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  {lang === 'cz' ? 'Správa turnajů (Owner)' : 'Manage Tournaments (Owner)'}
+                  {translate(lang, "lobbyView.manageTournamentsOwner")}
                 </p>
                 <div className="flex flex-col gap-2">
                   {availableToAdd.map(at => (
@@ -604,7 +605,7 @@ export function LobbyView({
                       className="w-full py-2.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <PlusCircle className="w-4 h-4" />
-                      {lang === 'cz' ? `Přidat ${at.name} do lobby` : `Add ${at.name} to lobby`}
+                      {translate(lang, "lobbyView.addToLobby", { value1: at.name })}
                     </button>
                   ))}
                 </div>
@@ -625,16 +626,16 @@ export function LobbyView({
               </span>
               <span className="min-w-0">
                 <span className="block text-xs font-black uppercase text-slate-700">
-                  {lang === 'cz' ? 'Členové' : 'Members'}
+                  {translate(lang, "lobbyMembersDialog.members")}
                 </span>
                 <span className="mt-1 block text-[11px] font-semibold text-slate-500">
                   {membersLoading
-                    ? (lang === 'cz' ? 'Načítám členy…' : 'Loading members…')
+                    ? (translate(lang, "lobbyMembersDialog.loadingMembers"))
                     : membershipError
-                      ? (lang === 'cz' ? 'Správa členů není dostupná' : 'Member management unavailable')
+                      ? (translate(lang, "lobbyView.memberManagementUnavailable"))
                       : pendingRequests.length > 0
-                        ? `${pendingRequests.length} ${lang === 'cz' ? 'čeká na vyřízení' : 'awaiting review'}`
-                        : (lang === 'cz' ? 'Seznam a přístup do lobby' : 'Lobby list and access')}
+                        ? `${pendingRequests.length} ${translate(lang, "lobbyView.awaitingReview")}`
+                        : (translate(lang, "lobbyView.lobbyListAndAccess"))}
                 </span>
               </span>
             </span>
@@ -662,10 +663,10 @@ export function LobbyView({
                   </span>
                   <span>
                     <span className="block text-xs font-black uppercase text-slate-700">
-                      {lang === 'cz' ? 'Správa lobby' : 'Lobby management'}
+                      {translate(lang, "lobbyView.lobbyManagement")}
                     </span>
                     <span className="mt-1 block text-[11px] font-semibold text-slate-500">
-                      {lang === 'cz' ? 'Turnaje a nastavení vlastníka' : 'Tournaments and owner settings'}
+                      {translate(lang, "lobbyView.tournamentsAndOwnerSettings")}
                     </span>
                   </span>
                 </span>
@@ -685,16 +686,14 @@ export function LobbyView({
                     {showDeleteConfirm ? (
                       <>
                         <p className="text-xs font-bold leading-relaxed text-red-700">
-                          {lang === 'cz'
-                            ? 'Smazání lobby odstraní členství i tipy v této lobby. Tuto akci nelze vrátit.'
-                            : 'Deleting the lobby removes its memberships and predictions. This cannot be undone.'}
+                          {translate(lang, "lobbyView.deletingTheLobbyRemovesItsMembershipsAndPredictionsThis")}
                         </p>
                         <div className="mt-3 grid grid-cols-2 gap-2">
                           <button disabled={isDeleting} onClick={() => setShowDeleteConfirm(false)} className="min-h-10 rounded-xl bg-white text-[10px] font-black uppercase text-slate-600">
-                            {lang === 'cz' ? 'Zrušit' : 'Cancel'}
+                            {translate(lang, "lobbyPrizePanel.cancel")}
                           </button>
                           <button disabled={isDeleting} onClick={handleDelete} className="min-h-10 rounded-xl bg-red-600 text-[10px] font-black uppercase text-white disabled:opacity-50">
-                            {isDeleting ? (lang === 'cz' ? 'Mažu…' : 'Deleting…') : (lang === 'cz' ? 'Smazat lobby' : 'Delete lobby')}
+                            {isDeleting ? (translate(lang, "lobbyView.deleting")) : (translate(lang, "lobbyView.deleteLobby"))}
                           </button>
                         </div>
                       </>
@@ -705,7 +704,7 @@ export function LobbyView({
                         className="flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-white px-3 text-[10px] font-black uppercase text-red-600"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        {lang === 'cz' ? 'Smazat lobby' : 'Delete lobby'}
+                        {translate(lang, "lobbyView.deleteLobby")}
                       </button>
                     )}
                   </div>
@@ -724,35 +723,33 @@ export function LobbyView({
               >
                 <span>
                   <h2 className="block text-xs font-bold text-slate-400 uppercase tracking-widest">
-                    {lang === 'cz' ? 'Pravidla' : 'Rules'}
+                    {translate(lang, "lobbyView.rules")}
                   </h2>
                   <span className="mt-1 block text-[11px] font-semibold text-slate-500">
-                    {lang === 'cz' ? 'Pravidla hry a pravidla turnaje' : 'Game rules and tournament rules'}
+                    {translate(lang, "lobbyView.gameRulesAndTournamentRules")}
                   </span>
                 </span>
                 <span className="flex items-center gap-2">
-                  <LockKeyhole className="h-3.5 w-3.5 text-slate-300" aria-label={lang === 'cz' ? 'Pouze pro čtení' : 'Read only'} />
+                  <LockKeyhole className="h-3.5 w-3.5 text-slate-300" aria-label={translate(lang, "lobbyView.readOnly")} />
                   <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform md:hidden ${isRulesExpanded ? 'rotate-90' : ''}`} />
                 </span>
               </button>
               <div className={`${isRulesExpanded ? 'mt-4 block' : 'hidden'} space-y-4 md:mt-4 md:block`}>
                 <div>
                   <h3 className="text-[10px] font-black uppercase text-slate-500">
-                    {lang === 'cz' ? 'Pravidla hry' : 'Game rules'}
+                    {translate(lang, "lobbyView.gameRules")}
                   </h3>
                   <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">
-                    {lang === 'cz'
-                      ? 'Tipy jsou vždy svázané s konkrétní lobby a turnajem. Po uzávěrce zápasu je nelze měnit.'
-                      : 'Predictions always belong to one lobby and tournament. They cannot be changed after the match lock.'}
+                    {translate(lang, "lobbyView.predictionsAlwaysBelongToOneLobbyAndTournamentThey")}
                   </p>
                 </div>
                 <div className="border-t border-slate-100 pt-4">
                   <h3 className="text-[10px] font-black uppercase text-slate-500">
-                    {lang === 'cz' ? 'Pravidla turnaje' : 'Tournament rules'}
+                    {translate(lang, "lobbyView.tournamentRules")}
                   </h3>
                   <div className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 p-4">
                     <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-slate-600">
-                      {rulesText || (lang === 'cz' ? 'Pravidla turnaje zatím nejsou k dispozici.' : 'Tournament rules are not available yet.')}
+                      {rulesText || (translate(lang, "lobbyView.tournamentRulesAreNotAvailableYet"))}
                     </p>
                   </div>
                 </div>
@@ -764,7 +761,7 @@ export function LobbyView({
           <div id="lobby-history" className="scroll-mt-24 bg-white rounded-3xl p-6 shadow-sm border border-slate-100 opacity-80">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
               <History className="w-3.5 h-3.5" />
-              {lang === 'cz' ? 'Historie soutěží' : 'Past Tournaments'}
+              {translate(lang, "lobbyView.pastTournaments")}
             </h2>
             <div className="space-y-3">
               {completedTournaments.length > 0 ? (
@@ -784,7 +781,7 @@ export function LobbyView({
                           {t.name}
                         </p>
                         <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-emerald-600 group-hover:text-emerald-200">
-                          {lang === 'cz' ? 'Ukončeno' : 'Completed'}
+                          {translate(lang, "lobbyView.completed")}
                         </p>
                       </div>
                       <div className="shrink-0 w-8 h-8 rounded-full bg-white group-hover:bg-slate-800 flex items-center justify-center transition-colors">
@@ -794,15 +791,15 @@ export function LobbyView({
 
                     <div className="relative z-10 mt-4 grid grid-cols-3 gap-2">
                       <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Zápasy' : 'Matches'}</p>
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{translate(lang, "matches")}</p>
                         <p className="text-sm font-black text-slate-800 group-hover:text-white">{stats.total}</p>
                       </div>
                       <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Hotovo' : 'Done'}</p>
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{translate(lang, "lobbyView.done")}</p>
                         <p className="text-sm font-black text-slate-800 group-hover:text-white">100%</p>
                       </div>
                       <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10 min-w-0">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{lang === 'cz' ? 'Vítěz' : 'Winner'}</p>
+                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{translate(lang, "winnerTab")}</p>
                         <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{champion || '—'}</p>
                       </div>
                     </div>
@@ -817,7 +814,7 @@ export function LobbyView({
                 })
               ) : (
                 <p className="text-xs text-slate-400 italic text-center py-4">
-                  {lang === 'cz' ? 'Žádné archivované turnaje' : 'No archived tournaments'}
+                  {translate(lang, "lobbyView.noArchivedTournaments")}
                 </p>
               )}
             </div>
@@ -833,7 +830,7 @@ export function LobbyView({
                Hall of Fame
              </h2>
              <p className="text-[10px] text-slate-400 font-medium mb-5">
-               {lang === 'cz' ? 'Kumulované body za všechny turnaje' : 'All-time accumulated points'}
+               {translate(lang, "lobbyView.allTimeAccumulatedPoints")}
              </p>
              
              {hallOfFameEntries.length > 0 ? (
@@ -852,7 +849,7 @@ export function LobbyView({
                        onClick={() => setSelectedPlayerId(entry.player_id)}
                        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-left disabled:cursor-default"
                        aria-label={communityProfilesEnabled
-                         ? (lang === 'cz' ? `Otevřít profil ${entry.username}` : `Open ${entry.username}'s profile`)
+                         ? (translate(lang, "leaderboardScreen.openSProfile", { value1: entry.username }))
                          : undefined}
                      >
                        <div className="flex items-center gap-3 min-w-0">
@@ -868,13 +865,13 @@ export function LobbyView({
                          <div className="min-w-0">
                            <p className="text-sm font-black text-slate-800 truncate">{entry.username}</p>
                            <p className="text-[9px] font-bold uppercase text-slate-400">
-                             {entry.completed_tournaments_count} {lang === 'cz' ? 'dokončený turnaj' : 'completed tournament'}
+                             {entry.completed_tournaments_count} {translate(lang, "lobbyView.completedTournament")}
                            </p>
                          </div>
                        </div>
                        <div className="text-right shrink-0">
                          <p className="text-lg font-black text-slate-900 leading-none">{entry.total_points}</p>
-                         <p className="text-[8px] font-black uppercase text-slate-400">{lang === 'cz' ? 'bodů' : 'pts'}</p>
+                         <p className="text-[8px] font-black uppercase text-slate-400">{translate(lang, "lobbyView.pts")}</p>
                        </div>
                      </button>
                    );
@@ -884,10 +881,10 @@ export function LobbyView({
                <div className="flex flex-col items-center justify-center p-6 text-center border-t border-slate-50">
                  <Trophy className="w-8 h-8 text-slate-200 mb-2" />
                  <p className="text-sm font-bold text-slate-600 mb-1">
-                   {lang === 'cz' ? 'Síň slávy čeká na první turnaj' : 'The Hall of Fame awaits its first tournament'}
+                   {translate(lang, "lobbyView.theHallOfFameAwaitsItsFirstTournament")}
                  </p>
                  <p className="text-[10px] items-center text-slate-400 max-w-[180px]">
-                   {lang === 'cz' ? 'Po dokončení turnaje se tu objeví historické pořadí hráčů.' : 'Historical player standings will appear after a tournament is completed.'}
+                   {translate(lang, "lobbyView.historicalPlayerStandingsWillAppearAfterATournamentIs")}
                  </p>
                </div>
              )}
@@ -921,19 +918,15 @@ export function LobbyView({
       <ConfirmDialog
         open={Boolean(pendingConfirmation)}
         title={pendingConfirmation?.kind === 'remove'
-          ? (lang === 'cz' ? 'Odebrat člena?' : 'Remove member?')
-          : (lang === 'cz' ? 'Opustit lobby?' : 'Leave lobby?')}
+          ? (translate(lang, "lobbyView.removeMember"))
+          : (translate(lang, "lobbyView.leaveLobby"))}
         description={pendingConfirmation?.kind === 'remove'
-          ? (lang === 'cz'
-            ? `${pendingConfirmation.member.username} ztratí přístup do lobby. Historické tipy a body zůstanou zachované.`
-            : `${pendingConfirmation.member.username} will lose lobby access. Historical predictions and points remain.`)
-          : (lang === 'cz'
-            ? 'Ztratíš přístup do lobby. Tvoje historické tipy a body zůstanou zachované.'
-            : 'You will lose lobby access. Your historical predictions and points remain.')}
+          ? (translate(lang, "lobbyView.willLoseLobbyAccessHistoricalPredictionsAndPointsRemain", { value1: pendingConfirmation.member.username }))
+          : (translate(lang, "lobbyView.youWillLoseLobbyAccessYourHistoricalPredictionsAnd"))}
         confirmLabel={pendingConfirmation?.kind === 'remove'
-          ? (lang === 'cz' ? 'Odebrat' : 'Remove')
-          : (lang === 'cz' ? 'Opustit' : 'Leave')}
-        cancelLabel={lang === 'cz' ? 'Zrušit' : 'Cancel'}
+          ? (translate(lang, "lobbyView.remove"))
+          : (translate(lang, "lobbyView.leave"))}
+        cancelLabel={translate(lang, "lobbyPrizePanel.cancel")}
         busy={membershipActionId === user.id || (
           pendingConfirmation?.kind === 'remove'
           && membershipActionId === pendingConfirmation.member.user_id

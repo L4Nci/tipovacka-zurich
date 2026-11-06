@@ -1,4 +1,7 @@
 import { ClerkProvider, useAuth, useClerk, useUser } from "@clerk/react";
+import { csCZ } from '@clerk/localizations/cs-CZ';
+import { enUS } from '@clerk/localizations/en-US';
+import { useLocale } from '../i18n/LocaleProvider.tsx';
 import { createContext, Fragment, useCallback, useContext, useLayoutEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { bindClerkAccessTokenGetter, type ClerkAccessTokenGetter } from "./clerkSupabase.ts";
@@ -16,11 +19,12 @@ type GameSession = {
 const GameSessionContext = createContext<GameSession | null>(null);
 
 export function AppClerkProvider({ publishableKey, children }: { publishableKey: string; children: ReactNode }) {
+  const { locale } = useLocale();
   if (!publishableKey || !/^pk_(test|live)_/.test(publishableKey)) {
     throw new Error("Přihlášení vyžaduje platný Clerk publishable klíč.");
   }
   return (
-    <ClerkProvider publishableKey={publishableKey} appearance={{ elements: { profileSection__danger: { display: 'none' } } }}>
+    <ClerkProvider publishableKey={publishableKey} localization={locale === 'cs' ? csCZ : enUS} appearance={{ elements: { profileSection__danger: { display: 'none' } } }}>
       <ClerkSessionBridge>{children}</ClerkSessionBridge>
     </ClerkProvider>
   );

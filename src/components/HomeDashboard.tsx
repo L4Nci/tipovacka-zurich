@@ -1,3 +1,4 @@
+import { translate, normalizeLocale, intlLocale, pluralMessage, type Locale, type LocaleInput } from '../i18n/index.ts';
 import { MATCH_TIME_ZONE, pragueCalendarDay } from '../lib/matchTime.ts';
 import { useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -30,7 +31,7 @@ import { OfficialEventCard } from './OfficialEventCard.tsx';
 export type AddLobbyMode = 'none' | 'menu' | 'create' | 'join' | 'official';
 
 type HomeDashboardProps = {
-  lang: 'cz' | 'en';
+  lang: LocaleInput;
   lobbies: Lobby[];
   summaries: HomeDashboardSummary[];
   summariesLoading: boolean;
@@ -66,7 +67,7 @@ const MembershipNotices = ({
   onOpenLobby,
   onCancelJoinRequest
 }: {
-  lang: 'cz' | 'en';
+  lang: Locale;
   items: MembershipHomeItem[];
   loading: boolean;
   error: string;
@@ -81,7 +82,7 @@ const MembershipNotices = ({
 
   if (loading) {
     return (
-      <section className="mb-6" aria-label={lang === 'cz' ? 'Stav členství' : 'Membership status'}>
+      <section className="mb-6" aria-label={translate(lang, "homeDashboard.membershipStatus")}>
         <DashboardSkeleton compact />
       </section>
     );
@@ -93,10 +94,10 @@ const MembershipNotices = ({
         <div className="flex items-start gap-3">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <p className="flex-1 text-xs font-black text-amber-800">
-            {lang === 'cz' ? 'Stav žádostí se nepodařilo načíst.' : 'Membership requests could not be loaded.'}
+            {translate(lang, "homeDashboard.membershipRequestsCouldNotBeLoaded")}
           </p>
           <button type="button" onClick={onRetry} className="text-[10px] font-black uppercase text-amber-700">
-            {lang === 'cz' ? 'Zkusit znovu' : 'Retry'}
+            {translate(lang, "homeDashboard.retry")}
           </button>
         </div>
       </section>
@@ -106,7 +107,7 @@ const MembershipNotices = ({
   if (visibleItems.length === 0) return null;
 
   return (
-    <section className="mb-6 space-y-2" aria-label={lang === 'cz' ? 'Stav členství' : 'Membership status'}>
+    <section className="mb-6 space-y-2" aria-label={translate(lang, "homeDashboard.membershipStatus")}>
       {actionError && (
         <p className="rounded-xl bg-red-50 px-3 py-2 text-[10px] font-bold text-red-600">{actionError}</p>
       )}
@@ -118,18 +119,18 @@ const MembershipNotices = ({
         const isManagement = item.item_type === 'management';
         const isRemoved = item.item_type === 'membership' && item.membership_status === 'removed';
         const label = isPending
-          ? (lang === 'cz' ? 'Žádost čeká na schválení' : 'Request awaiting approval')
+          ? (translate(lang, "homeDashboard.requestAwaitingApproval"))
           : isApproved
-            ? (lang === 'cz' ? 'Žádost schválena' : 'Request approved')
+            ? (translate(lang, "homeDashboard.requestApproved"))
             : isRejected
-              ? (lang === 'cz' ? 'Žádost zamítnuta' : 'Request rejected')
+              ? (translate(lang, "homeDashboard.requestRejected"))
               : isManagement
                 ? (item.pending_request_count === 1
-                  ? (lang === 'cz' ? 'Nová žádost' : 'New request')
-                  : (lang === 'cz' ? `${item.pending_request_count} nové žádosti` : `${item.pending_request_count} new requests`))
+                  ? (translate(lang, "homeDashboard.newRequest"))
+                  : (translate(lang, "homeDashboard.newRequests", { value1: item.pending_request_count })))
                 : isRemoved
-                  ? (lang === 'cz' ? 'Přístup do lobby byl odebrán' : 'Lobby access was removed')
-                  : (lang === 'cz' ? 'Opustil/a jsi lobby' : 'You left the lobby');
+                  ? (translate(lang, "homeDashboard.lobbyAccessWasRemoved"))
+                  : (translate(lang, "homeDashboard.youLeftTheLobby"));
 
         return (
           <div key={`${item.item_type}:${item.request_id || item.lobby_id}:${item.event_at}`} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
@@ -150,14 +151,14 @@ const MembershipNotices = ({
                     try {
                       await onCancelJoinRequest(item.request_id as string);
                     } catch {
-                      setActionError(lang === 'cz' ? 'Žádost se nepodařilo zrušit.' : 'Could not cancel the request.');
+                      setActionError(translate(lang, "homeDashboard.couldNotCancelTheRequest"));
                     } finally {
                       setCancellingId(null);
                     }
                   }}
                   className="min-h-9 shrink-0 rounded-lg px-2 text-[9px] font-black uppercase text-slate-500 disabled:opacity-50"
                 >
-                  {lang === 'cz' ? 'Zrušit žádost' : 'Cancel'}
+                  {translate(lang, "homeDashboard.cancel")}
                 </button>
               ) : (isManagement || isApproved) && lobby ? (
                 <button
@@ -166,8 +167,8 @@ const MembershipNotices = ({
                   className="min-h-9 shrink-0 rounded-lg bg-slate-900 px-3 text-[9px] font-black uppercase text-white"
                 >
                   {isManagement
-                    ? (lang === 'cz' ? 'Vyžaduje správu' : 'Manage')
-                    : (lang === 'cz' ? 'Otevřít lobby' : 'Open lobby')}
+                    ? (translate(lang, "homeDashboard.manage"))
+                    : (translate(lang, "homeDashboard.openLobby"))}
                 </button>
               ) : null}
             </div>
@@ -178,97 +179,88 @@ const MembershipNotices = ({
   );
 };
 
-const formatLockTime = (value: string | null, lang: 'cz' | 'en') => {
+const formatLockTime = (value: string | null, lang: Locale) => {
   if (!value) return null;
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return null;
 
   const now = new Date();
   const dayDiff = pragueCalendarDay(date) - pragueCalendarDay(now);
-  const time = date.toLocaleTimeString(lang === 'cz' ? 'cs-CZ' : 'en-GB', {
+  const time = date.toLocaleTimeString(intlLocale(lang), {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: MATCH_TIME_ZONE
   });
 
-  if (lang === 'cz') {
-    if (dayDiff === 0) return `Uzávěrka dnes v ${time}`;
-    if (dayDiff === 1) return `Uzávěrka zítra v ${time}`;
-    return `Uzávěrka ${date.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', timeZone: MATCH_TIME_ZONE })} v ${time}`;
-  }
-  if (dayDiff === 0) return `Locks today at ${time}`;
-  if (dayDiff === 1) return `Locks tomorrow at ${time}`;
-  return `Locks ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: MATCH_TIME_ZONE })} at ${time}`;
+  if (dayDiff === 0) return translate(lang, 'lock.today', { time });
+  if (dayDiff === 1) return translate(lang, 'lock.tomorrow', { time });
+  return translate(lang, 'lock.date', {
+    time, date: date.toLocaleDateString(intlLocale(lang), { day: 'numeric', month: 'numeric', timeZone: MATCH_TIME_ZONE }),
+  });
 };
 
-const formatLaterStatus = (value: string | null, lang: 'cz' | 'en') => {
-  if (!value) return lang === 'cz' ? 'Další tipování později' : 'More predictions later';
+const formatLaterStatus = (value: string | null, lang: Locale) => {
+  if (!value) return translate(lang, "homeDashboard.morePredictionsLater");
   const diffDays = Math.max(1, Math.ceil((new Date(value).getTime() - Date.now()) / 86_400_000));
-  if (lang === 'en') return `Next predictions in ${diffDays} ${diffDays === 1 ? 'day' : 'days'}`;
-  if (diffDays === 1) return 'Další tipování za 1 den';
-  if (diffDays >= 2 && diffDays <= 4) return `Další tipování za ${diffDays} dny`;
-  return `Další tipování za ${diffDays} dní`;
+  return pluralMessage(lang, 'nextPredictions', diffDays);
 };
 
-const formatWaitingCount = (count: number, lang: 'cz' | 'en') => {
-  if (lang === 'en') return `${count} ${count === 1 ? 'match is' : 'matches are'} waiting`;
-  if (count === 1) return '1 zápas čeká';
-  if (count >= 2 && count <= 4) return `${count} zápasy čekají`;
-  return `${count} zápasů čeká`;
+const formatWaitingCount = (count: number, lang: Locale) => {
+  return pluralMessage(lang, 'waitingMatches', count);
 };
 
-const getCardCopy = (summary: HomeDashboardSummary, lang: 'cz' | 'en') => {
+const getCardCopy = (summary: HomeDashboardSummary, lang: Locale) => {
   const state = classifyHomeDashboardSummary(summary);
   const copy: Record<HomeDashboardCardState, { status: string; cta: string; missing: boolean }> = {
     actionable: {
       status: formatWaitingCount(summary.actionable_match_count, lang),
-      cta: lang === 'cz' ? 'Tipovat' : 'Predict',
+      cta: translate(lang, "homeDashboard.predict"),
       missing: true
     },
     all_predicted: {
-      status: lang === 'cz' ? 'Vše máš tipnuto' : 'All predictions complete',
-      cta: lang === 'cz' ? 'Zobrazit zápasy' : 'View matches',
+      status: translate(lang, "homeDashboard.allPredictionsComplete"),
+      cta: translate(lang, "homeDashboard.viewMatches"),
       missing: false
     },
     later: {
       status: formatLaterStatus(summary.next_missing_lock_time, lang),
-      cta: (summary.missing_match_count ?? 0) > 0 ? (lang === 'cz' ? 'Tipovat' : 'Predict')
-        : (lang === 'cz' ? 'Zobrazit turnaj' : 'View tournament'),
+      cta: (summary.missing_match_count ?? 0) > 0 ? (translate(lang, "homeDashboard.predict"))
+        : (translate(lang, "homeDashboard.viewTournament")),
       missing: (summary.missing_match_count ?? 0) > 0
     },
     schedule_pending: {
-      status: lang === 'cz' ? 'Turnaj čeká na rozpis' : 'Tournament awaits schedule',
-      cta: lang === 'cz' ? 'Detail turnaje' : 'Tournament detail',
+      status: translate(lang, "homeDashboard.tournamentAwaitsSchedule"),
+      cta: translate(lang, "homeDashboard.tournamentDetail"),
       missing: false
     },
     waiting_results: {
-      status: lang === 'cz' ? 'Čeká na výsledky' : 'Waiting for results',
-      cta: lang === 'cz' ? 'Zobrazit turnaj' : 'View tournament',
+      status: translate(lang, "homeDashboard.waitingForResults"),
+      cta: translate(lang, "homeDashboard.viewTournament"),
       missing: false
     },
     completion_pending: {
-      status: lang === 'cz' ? 'Čeká na uzavření turnaje' : 'Waiting for tournament close',
-      cta: lang === 'cz' ? 'Detail turnaje' : 'Tournament detail',
+      status: translate(lang, "homeDashboard.waitingForTournamentClose"),
+      cta: translate(lang, "homeDashboard.tournamentDetail"),
       missing: false
     },
     owner_attention: {
-      status: lang === 'cz' ? 'Vyžaduje správu' : 'Needs management',
-      cta: lang === 'cz' ? 'Spravovat' : 'Manage',
+      status: translate(lang, "homeDashboard.needsManagement"),
+      cta: translate(lang, "homeDashboard.manage_ac2c39"),
       missing: false
     },
     ready: {
-      status: lang === 'cz' ? 'Turnaj je připraven' : 'Tournament is ready',
-      cta: lang === 'cz' ? 'Zobrazit turnaj' : 'View tournament',
+      status: translate(lang, "homeDashboard.tournamentIsReady"),
+      cta: translate(lang, "homeDashboard.viewTournament"),
       missing: false
     },
     completed: {
-      status: lang === 'cz' ? 'Turnaj ukončen' : 'Tournament completed',
-      cta: lang === 'cz' ? 'Zobrazit výsledky' : 'View results',
+      status: translate(lang, "homeDashboard.tournamentCompleted"),
+      cta: translate(lang, "app.viewResults"),
       missing: false
     },
     inactive: {
-      status: lang === 'cz' ? 'Neaktivní turnaj' : 'Inactive tournament',
-      cta: lang === 'cz' ? 'Detail lobby' : 'Lobby detail',
+      status: translate(lang, "homeDashboard.inactiveTournament"),
+      cta: translate(lang, "homeDashboard.lobbyDetail"),
       missing: false
     }
   };
@@ -344,7 +336,7 @@ const LobbyWorldCard = ({
   lobby: Lobby;
   summary: HomeDashboardSummary | null;
   attention: ReturnType<typeof getLobbyPredictionAttention>;
-  lang: 'cz' | 'en';
+  lang: Locale;
   loading: boolean;
   error: string;
   eagerCover: boolean;
@@ -369,23 +361,23 @@ const LobbyWorldCard = ({
   const isQuietLobbyAction = !summary || state === 'owner_attention' || state === 'inactive';
   const tipsterLabel = formatTipsterCount(lobby.member_count || 0, lang);
   const tournamentLabel = summary?.tournament_name || (
-    lang === 'cz' ? 'Bez aktivního turnaje' : 'No active tournament'
+    translate(lang, "homeDashboard.noActiveTournament")
   );
   const statusLabel = loading
     ? null
     : error
-      ? (lang === 'cz' ? 'Dění teď nejde načíst' : 'Live status is unavailable')
+      ? (translate(lang, "homeDashboard.liveStatusIsUnavailable"))
       : attention.missingCount > 0
         ? formatWaitingCount(attention.urgentCount || attention.missingCount, lang)
-          + (lang === 'cz' ? ' na natipování' : ' for predictions')
-          + (attention.urgentCount > 0 ? (lang === 'cz' ? ' do 48 hodin' : ' within 48 hours') : '')
+          + (translate(lang, "homeDashboard.forPredictions"))
+          + (attention.urgentCount > 0 ? (translate(lang, "homeDashboard.within48Hours")) : '')
         : copy?.status || (
-        lang === 'cz' ? 'Další turnaj zatím není vypsán' : 'The next tournament is not scheduled yet'
+        translate(lang, "homeDashboard.theNextTournamentIsNotScheduledYet")
       );
   const ctaLabel = error
-    ? (lang === 'cz' ? 'Zkusit znovu' : 'Retry')
-    : attention.contexts.length > 1 ? (lang === 'cz' ? 'Tipovat nejbližší soutěž' : 'Predict the next competition')
-      : copy?.cta || (lang === 'cz' ? 'Otevřít lobby' : 'Open lobby');
+    ? (translate(lang, "homeDashboard.retry"))
+    : attention.contexts.length > 1 ? (translate(lang, "homeDashboard.predictTheNextCompetition"))
+      : copy?.cta || (translate(lang, "homeDashboard.openLobby"));
   const cardHeight = isCompleted ? 'min-h-[236px]' : 'min-h-[264px]';
   const ctaStyle = isActionable
     ? 'border border-red-600 bg-red-600 text-white shadow-sm hover:bg-red-700'
@@ -425,7 +417,7 @@ const LobbyWorldCard = ({
       <button
         type="button"
         onClick={() => onOpenLobby(lobby)}
-        aria-label={lang === 'cz' ? `Otevřít lobby ${lobby.name}` : `Open lobby ${lobby.name}`}
+        aria-label={translate(lang, "homeDashboard.openLobby_1d1429", { value1: lobby.name })}
         className="absolute inset-0 z-10 cursor-pointer rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500"
       />
 
@@ -444,7 +436,7 @@ const LobbyWorldCard = ({
 
         <div className="mt-auto pt-6">
           {loading ? (
-            <div aria-label={lang === 'cz' ? 'Načítání dění v lobby' : 'Loading lobby activity'}>
+            <div aria-label={translate(lang, "homeDashboard.loadingLobbyActivity")}>
               <div className="h-5 w-3/5 rounded bg-slate-200/80 motion-safe:animate-pulse motion-reduce:animate-none" />
               <div className="mt-2 h-3 w-2/5 rounded bg-slate-200/70 motion-safe:animate-pulse motion-reduce:animate-none" />
             </div>
@@ -457,7 +449,7 @@ const LobbyWorldCard = ({
               {!error && attention.contexts.length > 1 && <div className="pointer-events-auto mt-3 space-y-2">
                 {attention.contexts.map(context => <button key={context.tournament_id} type="button"
                   onClick={event => { event.stopPropagation(); onOpenContext(context, true, 'matches'); }}
-                  aria-label={(lang === 'cz' ? 'Tipovat: ' : 'Predict: ') + lobby.name + ' · ' + context.tournament_name}
+                  aria-label={(translate(lang, "homeDashboard.predict_ada658")) + lobby.name + ' · ' + context.tournament_name}
                   className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-left text-xs font-bold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
                   <span className="min-w-0 break-words">{context.tournament_name}</span>
                   <span className="flex shrink-0 items-center gap-1 text-red-600">
@@ -480,7 +472,7 @@ const LobbyWorldCard = ({
             className={`pointer-events-auto mt-5 inline-flex min-h-11 max-w-full items-center justify-center gap-2 self-start rounded-xl px-4 text-[10px] font-black uppercase tracking-wider transition-[transform,background-color,border-color] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none ${ctaStyle}`}
           >
             {isCompleted && <CheckCircle2 className="h-4 w-4" />}
-            {loading ? (lang === 'cz' ? 'Načítám' : 'Loading') : ctaLabel}
+            {loading ? (translate(lang, "homeDashboard.loading")) : ctaLabel}
             {!loading && !isCompleted && <ChevronRight className="h-4 w-4" />}
           </button>
         </div>
@@ -499,7 +491,7 @@ const AddLobbySheet = ({
   onOpenOfficialEvent,
   onSetMode
 }: {
-  lang: 'cz' | 'en';
+  lang: Locale;
   mode: AddLobbyMode;
   officialEvents: OfficialEventCardType[];
   officialEventBusy: boolean;
@@ -532,7 +524,7 @@ const AddLobbySheet = ({
               <button
                 type="button"
                 onClick={() => onSetMode('menu')}
-                aria-label={lang === 'cz' ? 'Zpět na výběr' : 'Back to choices'}
+                aria-label={translate(lang, "homeDashboard.backToChoices")}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -540,14 +532,14 @@ const AddLobbySheet = ({
             )}
             <h2 id="add-lobby-sheet-title" className="truncate text-sm font-black text-slate-900">
               {mode === 'official'
-                ? (lang === 'cz' ? 'Oficiální turnaje' : 'Official tournaments')
-                : (lang === 'cz' ? 'Přidat lobby' : 'Add lobby')}
+                ? (translate(lang, "homeDashboard.officialTournaments"))
+                : (translate(lang, "homeDashboard.addLobby"))}
             </h2>
           </div>
           <button
             type="button"
             onClick={() => onSetMode('none')}
-            aria-label={lang === 'cz' ? 'Zavřít' : 'Close'}
+            aria-label={translate(lang, "homeDashboard.close")}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -562,10 +554,10 @@ const AddLobbySheet = ({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-xs font-black text-slate-900">
-                  {lang === 'cz' ? 'Připojit se kódem' : 'Join with a code'}
+                  {translate(lang, "homeDashboard.joinWithACode")}
                 </span>
                 <span className="mt-1 block text-[10px] font-medium text-slate-500">
-                  {lang === 'cz' ? 'Připojit se do lobby kamaráda.' : "Join a friend's lobby."}
+                  {translate(lang, "homeDashboard.joinAFriendSLobby")}
                 </span>
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -576,10 +568,10 @@ const AddLobbySheet = ({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-xs font-black text-slate-900">
-                  {lang === 'cz' ? 'Založit lobby' : 'Create a lobby'}
+                  {translate(lang, "homeDashboard.createALobby")}
                 </span>
                 <span className="mt-1 block text-[10px] font-medium text-slate-500">
-                  {lang === 'cz' ? 'Soukromá lobby.' : 'A private lobby.'}
+                  {translate(lang, "homeDashboard.aPrivateLobby")}
                 </span>
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -591,10 +583,10 @@ const AddLobbySheet = ({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-xs font-black text-slate-900">
-                    {lang === 'cz' ? 'Oficiální turnaje' : 'Official tournaments'}
+                    {translate(lang, "homeDashboard.officialTournaments")}
                   </span>
                   <span className="mt-1 block text-[10px] font-medium text-slate-500">
-                    {lang === 'cz' ? 'Veřejné soutěže Tipovačky.' : 'Public Tipovačka competitions.'}
+                    {translate(lang, "homeDashboard.publicTipovaKaCompetitions")}
                   </span>
                 </span>
                 <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
@@ -617,7 +609,7 @@ const AddLobbySheet = ({
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center">
             <p className="text-xs font-black text-slate-700">
-              {lang === 'cz' ? 'Teď není otevřený žádný turnaj.' : 'There is no open tournament right now.'}
+              {translate(lang, "homeDashboard.thereIsNoOpenTournamentRightNow")}
             </p>
           </div>
         )}
@@ -628,7 +620,7 @@ const AddLobbySheet = ({
 };
 
 export function HomeDashboard({
-  lang,
+  lang: requestedLocale,
   lobbies,
   summaries,
   summariesLoading,
@@ -649,6 +641,7 @@ export function HomeDashboard({
   onOpenOfficialEvent,
   onSetAddLobbyMode
 }: HomeDashboardProps) {
+  const lang = normalizeLocale(requestedLocale);
   const homeOfficialEvents = officialEvents.filter(shouldShowOfficialEventOnHome);
   const hasHomeItems = lobbies.length > 0 || homeOfficialEvents.length > 0;
   const membershipNotices = (
@@ -668,7 +661,7 @@ export function HomeDashboard({
     <main className="flex flex-1 flex-col p-4 sm:p-6">
       <section aria-labelledby="home-lobbies-title">
         <h2 className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
-          <span id="home-lobbies-title">{lang === 'cz' ? 'Tvoje lobby' : 'Your lobbies'}</span>
+          <span id="home-lobbies-title">{translate(lang, "homeDashboard.yourLobbies")}</span>
         </h2>
         {membershipNotices}
         {hasHomeItems ? (
@@ -708,7 +701,7 @@ export function HomeDashboard({
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-7 text-center">
             <p className="text-xs font-black text-slate-700">
-              {lang === 'cz' ? 'Zatím tu nemáš žádnou lobby.' : 'You do not have a lobby yet.'}
+              {translate(lang, "homeDashboard.youDoNotHaveALobbyYet")}
             </p>
           </div>
         )}
@@ -720,7 +713,7 @@ export function HomeDashboard({
           onClick={() => onSetAddLobbyMode('menu')}
           className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase tracking-wider text-slate-600"
         >
-          <Plus className="h-4 w-4" /> {lang === 'cz' ? 'Přidat lobby' : 'Add lobby'}
+          <Plus className="h-4 w-4" /> {translate(lang, "homeDashboard.addLobby")}
         </button>
 
         {addLobbyPanel && <div className="mt-3">{addLobbyPanel}</div>}

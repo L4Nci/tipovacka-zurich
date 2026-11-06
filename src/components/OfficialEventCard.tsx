@@ -1,3 +1,5 @@
+import { translate, intlLocale, pluralMessage, type Locale } from '../i18n/index.ts';
+import { useLocale } from '../i18n/LocaleProvider.tsx';
 import { ArrowRight, CheckCircle2, Gift, ShieldCheck, Users } from 'lucide-react';
 import { formatTipsterCount } from '../lib/homeDashboard.ts';
 import type { OfficialEventCard as OfficialEventCardType } from '../types.ts';
@@ -18,9 +20,9 @@ const getOfficialEventCover = (coverKey: string | null) => {
     : '/lobby-covers/stadium-community.jpg';
 };
 
-const formatDeadline = (value: string | null | undefined) => {
+const formatDeadline = (value: string | null | undefined, lang: Locale) => {
   if (!value) return null;
-  return new Intl.DateTimeFormat('cs-CZ', {
+  return new Intl.DateTimeFormat(intlLocale(lang), {
     day: 'numeric',
     month: 'numeric',
     hour: '2-digit',
@@ -36,23 +38,24 @@ export function OfficialEventCard({
   eagerCover = false,
   onOpen
 }: OfficialEventCardProps) {
+  const { locale: lang } = useLocale();
   const isCompleted = event.status === 'completed';
   const isActionable = event.is_participating && event.actionable_match_count > 0;
   const status = isCompleted
-    ? 'Turnaj ukončen'
+    ? translate(lang, "homeDashboard.tournamentCompleted")
     : event.actionable_match_count > 0
-      ? `${event.actionable_match_count} zápasy čekají`
+      ? pluralMessage(lang, 'waitingMatches', event.actionable_match_count)
       : event.open_match_count > 0
-        ? 'Všechny otevřené zápasy máš tipnuté'
-        : 'Další zápasy zatím nejsou otevřené';
+        ? translate(lang, "officialEventCard.youHavePredictedEveryOpenMatch")
+        : translate(lang, "officialEventCard.moreMatchesWillOpenLater");
   const cta = isCompleted
-    ? 'Zobrazit výsledky'
+    ? translate(lang, "app.viewResults")
     : !event.is_participating
-      ? 'Zapojit se'
+      ? translate(lang, "officialEventCard.join")
       : isActionable
-        ? 'Tipovat'
-        : 'Zobrazit turnaj';
-  const deadline = formatDeadline(event.next_match?.lock_time_utc);
+        ? translate(lang, "homeDashboard.predict")
+        : translate(lang, "homeDashboard.viewTournament");
+  const deadline = formatDeadline(event.next_match?.lock_time_utc, lang);
   const cardHeight = isCompleted ? 'min-h-[236px]' : 'min-h-[264px]';
   const ctaStyle = isActionable
     ? 'border border-red-600 bg-red-600 text-white shadow-sm hover:bg-red-700'
@@ -74,7 +77,7 @@ export function OfficialEventCard({
       <button
         type="button"
         onClick={() => onOpen(event)}
-        aria-label={`Otevřít oficiální turnaj ${event.name}`}
+      aria-label={translate(lang, 'official.open', { name: event.name })}
         className="absolute inset-0 z-10 cursor-pointer rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500"
       />
 
@@ -86,24 +89,22 @@ export function OfficialEventCard({
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] font-black uppercase tracking-[0.12em] text-red-600">
             <span className="inline-flex items-center gap-1">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              Oficiální
-            </span>
+              {translate(lang, "officialEventCard.official")}</span>
             {typeof event.participant_count === 'number' && (
               <span className="inline-flex items-center gap-1 text-slate-500">
                 <Users className="h-3.5 w-3.5" aria-hidden="true" />
-                {formatTipsterCount(event.participant_count, 'cz')}
+                {formatTipsterCount(event.participant_count, lang)}
               </span>
             )}
           </div>
         </div>
 
         <div className="mt-4 flex max-w-[88%] flex-wrap items-center gap-x-3 gap-y-1 text-xs font-bold leading-snug text-slate-600">
-          {commercialEnabled && event.partner_name && <span>S partnerem {event.partner_name}</span>}
+          {commercialEnabled && event.partner_name && <span>{translate(lang, "officialEventCard.withAPartner")}{event.partner_name}</span>}
           {commercialEnabled && event.has_prizes && (
             <span className="inline-flex items-center gap-1 text-amber-700">
               <Gift className="h-4 w-4" aria-hidden="true" />
-              Hraje se o ceny
-            </span>
+              {translate(lang, "officialEventCard.prizesAvailable")}</span>
           )}
         </div>
 
@@ -112,7 +113,7 @@ export function OfficialEventCard({
             {status}
           </p>
           {!isCompleted && deadline && (
-            <p className="mt-1 text-xs font-semibold text-slate-500">Uzávěrka {deadline}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">{translate(lang, "officialEventCard.deadline")}{deadline}</p>
           )}
           <button
             type="button"
@@ -125,7 +126,7 @@ export function OfficialEventCard({
             className={`pointer-events-auto mt-5 inline-flex min-h-11 max-w-full items-center justify-center gap-2 self-start rounded-xl px-4 text-[10px] font-black uppercase tracking-wider transition-[transform,background-color,border-color] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none ${ctaStyle}`}
           >
             {isCompleted && <CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
-            {busy ? 'Načítám' : cta}
+            {busy ? translate(lang, "homeDashboard.loading") : cta}
             {!busy && !isCompleted && <ArrowRight className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>

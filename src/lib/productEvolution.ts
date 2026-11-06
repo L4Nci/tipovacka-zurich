@@ -1,3 +1,4 @@
+import { translate, intlLocale, type LocaleInput } from '../i18n/index.ts';
 import type { Lobby, LobbyPrizeEntry, OfficialEventSeasonResult } from '../types.ts';
 
 export const MAX_LOBBY_PRIZES = 10;
@@ -103,21 +104,21 @@ export const preserveLobbyPrizeMetadata = (
   });
 };
 
-export const formatPrizePosition = (position: number) => `${position}. místo`;
+export const formatPrizePosition = (position: number, lang: LocaleInput = 'cs') => translate(lang, 'common.place', { position });
 
 export const getSeasonResultHeadline = (
-  result: Pick<OfficialEventSeasonResult, 'position' | 'participant_count'>
+  result: Pick<OfficialEventSeasonResult, 'position' | 'participant_count'>, lang: LocaleInput = 'cs'
 ) => {
   if (!result.position || result.participant_count < 1) {
-    return 'Výsledky se ještě dopočítávají';
+    return translate(lang, 'official.seasonPending');
   }
-  return `Skončil jsi ${result.position}. z ${result.participant_count.toLocaleString('cs-CZ')} tipérů.`;
+  return translate(lang, 'official.seasonHeadline', { position: result.position, count: result.participant_count.toLocaleString(intlLocale(lang)) });
 };
 
 export const getSeasonResultTier = (
-  result: Pick<OfficialEventSeasonResult, 'position' | 'top_percent'>
+  result: Pick<OfficialEventSeasonResult, 'position' | 'top_percent'>, lang: LocaleInput = 'cs'
 ) => {
-  if (result.position === 1) return 'Vítěz eventu';
+  if (result.position === 1) return translate(lang, 'official.eventWinner');
   if (result.position && result.position <= 10) return 'TOP 10';
   return result.top_percent ? `TOP ${result.top_percent} %` : null;
 };
