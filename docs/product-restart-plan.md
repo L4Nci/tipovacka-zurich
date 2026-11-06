@@ -2,6 +2,26 @@
 
 Verze 1.0 · 5. 11. 2026 · otevřený průběžný test Ligy mistrů 2026/27 bez limitu tří kol.
 
+**Upřesnění vlastníka — 6. 11. 2026:** před kampaní MS už má běžet plný
+produkt; kampaň je hlavně marketing, ukázky a polish. Stálá lobby může sloužit
+YouTube komunitě s opakovanými eventy. Paywall je námět k ověření, nikoli
+hotová funkce. Nenatipované zápasy mají být viditelné bez hledání. U MMA je
+přijatý směr vítěz + volitelné bonusy za způsob a **kolo**, bez přesného času.
+Aktuální stav, jazyky, měření a rozdělení práce shrnuje
+[připravenost produktu](product-readiness-2026-11-06.md); distribuční pokusy
+popisuje [marketingový plán](marketing-strategy-2026-11-06.md).
+
+**Produktový směr — 6. 11. 2026:** vlastník zvolil UFC jako první organizaci
+pro MMA. Listopadové eventy jsou příležitost pro malý test, pokud ověříme
+automatický zdroj a sjednotíme pravidla. Hlavní CZ/SK milník je **MS v hokeji
+13.–30. 5. 2027**; před kampaní musí být produkt provozně i bezpečnostně
+připravený. [Samostatný plán](mma-and-worlds-launch-plan.md) rozlišuje přijatý
+směr od navržených pravidel, termínů a kontrol. Na následný pokyn je nyní MMA
+winner-only pilot implementovaný a importovaný; aktuální ověření viz
+[MMA runbook](mma-pilot-runbook.md). Landing zůstává zadáním bez stavby.
+Aktuální stav nasazených fotbalových/hokejových soutěží uvádí
+[multi-sport runbook](multi-sport-sync.md); starší stavové poznámky níže jsou historie.
+
 **Aktivní cíl: funkční produkt v hlavní aplikaci a jediné stávající DB.** Používáme běžný `.env` lokálně a proměnné Netlify při nasazení. Oddělená beta konfigurace se ruší. Development Clerk na localhostu je propojený přes vlastníkem povolené nativní Supabase Third-Party Auth; skutečná registrace, mapování interního UUID a dokončený vlastní profil s rolí `player` jsou ověřené DB kontrolou a screenshoty. SQL sada RLS prošla s rollbackem a simulovanými ověřenými claims. Vlastník ověřil opětovné přihlášení a dva Google účty ve stejné lobby; DB potvrzuje tři aktivní členy včetně historického Supabase admina. Rozšířené SQL testy ověřily oddělení tipů a opravena je mezera při tipování po známém výsledku. Skutečné Clerk API 403 a živý herní průchod zbývají ověřit. Produkční instance/doména, deployment a celý pilot hotové nejsou. Aktuální stav a zbývající rozsah jsou v [realizačním podkladu](beta-implementation-scope.md). Dvojice alternativních prototypů se nestaví.
 
 **Teď dokončujeme schválený přechod na Clerk a ověřujeme jeden funkční průchod v hlavní aplikaci.**
@@ -46,7 +66,7 @@ První průchod, který musí fungovat:
 - [x] První pilot testuje vlastník a známá parta. Nábor cizích skupin není podmínkou této první testovací verze.
 - [x] Začátek má být levný, ideálně bez paušálů; ověřený produkt lze později finančně podpořit. Nulová cena není pevný limit pro celý další vývoj.
 - [x] Více sportů a velké eventy patří do směru produktu. Nebudeme je všechny vydávat najednou.
-- [x] Pořadí rozšiřování: **fotbal → hokej → MMA**. UFC je kandidát k prověření; **F1 zatím volitelně**, nikoli slíbený rozsah.
+- [x] Pořadí rozšiřování: **fotbal → hokej → MMA**. Dne 6. 11. vlastník zvolil **UFC jako první MMA organizaci**; UFCalendar a winner-only pilot prošly bootstrap ověřením. **F1 zatím volitelně**, nikoli slíbený rozsah.
 - [x] První fotbalová soutěž je **UEFA Liga mistrů, potom Premier League**. Pilot je potvrzený pro **Ligu mistrů 2026/27 bez omezení na tři kola, s cílem dohrát sezonu včetně play-off; body začínají vlastními novými tipy, bez bodovaného tipu na sezonního vítěze**. Soutěž je otevřená pro testování nyní; běžné uzávěrky platí a chybějící fáze doplníme podle dostupnosti rozpisu.
 - [x] **Tipy zůstávají samostatné v každé lobby**, i když hráč tipuje stejný zápas ve více skupinách.
 - [x] Vlastník chce **úplný konečný výsledek** a při rozstřelu preferuje tipování jeho skóre, např. **5:4**. Jde o preferovanou herní variantu k dopracování v T05, nikoli oficiální gólové skóre nebo implementované pravidlo. Návrh jen 90 minut ani automatické přičtení jednoho gólu nebereme jako přijatou volbu.
@@ -95,7 +115,7 @@ Tato část je návrh rozsahu, ne další potvrzené rozhodnutí.
 | Tipování, uzávěrka, pořadí a vysvětlení bodů | MMA jako další formát tipu, F1 jako volitelný pozdější směr |
 | Testovací prostředí na Netlify a kontrolované sync joby | Samostatné firemní funkce a prodej |
 
-Potvrzené pořadí je **fotbal → hokej → MMA**, F1 zůstává volitelná. Vlastník vybral **Ligu mistrů 2026/27 pro průběžný test celé sezony, Premier League jako následující soutěž**. Česká nejvyšší liga zůstává pozdější možnost podle zájmu party. Premier League je anglická domácí soutěž; Liga mistrů je samostatná evropská klubová soutěž. Limit tří kol je zrušený; odehrané zápasy tvoří historii a tipovat lze budoucí zápasy před uzávěrkou. U MMA ověříme cílovou organizaci (kandidát UFC), datový zdroj a formát tipu. Pro první fotbalové soutěže prošel football-data.org čtecím ověřením; katalog je importovaný a chráněný sync je připravený k nasazení.
+Potvrzené pořadí je **fotbal → hokej → MMA**, F1 zůstává volitelná. Vlastník vybral **Ligu mistrů 2026/27 pro průběžný test celé sezony, Premier League jako následující soutěž**. Česká nejvyšší liga zůstává pozdější možnost podle zájmu party. Premier League je anglická domácí soutěž; Liga mistrů je samostatná evropská klubová soutěž. Limit tří kol je zrušený; odehrané zápasy tvoří historii a tipovat lze budoucí zápasy před uzávěrkou. U MMA je první organizací UFC; ověříme datový zdroj a formát tipu podle [nového plánu](mma-and-worlds-launch-plan.md). Pro první fotbalové soutěže prošel football-data.org čtecím ověřením; katalog je importovaný a chráněný sync je připravený k nasazení.
 
 Premier League nabízí pravidelný ligový rytmus; Liga mistrů přidá evropské kluby a pohárový formát. To je produktové doporučení, ne žebříček velikosti trhu. La Liga, Bundesliga nebo Serie A mohou následovat stejnou fotbalovou cestou podle skutečné poptávky; nejsou podmínkou pilotu.
 

@@ -8,6 +8,37 @@ It is not a feature backlog, TODO list, sprint plan, GitHub Issue list, technica
 
 ## Planning update — 2026-11-03
 
+**Owner direction — 2026-11-06:** add MMA as the next prediction format, with
+UFC as the first organization. UFC 334 on 14 November and the announced
+Procházka event on 21 November are candidate small-group tests, conditional on
+verified automated data and an agreed rules contract; they are not release
+commitments. The same persistent lobby should carry the group into the next
+event, with separate participation and standings. The winner-only pilot is now
+implemented and both cards are imported; see the [MMA runbook](mma-pilot-runbook.md)
+for release verification and remaining limits.
+
+The owner accepted winner prediction with optional method-of-victory and round
+bonuses as the MMA direction; predict the finishing round, not the exact clock
+time. The pilot uses versioned winner-only scoring (1 point for a correct
+winner); method/round bonuses remain to be specified and implemented.
+Creator/YouTube communities are an accepted use case for the same persistent
+lobby; paid community access is an idea, not an implemented entitlement or an
+approved payment/pricing model. Missing predictions should be immediately
+visible and directly actionable across competitions.
+
+The owner selected the men's Ice Hockey World Championship, 13–30 May 2027,
+as the main CZ/SK acquisition milestone. The owner clarified that the product
+must already be fully operational before the campaign; campaign work is mainly
+marketing, demonstrations and polish. Readiness requires clear onboarding,
+multilingual play, verified automated fixtures
+and results, trustworthy points, security review and tested operations. This is
+a product-readiness target, not a claim that the current app is ready for scale.
+The [readiness and work split](product-readiness-2026-11-06.md) proposes a
+February operational target, leaving March/April for marketing and refinement.
+The proposed preparation dates, MMA structure and launch criteria are in the
+[MMA and Worlds plan](mma-and-worlds-launch-plan.md). Landing-page work remains
+planning only until the owner requests implementation.
+
 **Multi-sport expansion — 2026-11-05:** the owner chose Premier League, then NHL
 and Czech Extraliga. PL/NHL are active in the same DB and Testovací rodeo. Imported
 ELH data are preserved but temporarily hidden/archived because Hokej.cz refuses
@@ -66,7 +97,9 @@ Cosmetic customization and visible supporter identity are the intended
 monetization area to validate. Pricing, payment implementation and exact
 Free/Premium boundaries remain undecided; payment must not affect sporting
 scores or the ability to win. Expansion order is football, hockey, then MMA;
-UFC is a candidate to investigate. F1 remains an optional later direction.
+the owner selected UFC as the first MMA organization on 6 November. UFCalendar
+and the winner-only pilot are verified at bootstrap; broader provider reliability
+and live play still need observation. F1 remains an optional later direction.
 
 The owner chose to archive the old version and start the pilot with new
 accounts and a fresh scoring period. The owner identified “Fotbaloví experti”

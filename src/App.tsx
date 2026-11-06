@@ -33,6 +33,7 @@ import { isDrawPrediction, requiresFootballWinner, formatStageLabel, isHockeyTou
 import { clubCrestUrl } from './lib/teamAssets.ts';
 import { formatMatchKickoff, MATCH_TIME_ZONE } from './lib/matchTime.ts';
 import { TournamentSetup } from './components/TournamentSetup.tsx';
+import { isMmaTournament } from './lib/mma.ts';
 import { 
   fetchAllData, 
   fetchCriticalAppData,
@@ -91,6 +92,7 @@ const LazyLeaderboardScreen = lazy(() => import('./components/LeaderboardScreen.
 const LazyLobbyView = lazy(() => import('./components/LobbyView.tsx').then(module => ({ default: module.LobbyView })));
 const LazyProfileScreen = lazy(() => import('./components/ProfileScreen.tsx'));
 const LazyOfficialEventView = lazy(() => import('./components/OfficialEventView.tsx'));
+const LazyMmaEventView = lazy(() => import('./components/MmaEventView.tsx'));
 
 const translations = {
   cz: {
@@ -1147,7 +1149,7 @@ export default function App() {
     };
 
     const fetchWinnerPickerTeams = async () => {
-      if (authStatus !== 'authenticated' || !activeTournamentId) {
+      if (authStatus !== 'authenticated' || !activeTournamentId || isMmaTournament(activeTournamentId)) {
         setWinnerPickerTeams([]);
         return;
       }
@@ -1516,11 +1518,20 @@ export default function App() {
   }, [matches, adminMatchFilter, adminGroupFilter]);
 
   const tournamentStats = useMemo(() => {
+    const mmaStats = Object.fromEntries(homeDashboardSummaries
+      .filter(row => row.lobby_id === activeLobbyId && isMmaTournament(row.tournament_id))
+      .map(row => [row.tournament_id, {
+        total: row.total_match_count ?? 0, scheduled: (row.total_match_count ?? 0) - (row.settled_match_count ?? 0),
+        finished: row.settled_match_count ?? 0, unresolved: (row.total_match_count ?? 0) - (row.settled_match_count ?? 0),
+        isCompleted: row.is_completed, championName: null, championShortName: null, championFlag: null,
+        nextStart: row.is_completed ? null : row.event_starts_at ?? null,
+        nextMatchLabel: lang === 'cz' ? 'Začátek karty · MMA' : 'First bell · MMA',
+      }]));
     const defaultTournamentId = activeTournamentId
       || activeLobby?.tournaments?.find(tournament => tournament.status === 'active')?.tournament_id
       || activeLobby?.tournament_id;
 
-    if (!defaultTournamentId) return {};
+    if (!defaultTournamentId || isMmaTournament(defaultTournamentId)) return mmaStats;
 
     const tournamentMatches = matches.filter(match => !match.tournament_id || match.tournament_id === defaultTournamentId);
     const scheduledMatches = tournamentMatches.filter(match => match.status === 'scheduled');
@@ -1536,6 +1547,7 @@ export default function App() {
     const isCompleted = Boolean(champion) && tournamentMatches.length > 0 && unresolvedMatches.length === 0;
 
     return {
+      ...mmaStats,
       [defaultTournamentId]: {
         total: tournamentMatches.length,
         scheduled: scheduledMatches.length,
@@ -1549,7 +1561,7 @@ export default function App() {
         nextMatchLabel: nextMatch ? `${nextMatch.home_name} vs ${nextMatch.away_name}` : null
       }
     };
-  }, [activeLobby, activeTournamentId, matches, teams]);
+  }, [activeLobby, activeLobbyId, activeTournamentId, matches, teams, homeDashboardSummaries, lang]);
   const activeTournamentIsCompleted = Boolean(
     activeTournamentId && tournamentStats[activeTournamentId]?.isCompleted
   );
@@ -2903,6 +2915,15 @@ export default function App() {
         onHome={goHome}
       />
     );
+  }
+
+  if (activeLobby && activeTournamentId && isMmaTournament(activeTournamentId)) {
+    return <Suspense fallback={<AuthenticatedAppSkeleton t={t} error="" onRetry={() => undefined} />}>
+      <LazyMmaEventView lobbyId={activeLobby.id} lobbyName={activeLobby.name} tournamentId={activeTournamentId}
+        userId={user.id} lang={lang} onBack={() => setActiveTournamentId(null)}
+        initialFilter={tab === 'results' ? 'results' : matchFilter === 'untipped' ? 'missing' : 'all'}
+        onPredictionSaved={() => void loadHomeDashboard()} />
+    </Suspense>;
   }
 
   if (lobbyNavigationViewState === 'home') {

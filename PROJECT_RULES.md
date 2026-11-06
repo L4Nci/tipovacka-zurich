@@ -1,5 +1,19 @@
 # Kompletní checklist pro další vývoj Tipovačky
 
+**Realizace — 6. 11.:** dvě UFC karty jsou importované v jediné stávající DB.
+MMA má samostatný winner-only kontrakt, RLS a automatický přepočet; bootstrap
+testy prošly s ROLLBACK. Stav vydání a provozní hranice jsou v
+[MMA runbooku](docs/mma-pilot-runbook.md). Bonusy způsob/kolo zůstávají další etapou.
+
+**Produktové upřesnění — 6. 11. 2026:** vlastník chce před hlavní CZ/SK kampaní
+MS 2027 již plně běžící produkt a čas kampaně věnovat hlavně marketingu a polish.
+YouTube/tvůrčí komunity používají stejnou stálou lobby s jednotlivými eventy;
+placený přístup je námět k samostatnému dopracování. U MMA je přijatá základní
+volba vítěze a volitelné bonusy způsob/kolo, bez přesného času. Chybějící tipy
+mají být na očích a dosažitelné přímo. [Stav a rozdělení práce](docs/product-readiness-2026-11-06.md)
+oddělují existující funkce od navržených úprav, právního/měřicího nastavení a
+nedokončeného ověření. Tento plán nemění pravidla ani data běžící aplikace.
+
 **Více lig — 5. 11. večer:** na pokyn vlastníka jsou importované a aktivní Premier
 League a NHL, připojené do Testovacího rodea. Extraligový import je zachovaný, ale
 dočasně skrytý/archivovaný: Hokej.cz z Netlify vrací 403 a API-Sports Free odmítá

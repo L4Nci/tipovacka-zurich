@@ -17,6 +17,10 @@ export type HomeDashboardSummary = {
   tournament_status: 'active' | 'archived';
   is_completed: boolean;
   actionable_match_count: number;
+  missing_match_count?: number;
+  total_match_count?: number;
+  settled_match_count?: number;
+  event_starts_at?: string | null;
   next_actionable_lock_time: string | null;
   next_missing_lock_time: string | null;
   all_known_unlocked_predicted: boolean;
@@ -208,6 +212,16 @@ export const getPrimaryHomeDashboardSummaryForLobby = (
       a.tournament_name.localeCompare(b.tournament_name) ||
       a.tournament_id.localeCompare(b.tournament_id)
     ))[0] || null;
+};
+
+export const getLobbyPredictionAttention = (lobbyId: string, summaries: HomeDashboardSummary[]) => {
+  const contexts = sortHomeDashboardSummaries(summaries.filter(row => row.lobby_id === lobbyId))
+    .filter(row => (row.missing_match_count ?? row.actionable_match_count) > 0);
+  return {
+    contexts,
+    urgentCount: contexts.reduce((sum, row) => sum + row.actionable_match_count, 0),
+    missingCount: contexts.reduce((sum, row) => sum + (row.missing_match_count ?? row.actionable_match_count), 0),
+  };
 };
 
 export const sortHomeDashboardSummaries = (summaries: HomeDashboardSummary[]) => {

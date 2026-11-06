@@ -4,6 +4,15 @@ Tipovačka is currently being rebuilt and tested in the existing Supabase projec
 
 ## Product Context
 
+**MMA pilot, 6 November:** UFC 334 and Procházka–Stirling are imported in the
+same Supabase project and attached to Testovací rodeo. Winner-only predictions
+use separate MMA tables, `mma-winner-v1` (correct winner 1 point), and a shared
+first-bell lock. UFCalendar is the verified Free source; `MMA_SYNC_ENABLED`
+gates adaptive polling through the existing protected cron endpoint. The
+bootstrap RLS/scoring suite passed with ROLLBACK before import. See
+[the MMA runbook](docs/mma-pilot-runbook.md) for release verification and limits.
+Landing remains a brief, not an implementation request.
+
 **Expansion, 5 November evening:** the owner requested Premier League, then NHL
 and Czech Extraliga. PL and NHL are active in Testovací rodeo. ELH's 363 imported
 games are preserved, but its catalog is hidden/relationship archived: Hokej.cz

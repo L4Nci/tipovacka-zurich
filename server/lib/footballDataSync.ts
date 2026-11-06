@@ -5,6 +5,7 @@ import { calculatePoints } from '../../src/lib/scoring.ts';
 import { clubCrestUrl } from '../../src/lib/teamAssets.ts';
 import { getSupabaseAdmin } from './supabaseAdmin.ts';
 import { runHockeyCatalogSync } from './hockeySync.ts';
+import { runMmaCatalogSync } from './mmaSync.ts';
 
 export const FOOTBALL_DATA_TOURNAMENT = 'uefa-champions-league-2026-27';
 export const FOOTBALL_DATA_SCORING_RULE = 'football-final-shootout-v1';
@@ -204,10 +205,11 @@ export async function handleFootballDataSyncRequest(event: Request, dependencies
   try {
     const result = await (dependencies.sync ?? (async dry => {
       const admin = getSupabaseAdmin();
-      const [football, hockey] = await Promise.all([runFootballDataCatalogSync(admin, dry), runHockeyCatalogSync(admin, dry)]);
-      return { ...football, competitions: { ...football.competitions, ...hockey.competitions },
-        failed: football.failed || hockey.failed, busy: football.busy || hockey.busy,
-        wrote_to_db: football.wrote_to_db || hockey.wrote_to_db, conflicts: [...football.conflicts, ...hockey.conflicts] };
+      const [football, hockey, mma] = await Promise.all([runFootballDataCatalogSync(admin, dry), runHockeyCatalogSync(admin, dry), runMmaCatalogSync(admin, dry)]);
+      return { ...football, competitions: { ...football.competitions, ...hockey.competitions, ...mma.competitions },
+        failed: football.failed || hockey.failed || mma.failed, busy: football.busy || hockey.busy || mma.busy,
+        wrote_to_db: football.wrote_to_db || hockey.wrote_to_db || mma.wrote_to_db,
+        conflicts: [...football.conflicts, ...hockey.conflicts, ...mma.conflicts] };
     }))(dryRun);
     return response(result.failed ? 502 : result.busy ? 409 : result.conflicts?.length ? 409 : 200, result);
   } catch (error) {
