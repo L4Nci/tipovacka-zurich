@@ -2,6 +2,7 @@ import { supabase } from "./supabase.ts";
 import { getClerkAccessToken } from "./clerkSupabase.ts";
 import { normalizeAccountProfile, type AccountProfile } from "./clerkAccount.ts";
 import { calculatePoints } from "./scoring.ts";
+import { isMmaTournament } from "./mma.ts";
 import { isDrawPrediction, requiresFootballWinner, isHockeyTournament } from "./matchRules.ts";
 import {
   Player,
@@ -438,25 +439,44 @@ const fetchHomeDashboardBatchedFallback = async (
 };
 
 export const fetchHomeDashboard = async (userId: string, lobbies: Lobby[]) => {
-  const { data, error } = await supabase.rpc('get_user_home_dashboard');
-
-  if (!error && data) {
-    return {
-      summaries: data.map(normalizeHomeDashboardSummary),
-      source: 'rpc' as const
-    };
-  }
-
+  const hasMma = lobbies.some(lobby => lobby.tournaments?.some(relation => isMmaTournament(relation.tournament_id)));
+  const [{ data, error }, pending, mma] = await Promise.all([
+    supabase.rpc('get_user_home_dashboard'),
+    supabase.rpc('get_my_pending_match_counts'),
+    hasMma ? supabase.rpc('get_my_mma_home') : Promise.resolve({ data: [], error: null }),
+  ]);
   if (error && !isMissingHomeDashboardRpcError(error)) throw error;
-
   if (error && !warnedMissingHomeDashboardRpc) {
     warnedMissingHomeDashboardRpc = true;
     console.warn('Home dashboard RPC is unavailable; using the batched read-only fallback.');
   }
-
+  const base: HomeDashboardSummary[] = !error && data ? data.map(normalizeHomeDashboardSummary)
+    : await fetchHomeDashboardBatchedFallback(userId, lobbies);
+  const countByContext = new Map((pending.data ?? []).map((row: any) => [row.lobby_id + ':' + row.tournament_id, Number(row.missing_count)]));
+  const summaries = base.filter(row => !isMmaTournament(row.tournament_id)).map(row => ({
+    ...row, missing_match_count: pending.error ? undefined : countByContext.get(row.lobby_id + ':' + row.tournament_id) ?? 0,
+  }));
+  if (mma.error) throw new Error('MMA přehled se nepodařilo načíst.');
+  for (const row of mma.data ?? []) {
+    const lobby = lobbies.find(item => item.id === row.lobby_id);
+    const relation = lobby?.tournaments?.find(item => item.tournament_id === row.tournament_id);
+    if (!lobby || !relation || relation.status !== 'active') continue;
+    const completed = row.event_status === 'cancelled' || (row.event_status === 'completed' && Number(row.fight_count) > 0 && Number(row.settled_count) === Number(row.fight_count));
+    summaries.push({
+      lobby_id: lobby.id, lobby_name: lobby.name, lobby_role: lobby.lobby_role ?? 'member',
+      member_count: lobby.member_count ?? 0, tournament_id: row.tournament_id,
+      tournament_name: relation.tournament?.name ?? row.tournament_id, tournament_status: 'active',
+      is_completed: completed, actionable_match_count: Number(row.urgent_count), missing_match_count: Number(row.missing_count),
+      total_match_count: Number(row.fight_count), settled_match_count: Number(row.settled_count), event_starts_at: row.event_starts_at,
+      next_actionable_lock_time: Number(row.urgent_count) > 0 ? row.next_lock : null,
+      next_missing_lock_time: row.next_lock, all_known_unlocked_predicted: Number(row.open_count) > 0 && Number(row.missing_count) === 0,
+      schedule_state: completed ? 'completed' : Number(row.fight_count) === 0 ? 'schedule_pending'
+        : Number(row.open_count) > 0 ? 'ready' : 'waiting_results', requires_owner_attention: false,
+    });
+  }
   return {
-    summaries: await fetchHomeDashboardBatchedFallback(userId, lobbies),
-    source: 'batched-fallback' as const
+    summaries,
+    source: !error && data ? 'rpc' as const : 'batched-fallback' as const,
   };
 };
 
@@ -1292,6 +1312,13 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
     const activeTournObj = activeTournamentsInLobby.find(t => t.status === 'active');
     targetTournamentId = activeTournObj?.tournament_id || activeLOB.tournament_id;
   }
+  if (isMmaTournament(targetTournamentId)) {
+    if (!activeLOB || !activeLOB.tournaments?.some(relation => relation.tournament_id === targetTournamentId)) {
+      throw new Error('Soutěž není dostupná v této lobby.');
+    }
+    return { lobbyId: activeLobbyId, lobbyName: activeLOB.name, lobbies: lobbiesList,
+      matches: [] as Match[], teams: [] as Team[], leaderboard: [] as Player[], allPredictions: [] as Prediction[] };
+  }
 
   const {
     lobbyName,
@@ -1410,6 +1437,13 @@ export const fetchCriticalAppData = async (userId: string, lobbyId?: string, tou
     const activeTournObj = activeTournamentsInLobby.find(t => t.status === 'active');
     targetTournamentId = activeTournObj?.tournament_id || activeLOB.tournament_id;
   }
+  if (isMmaTournament(targetTournamentId)) {
+    if (!activeLOB || !activeLOB.tournaments?.some(relation => relation.tournament_id === targetTournamentId)) {
+      throw new Error('Soutěž není dostupná v této lobby.');
+    }
+    return { lobbyId: activeLobbyId, lobbyName: activeLOB.name, tournamentId: targetTournamentId,
+      lobbies: lobbiesList, matches: [] as Match[], teams: [] as Team[] };
+  }
 
   const {
     lobbyName,
@@ -1452,6 +1486,7 @@ export const fetchCriticalAppData = async (userId: string, lobbyId?: string, tou
 };
 
 export const fetchDeferredAppData = async (lobbyId: string, tournamentId: string | undefined, matches: Match[]) => {
+  if (isMmaTournament(tournamentId)) return { leaderboard: [] as Player[], allPredictions: [] as Prediction[] };
   const allPredictions = await fetchFormattedLobbyPredictions(lobbyId, tournamentId, matches, "fetchDeferredAppData predictions");
   const leaderboard = await fetchLobbyLeaderboard(lobbyId, tournamentId, allPredictions);
 

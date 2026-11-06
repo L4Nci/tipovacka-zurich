@@ -16,6 +16,7 @@ import {
   classifyHomeDashboardSummary,
   formatTipsterCount,
   getPrimaryHomeDashboardSummaryForLobby,
+  getLobbyPredictionAttention,
   type HomeDashboardCardState,
   type HomeDashboardSummary
 } from '../lib/homeDashboard.ts';
@@ -231,8 +232,9 @@ const getCardCopy = (summary: HomeDashboardSummary, lang: 'cz' | 'en') => {
     },
     later: {
       status: formatLaterStatus(summary.next_missing_lock_time, lang),
-      cta: lang === 'cz' ? 'Zobrazit turnaj' : 'View tournament',
-      missing: false
+      cta: (summary.missing_match_count ?? 0) > 0 ? (lang === 'cz' ? 'Tipovat' : 'Predict')
+        : (lang === 'cz' ? 'Zobrazit turnaj' : 'View tournament'),
+      missing: (summary.missing_match_count ?? 0) > 0
     },
     schedule_pending: {
       status: lang === 'cz' ? 'Turnaj čeká na rozpis' : 'Tournament awaits schedule',
@@ -329,6 +331,7 @@ const getCompletedLobbySummary = (lobby: Lobby): HomeDashboardSummary | null => 
 const LobbyWorldCard = ({
   lobby,
   summary,
+  attention,
   lang,
   loading,
   error,
@@ -340,6 +343,7 @@ const LobbyWorldCard = ({
   key?: string;
   lobby: Lobby;
   summary: HomeDashboardSummary | null;
+  attention: ReturnType<typeof getLobbyPredictionAttention>;
   lang: 'cz' | 'en';
   loading: boolean;
   error: string;
@@ -371,12 +375,17 @@ const LobbyWorldCard = ({
     ? null
     : error
       ? (lang === 'cz' ? 'Dění teď nejde načíst' : 'Live status is unavailable')
-      : copy?.status || (
+      : attention.missingCount > 0
+        ? formatWaitingCount(attention.urgentCount || attention.missingCount, lang)
+          + (lang === 'cz' ? ' na natipování' : ' for predictions')
+          + (attention.urgentCount > 0 ? (lang === 'cz' ? ' do 48 hodin' : ' within 48 hours') : '')
+        : copy?.status || (
         lang === 'cz' ? 'Další turnaj zatím není vypsán' : 'The next tournament is not scheduled yet'
       );
   const ctaLabel = error
     ? (lang === 'cz' ? 'Zkusit znovu' : 'Retry')
-    : copy?.cta || (lang === 'cz' ? 'Otevřít lobby' : 'Open lobby');
+    : attention.contexts.length > 1 ? (lang === 'cz' ? 'Tipovat nejbližší soutěž' : 'Predict the next competition')
+      : copy?.cta || (lang === 'cz' ? 'Otevřít lobby' : 'Open lobby');
   const cardHeight = isCompleted ? 'min-h-[236px]' : 'min-h-[264px]';
   const ctaStyle = isActionable
     ? 'border border-red-600 bg-red-600 text-white shadow-sm hover:bg-red-700'
@@ -445,6 +454,18 @@ const LobbyWorldCard = ({
                 {statusLabel}
               </p>
               {timeLabel && <p className="mt-1 text-xs font-semibold text-slate-500">{timeLabel}</p>}
+              {!error && attention.contexts.length > 1 && <div className="pointer-events-auto mt-3 space-y-2">
+                {attention.contexts.map(context => <button key={context.tournament_id} type="button"
+                  onClick={event => { event.stopPropagation(); onOpenContext(context, true, 'matches'); }}
+                  aria-label={(lang === 'cz' ? 'Tipovat: ' : 'Predict: ') + lobby.name + ' · ' + context.tournament_name}
+                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-left text-xs font-bold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                  <span className="min-w-0 break-words">{context.tournament_name}</span>
+                  <span className="flex shrink-0 items-center gap-1 text-red-600">
+                    {context.actionable_match_count || context.missing_match_count || 0}
+                    <ChevronRight className="h-3 w-3" />
+                  </span>
+                </button>)}
+              </div>}
             </>
           )}
 
@@ -653,7 +674,8 @@ export function HomeDashboard({
         {hasHomeItems ? (
           <div className="space-y-4">
             {lobbies.map((lobby, index) => {
-              const summary = getPrimaryHomeDashboardSummaryForLobby(lobby.id, summaries) ||
+              const attention = getLobbyPredictionAttention(lobby.id, summaries);
+              const summary = attention.contexts[0] || getPrimaryHomeDashboardSummaryForLobby(lobby.id, summaries) ||
                 getCompletedLobbySummary(lobby);
 
               return (
@@ -661,6 +683,7 @@ export function HomeDashboard({
                   key={lobby.id}
                   lobby={lobby}
                   summary={summary}
+                  attention={attention}
                   lang={lang}
                   loading={summariesLoading}
                   error={summariesError}

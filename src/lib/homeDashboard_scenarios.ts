@@ -3,6 +3,7 @@ import {
   classifyHomeDashboardSummary,
   formatTipsterCount,
   getAttentionHomeDashboardSummaries,
+  getLobbyPredictionAttention,
   getLobbyCompetitionStatus,
   getPrimaryHomeDashboardSummaryForLobby,
   isUntippedMatchForDisplay,
@@ -116,6 +117,13 @@ assert.equal(
   'completed'
 );
 assert.equal(getPrimaryHomeDashboardSummaryForLobby('unknown-lobby', [actionable]), null);
+const anotherCompetition = { ...actionable, tournament_id: 'mma-event', tournament_name: 'UFC',
+  actionable_match_count: 0, missing_match_count: 5, next_missing_lock_time: hoursAfterNow(72), next_actionable_lock_time: null };
+const attention = getLobbyPredictionAttention('lobby-friends', [actionable, sameTournamentOtherLobby, anotherCompetition, completed]);
+assert.equal(attention.urgentCount, 1);
+assert.equal(attention.missingCount, 6);
+assert.deepEqual(attention.contexts.map(row => row.tournament_id), [actionable.tournament_id, 'mma-event']);
+assert.equal(getLobbyPredictionAttention('lobby-pub', [actionable, sameTournamentOtherLobby, anotherCompetition]).missingCount, 2);
 
 assert.equal(isUntippedMatchForDisplay({
   status: 'scheduled',
