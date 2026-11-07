@@ -1,5 +1,6 @@
 // Canonical source catalog. Keep keys stable when editing wording.
 export const cs = {
+  "mmaPhoto.cropped": "Foto (ořez):",
   "matches": "Zápasy",
   "results": "Výsledky",
   "rank": "Pořadí",
