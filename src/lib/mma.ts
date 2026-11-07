@@ -1,3 +1,5 @@
+import type { MmaPortrait } from './mmaPortraits.ts';
+
 export const MMA_PILOT_EVENTS = [
   { tournamentId: 'ufc-334-2026', providerId: 2563, expectedDate: '2026-11-14', label: 'UFC 334' },
   { tournamentId: 'ufc-qatar-2026-11-21', providerId: 3533, expectedDate: '2026-11-21', label: 'UFC Qatar: Procházka–Stirling' },
@@ -7,7 +9,7 @@ export const isMmaTournament = (id: string | null | undefined, sport?: string) =
   sport === 'mma' || MMA_PILOT_EVENTS.some(event => event.tournamentId === id);
 
 export type MmaFightStatus = 'scheduled' | 'finished' | 'draw' | 'void' | 'cancelled' | 'awaiting_result';
-export type MmaFighter = { id: number; name: string; country_code: string | null };
+export type MmaFighter = { id: number; name: string; country_code: string | null; portrait?: MmaPortrait | null };
 export type MmaFight = {
   id: string; tournament_id: string; provider_fight_id: number;
   fighter_a_id: number | null; fighter_b_id: number | null;

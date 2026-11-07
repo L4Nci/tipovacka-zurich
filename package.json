@@ -19,8 +19,9 @@
     "football-data:import": "node --import tsx scripts/football-data-import.ts",
     "hockey:import": "node --import tsx scripts/hockey-import.ts",
     "test:hockey": "node --import tsx --test server/lib/hockeyProvider.test.ts",
-    "test:mma": "node --import tsx --test server/lib/mmaProvider.test.ts src/lib/mmaPredictions.test.ts src/lib/mmaLobbyData.test.ts",
+    "test:mma": "node --import tsx --test server/lib/mmaProvider.test.ts src/lib/mmaPredictions.test.ts src/lib/mmaLobbyData.test.ts server/lib/mmaPortraitSync.test.ts src/lib/mmaPortraits.test.ts",
     "mma:import": "node --import tsx scripts/mma-import.ts",
+    "mma:portraits": "node --import tsx scripts/mma-portraits.ts",
     "test:match-presentation": "node --import tsx --test src/lib/matchPresentation.test.ts",
     "test:i18n": "node --import tsx --test src/i18n/index.test.ts"
   },

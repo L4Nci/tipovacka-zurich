@@ -1,5 +1,6 @@
 import type { MessageKey } from './cs.ts';
 export const en: Record<MessageKey, string> = {
+  "mmaPhoto.cropped": "Photo (cropped):",
   "matches": "Matches",
   "results": "Results",
   "rank": "Rank",

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { MMA_PILOT_EVENTS } from '../../src/lib/mma.ts';
 import { readMmaEvent, MmaProviderError, type MmaBatch } from './mmaProvider.ts';
+import { runMmaPortraitSync } from './mmaPortraitSync.ts';
 
 export async function submitMmaBatch(admin: SupabaseClient, batch: MmaBatch, dryRun: boolean) {
   const { data, error } = await admin.rpc('sync_mma_event', { batch_param: batch, dry_run_param: dryRun });
@@ -30,6 +31,9 @@ export async function runMmaCatalogSync(admin: SupabaseClient, dryRun: boolean, 
       results[event.tournamentId] = { failed: true, error: error instanceof MmaProviderError ? error.message : 'MMA sync could not be verified.' };
     }
   }
+  results.MMA_PORTRAITS = dryRun || Object.values(results).some(result => result.failed)
+    ? { skipped: true, wrote_to_db: false, reason: 'Portrait refresh is skipped in dry-run or while result polling is unhealthy.' }
+    : await runMmaPortraitSync(admin, key, options.transport);
   const values = Object.values(results);
   return { competitions: results, failed: values.some(result => result.failed),
     wrote_to_db: values.some(result => result.wrote_to_db), busy: false, conflicts: [] };
