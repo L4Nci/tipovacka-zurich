@@ -32,7 +32,7 @@ export async function loadMmaLobbyData(client: SupabaseClient, lobbyId: string, 
   const eventFights = (fights.data ?? []) as MmaFight[];
   const ids = [...new Set(eventFights.flatMap(f => [f.fighter_a_id, f.fighter_b_id]).filter(id => id !== null))];
   const [fighters, lobbyPredictions] = await Promise.all([
-    ids.length ? client.from('mma_fighters').select('id,name,country_code').in('id', ids)
+    ids.length ? client.from('mma_fighters').select('id,name,country_code,portrait').in('id', ids)
       : Promise.resolve({ data: [], error: null }),
     eventFights.length ? readAllRows<MmaPrediction>(client.from('mma_predictions')
       .select('lobby_id,fight_id,user_id,predicted_winner_id,lineup_version,points_earned')

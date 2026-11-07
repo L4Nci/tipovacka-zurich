@@ -20,7 +20,7 @@ penetrační test ani certifikace veřejného provozu.
 | Klíče | Server-only proměnné; finální frontend bundle neobsahoval 6 kontrolovaných secret hodnot | Nastavení Netlify, logy a přístupová práva/rotace |
 | Závislosti | `npm audit`: 11 hlášených balíčků, včetně 1 critical a 6 high; nepřibyly instalací překladů | Dosah na aplikaci zatím není potvrzen; samostatná [triage #26](https://github.com/L4Nci/tipovacka-zurich/issues/26) |
 | Historické přihlášení | Kompatibilita Supabase UUID je záměrně stále v DB | Rozhodnutí o vyřazení, revokaci a obnově admin účtu; nespoléhat na skrytý starý formulář |
-| Cookies/analytics | Analytics SDK zatím nezapojené | Skutečný cookie/network inventář, souhlasy, odvolání, správce, retence, export/výmaz a procesory |
+| Cookies/analytics | Analytics SDK zatím nezapojené; portréty načítají veřejné soubory z `d33t2v9cbr12gb.cloudfront.net` bez referreru | Skutečný cookie/network inventář včetně externího image CDN, souhlasy, odvolání, správce, retence, export/výmaz a procesory |
 | Zneužití a kapacita | Dílčí aplikační a provider limity | Rate/abuse test, zátěž před uzávěrkou, quota alerty, dohled |
 | Obnova a incident | Předchozí zálohy existují | Vyzkoušet obnovu, revokaci klíče, zastavení zápisů a návrat verze |
 

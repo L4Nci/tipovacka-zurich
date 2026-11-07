@@ -53,7 +53,7 @@ již před uzávěrkou, stejně jako v současných ostatních soutěžích.
 
 Čtení používá stávající RLS, přesný lobby/event kontext a stránkování tipů i
 pořadí; vlastní tipy zůstávají oddělené pro filtr Bez tipu a editační formulář.
-Není přidána nová policy, grant ani zápisová cesta. Tato klientská agregace je
+Pro komunitní tipy není přidána nová policy, grant ani zápisová cesta. Tato klientská agregace je
 určená pro pilot; velké veřejné komunity budou potřebovat samostatné kapacitní
 ověření a případně serverovou agregaci.
 
@@ -61,8 +61,8 @@ ověření a případně serverovou agregaci.
 
 UFCalendar: `GET https://api.ufcalendar.com/v1/events/{id}`, serverový Bearer
 `UFCAL_API_KEY`. Klíč nesmí mít prefix VITE a nepatří do gitu ani URL. Použitý
-účet ověřen jako Free: 1 000 požadavků/měsíc, 10/min. Vybraný pilot nepoužívá
-fotografie bojovníků. API-Sports Free přístup k oběma termínům odmítl.
+účet ověřen jako Free: 1 000 požadavků/měsíc, 10/min. Doplnění portrétů používá
+stejný zdroj a klíč; popis je níže. API-Sports Free přístup k oběma termínům odmítl.
 
 Stejný chráněný endpoint `/api/admin/sync-football-data` a stávající 15min cron
 obslouží i MMA, pokud `MMA_SYNC_ENABLED=true`. JSON zachovává explicitní
@@ -118,6 +118,60 @@ potvrzení chyby. Viz [výklad linteru](https://supabase.com/docs/guides/databas
 Před pozváním širší veřejnosti zbývá skutečný účet/obnova po refreshi,
 hraniční souběhy, výpadek a opožděné výsledky během živé karty, dohled a obnova.
 Neoznačovat celý produkt za bezpečnostně uzavřený: [matice](security-readiness-matrix.md).
+
+## Portréty bojovníků — patch 2
+
+Migrace `20261107100541_mma_fighter_portraits` je aplikovaná v existujícím
+projektu. Přidává pouze kosmetické `mma_fighters.portrait` a `portrait_checked_at`,
+privátní frontu obnovy a čítač fotografií. Nemění jména/identity, rozpisy, výsledky,
+tipy ani body. Zdrojový patch je navázaný na [issue #28](https://github.com/L4Nci/tipovacka-zurich/issues/28).
+
+Server čte `GET /v1/fighters/{id}` přes stejný `UFCAL_API_KEY`. UI dostane jen
+vybraný ověřený obrázek a plné kredity v již existujícím dotazu na bojovníky.
+Nevolá poskytovatele po hráčích ani lobby. Soubory jsou obsloužené z providerova
+Commons CDN a ukládají se do běžné browser/CDN cache; vlastní Storage ani placené
+transformace nejsou potřeba. Neznámý host, neprůkazná licence nebo chybějící autor
+znamenají náhradní zobrazení. Známé CC BY/BY-SA, CC0 a public domain metadata se
+ověřují serverově i před vykreslením. Viditelný kredit pod daným bojovníkem uvádí
+autora, licenci, odkaz na původní soubor a označení CSS ořezu. Aplikace nemění
+originální obrázek a neposílá na CDN/API klíč ani referrer. API vrací pouze fotky
+z Commons, nikoli oficiální promo fotografie; podmínky §6 uvádějí pravidla kreditů.
+
+První načtení 7. 11. 2026 ověřilo všech 44 profilů aktivních duelů: 19 použitelných
+fotografií a 25 náhradních zobrazení. Zbývající tři uložené profily nejsou součástí
+aktuálních aktivních duelů, pro které se profil čerpá. Jde o pokrytí v okamžiku importu,
+nikoli slib, že API dodá fotografii každému novému bojovníkovi. Kontrolní otisky
+všech herních tabulek, historických tipů/profilů a původních údajů bojovníků
+zůstaly po načtení shodné.
+
+Každý nezkušební běh existujícího cronu zkusí nejvýše **jeden** splatný profil
+z aktivních duelů. `dryRun`, vypnuté MMA nebo chyba při čtení MMA výsledků obnovu
+fotek vynechá. Chyba portrétu sama nevyvolá chybu výsledkového cronu; odpověď nese
+samostatné `competitions.MMA_PORTRAITS.warning`. Profilové volání má limit 5 s.
+
+DB rezervace sdílí zamykání a měsíční rozpočet s výsledky. Fotky mají vlastní
+strop **100 rezervací/měsíc** a přestanou rezervovat při celkovém čítači 800,
+aby posledních 100 z limitu 900 zůstalo výsledkům. Mezi profilovými rezervacemi
+je nejméně 10 s. Úspěch i potvrzené „bez fotky“ se cacheují 30 dní; chyba ponechá
+stávající obrázek a počká den. Patnáctiminutový lease obnoví úlohu po pádu workeru;
+starý/nesprávný/expirující token nesmí přepsat novější metadata. Tyto RPC může
+spustit jen `service_role`; hráčská oprávnění se nerozšiřují.
+
+`npm run mma:portraits -- --dry-run` pouze čte stav cache, bez API požadavků.
+`--write --fighters=196,102,116` cíleně připraví několik profilů; `--write --limit=50`
+postupně zpracuje až 50 splatných profilů, po 11 s. Všechny zápisy procházejí
+stejnou DB rezervací, nikdy neresetují cache/kvótu a předem zálohují tabulku
+bojovníků do privátního dočasného adresáře. Rychlé opakování může správně skončit
+skipem. Budoucí nové zápasy/bojovníci se postupně doplní existujícím cronem.
+
+Ověření: `npm run test:mma` zahrnuje profilovou identitu, výběr fotky, hosty/licence,
+chybějící a prázdné obrázky, ochranu klíče a oddělení selhání od výsledků.
+`supabase/tests/mma_fighter_portraits.sql` je opakovatelná sada pro existující
+katalog s ROLLBACK: hráčské zákazy, lease, stará odpověď, 30denní cache, chyba,
+prázdný výsledek, kvóty a zachování výsledkové rezervy. Test nemění sportovní fakta.
+Náhled s fixture ověřuje mobil/desktop, kredity, výběr i uložení a zachování
+rozepsaného tipu při selhání fotky. Skutečné Clerk přihlášení při tomto QA není
+nahrazováno fixture důkazem.
 
 ## Zdrojové podklady
 

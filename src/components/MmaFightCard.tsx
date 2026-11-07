@@ -6,6 +6,7 @@ import type { MmaFight, MmaPrediction, MmaFighter } from '../lib/mma.ts';
 import type { MmaStanding } from '../lib/mmaLobbyData.ts';
 import type { summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
 import { PredictionDistribution } from './PredictionDistribution.tsx';
+import { MmaFighterPortrait, MmaPortraitCredit } from './MmaFighterPortrait.tsx';
 
 export function MmaFightCard({ fight, fighters, prediction, community, members, userId, open, busy, lang, onSave }: {
   key?: string; fight: MmaFight; fighters: Map<number, MmaFighter>; prediction?: MmaPrediction;
@@ -40,14 +41,19 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
       <fieldset disabled={!open || busy} className="grid grid-cols-2 gap-3">
         <legend className="sr-only">{translate(lang, "mmaFightCard.pickTheBoutWinner")}</legend>
         {[a, b].map((person, index) => <button key={index} type="button" aria-pressed={Boolean(person && selected === person.id)}
+          aria-label={person?.name || translate(lang, 'mmaFightCard.opponentToBeConfirmed')}
           onClick={() => person && setSelected(person.id)}
           className={'min-h-24 rounded-2xl border-2 p-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-default ' +
             (person && selected === person.id ? (index === 0 ? 'border-[#ce1126] bg-red-50 text-slate-950' : 'border-[#006847] bg-emerald-50 text-slate-950')
               : 'border-slate-100 bg-slate-50 text-slate-700')}>
-          {person?.country_code && <span className="mb-2 block text-[10px] font-bold text-slate-400">{person.country_code}</span>}
+          <MmaFighterPortrait fighter={person} />
           <span className="block text-sm font-black leading-snug">{person?.name || (translate(lang, "mmaFightCard.opponentToBeConfirmed"))}</span>
         </button>)}
       </fieldset>
+      <div className="mt-2 grid grid-cols-2 gap-3">
+        <MmaPortraitCredit fighter={a} lang={lang} />
+        <MmaPortraitCredit fighter={b} lang={lang} />
+      </div>
       <div className="mt-5">
         <PredictionDistribution homeLabel={a?.name || 'TBA'} awayLabel={b?.name || 'TBA'}
           homePercent={community.homePercent} awayPercent={community.awayPercent} lang={lang} />

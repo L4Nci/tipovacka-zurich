@@ -72,6 +72,7 @@ test('one failed card does not prevent the other card from syncing', async () =>
   const submitted: string[] = [];
   const admin = { rpc: async (name: string, args: any) => {
     if (name === 'claim_mma_sync') return { data: true, error: null };
+    if (name === 'claim_mma_fighter_portrait') return { data: [], error: null };
     submitted.push(args.batch_param.event.tournament_id);
     return { data: { wrote_to_db: true }, error: null };
   } } as any;
@@ -83,5 +84,17 @@ test('one failed card does not prevent the other card from syncing', async () =>
   assert.equal(result.failed, true);
   assert.equal(result.wrote_to_db, true);
   assert.deepEqual(submitted, ['ufc-qatar-2026-11-21']);
+  assert.equal(JSON.stringify(result).includes('private-key'), false);
+  assert.equal(result.competitions.MMA_PORTRAITS.skipped, true);
+});
+
+test('an optional portrait outage does not turn a healthy result poll into failure', async () => {
+  const admin = { rpc: async (name: string) => ({ error: null, data:
+    name === 'claim_mma_sync' ? false : name === 'claim_mma_fighter_portrait'
+      ? [{ fighter_id: 196, claim_token: 'lease' }] : true }) } as any;
+  const result = await runMmaCatalogSync(admin, false, { enabled: true, key: 'private-key',
+    transport: (async () => { throw new Error('private-key'); }) as typeof fetch });
+  assert.equal(result.failed, false);
+  assert.equal(typeof result.competitions.MMA_PORTRAITS.warning, 'string');
   assert.equal(JSON.stringify(result).includes('private-key'), false);
 });
