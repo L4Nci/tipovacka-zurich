@@ -165,9 +165,11 @@ event-only product model to build.
 
 Player identity and profile persist across competitions. Lobby membership and
 history persist when the organizer starts the next competition; participation
-in that competition is a distinct concept. A new event does not silently enroll
+in that competition is a distinct concept. A new competition does not silently enroll
 all lobby members or carry historical points into its new leaderboard. Exact
 entry permissions and account contracts must be specified before implementation.
+Recurring UFC cards are rounds of an already enabled annual competition, so
+they inherit that league's lobby access; a new annual competition stays separate.
 
 Sports schedules and results are shared facts. Lobby participation, predictions
 and standings retain their competition context. The owner explicitly chose
