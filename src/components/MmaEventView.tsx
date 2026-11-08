@@ -1,7 +1,8 @@
 import { translate, type Locale } from '../i18n/index.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Clock, Info, RefreshCw, Trophy } from 'lucide-react';
-import { canPredictMmaFight, MMA_PILOT_EVENTS, type MmaFighter, type MmaFight, type MmaPrediction } from '../lib/mma.ts';
+import { canPredictMmaFight, isMmaSeason, mmaEventName, type MmaFighter, type MmaFight, type MmaPrediction } from '../lib/mma.ts';
+import { filterMmaSeason, mmaEventStandings } from '../lib/mmaSeason.ts';
 import { fetchMmaLobby, saveMmaPrediction, type MmaLobbyData, type MmaStanding } from '../lib/mmaDb.ts';
 import { summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
 import { MmaFightCard } from './MmaFightCard.tsx';
@@ -19,6 +20,8 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
   const [filter, setFilter] = useState<'all' | 'missing' | 'results'>(initialFilter);
   const [now, setNow] = useState(Date.now());
   const [showRules, setShowRules] = useState(false);
+  const [eventFilter, setEventFilter] = useState('all');
+  const [seasonStandings, setSeasonStandings] = useState(false);
   const requests = useRef(0);
   const load = useCallback(async () => {
     const request = ++requests.current;
@@ -34,6 +37,8 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
     return () => { requests.current++; };
   }, [load]);
   useEffect(() => { const interval = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(interval); }, []);
+  useEffect(() => { setEventFilter('all'); setSeasonStandings(false); setFilter(initialFilter); }, [lobbyId, tournamentId, initialFilter]);
+  const events = useMemo(() => new Map((data?.events ?? []).map(event => [event.tournament_id, event])), [data?.events]);
   const people = useMemo(() => new Map<number, MmaFighter>((data?.fighters ?? []).map(person => [person.id, person] as const)), [data?.fighters]);
   const picks = useMemo(() => new Map<string, MmaPrediction>((data?.predictions ?? []).map(pick => [pick.fight_id, pick] as const)), [data?.predictions]);
   const members = useMemo(() => new Map<string, MmaStanding>((data?.standings ?? []).map(person => [person.user_id, person] as const)), [data?.standings]);
@@ -47,11 +52,22 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
     return new Map<string, ReturnType<typeof summarizeMmaPredictions>>((data?.fights ?? []).map(fight =>
       [fight.id, summarizeMmaPredictions(lobbyId, fight, grouped.get(fight.id) ?? [], active)] as const));
   }, [data?.lobbyPredictions, data?.fights, members, lobbyId]);
-  const missing = (fight: MmaFight) => data && canPredictMmaFight(data.event, fight, now)
+  const missing = (fight: MmaFight) => events.has(fight.tournament_id)
+    && canPredictMmaFight(events.get(fight.tournament_id)!, fight, now)
     && picks.get(fight.id)?.lineup_version !== fight.lineup_version;
-  const rows = (data?.fights ?? []).filter(fight => filter === 'missing' ? missing(fight)
-    : filter === 'results' ? fight.status !== 'scheduled' : true);
-  const title = MMA_PILOT_EVENTS.find(event => event.tournamentId === tournamentId)?.label || 'UFC';
+  const rows = useMemo(() => data ? filterMmaSeason(data.events, data.fights, data.predictions, eventFilter, filter, now) : [],
+    [data, eventFilter, filter, now]);
+  const groups = (data?.events ?? []).map(event => ({ event, fights: rows.filter(fight => fight.tournament_id === event.tournament_id) }))
+    .filter(group => group.fights.length > 0);
+  if (filter === 'results') groups.reverse();
+  const title = isMmaSeason(tournamentId) ? 'UFC ' + tournamentId.slice(-4)
+    : data?.events[0] ? mmaEventName(data.events[0]) : 'UFC';
+  const selectedEvent = eventFilter === 'all' ? (isMmaSeason(tournamentId) ? null : data?.events[0]) : events.get(eventFilter);
+  const standings = useMemo(() => !data ? [] : eventFilter === 'all' || seasonStandings ? data.standings
+    : mmaEventStandings(lobbyId, eventFilter, data.standings, data.fights, data.lobbyPredictions), [data, eventFilter, seasonStandings, lobbyId]);
+  const missingCount = (data?.fights ?? []).filter(fight => (eventFilter === 'all' || fight.tournament_id === eventFilter) && missing(fight)).length;
+  const hasOpenFights = (data?.fights ?? []).some(fight => (eventFilter === 'all' || fight.tournament_id === eventFilter)
+    && events.has(fight.tournament_id) && canPredictMmaFight(events.get(fight.tournament_id)!, fight, now));
   const save = async (fight: MmaFight, winner: number) => {
     setSaving(fight.id); setError('');
     try { await saveMmaPrediction(lobbyId, userId, fight, winner); await load(); onPredictionSaved(); }
@@ -74,34 +90,50 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
         </button>
       </div>
     </header>
-    <MmaRulesDialog open={showRules} event={data?.event} lang={lang} onClose={() => setShowRules(false)} />
+    <MmaRulesDialog open={showRules} event={selectedEvent} lang={lang} onClose={() => setShowRules(false)} />
     <main className="space-y-4 p-4">
-      {data && <p className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
-        <Clock className="h-3 w-3 shrink-0" />
-        <span>{translate(lang, "mmaEventView.cardDeadline")}{formatMmaEventTime(data.event.lock_time_utc, lang)}</span>
-      </p>}
+      {data && <label className="block space-y-2 text-xs font-bold text-slate-500">
+        <span>{translate(lang, 'mmaSeason.eventFilter')}</span>
+        <select value={eventFilter} onChange={event => { setEventFilter(event.target.value); setSeasonStandings(false); }}
+          className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800">
+          <option value="all">{translate(lang, 'mmaSeason.allEvents')}</option>
+          {data.events.map(event => <option key={event.tournament_id} value={event.tournament_id}>{mmaEventName(event)}</option>)}
+        </select>
+      </label>}
       <div className="flex flex-wrap items-center gap-2">
         {(['all', 'missing', 'results'] as const).map(value => <button key={value} onClick={() => setFilter(value)}
           className={'min-h-10 rounded-full px-4 py-1.5 text-[10px] font-black transition-colors ' + (filter === value ? 'bg-red-600 text-white shadow-lg shadow-red-100' : 'border border-slate-100 bg-white text-slate-400 hover:border-slate-200')}>
-          {value === 'all' ? (translate(lang, "all")) : value === 'results' ? (translate(lang, "results"))
-            : (translate(lang, "app.missing")) + (data ? ' (' + data.fights.filter(missing).length + ')' : '')}
+          {value === 'all' ? (translate(lang, 'mmaSeason.upcoming')) : value === 'results' ? (translate(lang, "results"))
+            : (translate(lang, "app.missing")) + (data ? ' (' + missingCount + ')' : '')}
         </button>)}
         <button onClick={() => void load()} aria-label={translate(lang, "mmaEventView.refreshData")} className="ml-auto min-h-10 rounded-full bg-white px-3 text-slate-500"><RefreshCw className="h-4 w-4" /></button>
       </div>
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
       {loading && <p className="p-4 text-center text-sm text-slate-500">{translate(lang, "mmaEventView.loadingFightCard")}</p>}
       {!loading && data && rows.length === 0 && <p className="rounded-xl bg-white p-5 text-center text-sm font-bold text-slate-600">
-        {filter === 'missing' ? (Date.parse(data.event.lock_time_utc) <= now || !['announced', 'scheduled'].includes(data.event.status)
-          ? (translate(lang, "mmaEventView.predictionsAreLockedResultsWillUpdateAutomatically"))
-          : (translate(lang, "mmaEventView.allOpenBoutsHaveAPrediction")))
-          : (translate(lang, "mmaEventView.noResultsYet"))}
+        {filter === 'missing' ? translate(lang, hasOpenFights ? 'mmaEventView.allOpenBoutsHaveAPrediction' : 'mmaEventView.predictionsAreLockedResultsWillUpdateAutomatically')
+          : filter === 'results' ? translate(lang, 'mmaEventView.noResultsYet') : translate(lang, 'mmaSeason.noUpcoming')}
       </p>}
-      {data && rows.map(fight => <MmaFightCard key={fight.id} fight={fight} fighters={people} prediction={picks.get(fight.id)}
+      {data && groups.map(({ event, fights }) => <section key={event.tournament_id} className="space-y-4" aria-label={mmaEventName(event)}>
+        <div className="space-y-1 px-1 pt-3">
+          <h2 className="text-sm font-black text-slate-800">{mmaEventName(event)}</h2>
+          <p className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+            <Clock className="h-3 w-3 shrink-0" />{translate(lang, 'mmaEventView.cardDeadline')}{formatMmaEventTime(event.lock_time_utc, lang)}
+          </p>
+        </div>
+        {fights.map(fight => <MmaFightCard key={fight.id} fight={fight} eventLabel={mmaEventName(event)} fighters={people} prediction={picks.get(fight.id)}
         community={communityByFight.get(fight.id)} members={members} userId={userId}
-        open={canPredictMmaFight(data.event, fight, now)} busy={saving !== null} lang={lang} onSave={winner => save(fight, winner)} />)}
+        open={canPredictMmaFight(event, fight, now)} busy={saving !== null} lang={lang} onSave={winner => save(fight, winner)} />)}
+      </section>)}
       {data && <section className="rounded-2xl border border-slate-100 bg-white p-4">
-        <h2 className="mb-4 flex items-center gap-2 text-sm font-black text-slate-900"><Trophy className="h-4 w-4" />{translate(lang, "mmaEventView.thisLobbySStandings")}</h2>
-        <ol className="space-y-3">{data.standings.map((person, index) => <li key={person.user_id}
+        <h2 className="mb-4 flex items-center gap-2 text-sm font-black text-slate-900"><Trophy className="h-4 w-4" />
+          {translate(lang, isMmaSeason(tournamentId) && (eventFilter === 'all' || seasonStandings) ? 'mmaSeason.seasonStandings' : 'mmaSeason.eventStandings')}
+        </h2>
+        {selectedEvent && isMmaSeason(tournamentId) && <button type="button" onClick={() => setSeasonStandings(value => !value)}
+          className="mb-4 min-h-10 rounded-full bg-slate-50 px-3 text-xs font-bold text-slate-600">
+          {translate(lang, seasonStandings ? 'mmaSeason.showEventStandings' : 'mmaSeason.showSeasonStandings')}
+        </button>}
+        <ol className="space-y-3">{standings.map((person, index) => <li key={person.user_id}
           className="flex items-center justify-between gap-3 text-sm">
           <span className="min-w-0 truncate font-bold text-slate-700">{index + 1}. {person.avatar_emoji || ''} {person.username}{person.user_id === userId ? (translate(lang, "mmaEventView.you")) : ''}</span>
           <strong className="shrink-0 text-slate-950">{person.points} {translate(lang, "mmaEventView.pts")}</strong>

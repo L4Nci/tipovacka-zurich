@@ -1,5 +1,11 @@
 # Kompletní checklist pro další vývoj Tipovačky
 
+**Schváleno — 8. 11. 2026:** UFC má jednu roční soutěž v lobby, eventy jako její
+kola, souhrnné roční i jednotlivé eventové pořadí a filtr karet/výsledků.
+Nové karty se přidávají automaticky; další rok se zapíná samostatně, bez přenosu
+bodů. Existující tipy se nekopírují. [Kontrakt a stav vydání](docs/ufc-season-league.md)
+nahrazují původní samostatné pilotní karty a jejich polling.
+
 **Realizace — 6. 11.:** dvě UFC karty jsou importované v jediné stávající DB.
 MMA má samostatný winner-only kontrakt, RLS a automatický přepočet; bootstrap
 testy prošly s ROLLBACK. Stav vydání a provozní hranice jsou v

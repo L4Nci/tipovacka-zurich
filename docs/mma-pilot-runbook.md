@@ -1,5 +1,10 @@
 # MMA winner-only pilot
 
+**Approved successor — 8 November:** individual UFC cards become rounds within
+an annual league, preserving existing picks and locks. The new calendar/cadence,
+migration and release checks are in [UFC annual leagues](ufc-season-league.md).
+The release evidence and pilot-only intervals below describe the previous release.
+
 Aktualizace 6. 11. 2026. Dvě karty jsou importované v existujícím Supabase a
 připojené do **Testovacího rodea**. Migrace `20261106122607_mma_winner_pilot`
 je aplikovaná. První MMA release z [PR #23](https://github.com/L4Nci/tipovacka-zurich/pull/23)

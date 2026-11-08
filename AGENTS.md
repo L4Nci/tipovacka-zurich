@@ -4,6 +4,12 @@ Tipovačka is currently being rebuilt and tested in the existing Supabase projec
 
 ## Product Context
 
+**Approved 8 November:** implement annual UFC leagues inside each lobby, with
+automatic card discovery, event filters/results and season/event leaderboards.
+Preserve existing picks, duel IDs, scoring and locks. The next year is a separate
+competition. See [UFC annual leagues](docs/ufc-season-league.md) for the migration,
+bounded Free API cadence and release status; this supersedes pilot-only card grouping.
+
 **MMA pilot, 6 November:** UFC 334 and Procházka–Stirling are imported in the
 same Supabase project and attached to Testovací rodeo. Winner-only predictions
 use separate MMA tables, `mma-winner-v1` (correct winner 1 point), and a shared

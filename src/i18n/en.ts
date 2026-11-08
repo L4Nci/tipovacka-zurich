@@ -1,5 +1,13 @@
 import type { MessageKey } from './cs.ts';
 export const en: Record<MessageKey, string> = {
+  "mmaSeason.eventFilter": "UFC event",
+  "mmaSeason.allEvents": "All events",
+  "mmaSeason.upcoming": "Upcoming",
+  "mmaSeason.noUpcoming": "No upcoming bouts yet. New UFC cards will appear automatically.",
+  "mmaSeason.seasonStandings": "This lobby’s season standings",
+  "mmaSeason.eventStandings": "This lobby’s event standings",
+  "mmaSeason.showEventStandings": "Show event standings",
+  "mmaSeason.showSeasonStandings": "Show full season",
   "mmaPhoto.cropped": "Photo (cropped):",
   "matches": "Matches",
   "results": "Results",

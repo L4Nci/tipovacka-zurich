@@ -10,7 +10,7 @@ function fixtureClient(denyStandings = false) {
   const members = picks.map(row => ({ user_id: row.user_id, username: row.user_id,
     avatar_emoji: null, avatar_bg: null, points: '0', predictions_count: '1' }));
   const datasets = {
-    mma_events: [{ tournament_id: 'ufc-334-2026' }],
+    mma_events: [{ tournament_id: 'ufc-334-2026', season_tournament_id: 'ufc-2026', tournament: { name: 'UFC 334' } }],
     mma_fights: [{ id: 'bout-a', tournament_id: 'ufc-334-2026', fighter_a_id: 1, fighter_b_id: 2, ordering: 1 }],
     mma_fighters: fighters,
     mma_predictions: [...picks, { ...picks[0], lobby_id: 'private-other-lobby' }, { ...picks[0], fight_id: 'other-event-bout' }],
@@ -55,4 +55,15 @@ test('a failed membership check stops community prediction reads instead of show
   const { client, requests } = fixtureClient(true);
   await assert.rejects(loadMmaLobbyData(client, 'kobra', 'ufc-334-2026', 'member-0'), /MMA_LOBBY_LOAD_FAILED/);
   assert.equal(requests.some(request => request.table === 'mma_predictions'), false);
+});
+
+test('annual league loads cards under the parent season and keeps the lobby prediction context', async () => {
+  const { client, requests } = fixtureClient();
+  const rpc = client.rpc;
+  client.rpc = (name: string, args: any) => { assert.equal(args.p_tournament_id, 'ufc-2026');
+    return rpc(name, { ...args, p_tournament_id: 'ufc-334-2026' }); };
+  const result = await loadMmaLobbyData(client, 'kobra', 'ufc-2026', 'member-0');
+  assert.equal(result.events[0].event_name, 'UFC 334');
+  assert.deepEqual(requests.find(row => row.table === 'mma_events')?.filters, [['eq', 'season_tournament_id', 'ufc-2026']]);
+  assert.equal(result.predictions.length, 1);
 });
