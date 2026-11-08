@@ -1,5 +1,13 @@
 // Canonical source catalog. Keep keys stable when editing wording.
 export const cs = {
+  "mmaSeason.eventFilter": "UFC event",
+  "mmaSeason.allEvents": "Všechny eventy",
+  "mmaSeason.upcoming": "Nadcházející",
+  "mmaSeason.noUpcoming": "Zatím žádné další duely. Nové UFC karty se doplní automaticky.",
+  "mmaSeason.seasonStandings": "Pořadí sezony v této lobby",
+  "mmaSeason.eventStandings": "Pořadí tohoto eventu v lobby",
+  "mmaSeason.showEventStandings": "Ukázat pořadí eventu",
+  "mmaSeason.showSeasonStandings": "Ukázat celou sezonu",
   "mmaPhoto.cropped": "Foto (ořez):",
   "matches": "Zápasy",
   "results": "Výsledky",

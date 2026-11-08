@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { MMA_PILOT_EVENTS, type MmaFightStatus } from '../../src/lib/mma.ts';
+import { MMA_PILOT_EVENTS, mmaTournamentId, type MmaFightStatus } from '../../src/lib/mma.ts';
 
 export class MmaProviderError extends Error {}
+export class MmaCardPendingError extends MmaProviderError {}
 const fail = (message: string): never => { throw new MmaProviderError(message); };
 const object = (value: any) => value && typeof value === 'object' && !Array.isArray(value);
 const positiveId = (value: any) => Number.isSafeInteger(value) && value > 0;
@@ -21,15 +22,20 @@ function fighter(value: any) {
 
 export function normalizeMmaEvent(payload: any, providerId: number, observedAt = new Date()) {
   const config = MMA_PILOT_EVENTS.find(event => event.providerId === providerId);
-  if (!config || !object(payload) || payload.id !== providerId || payload.org !== 'ufc' || payload.sport !== 'mma'
+  if (!positiveId(providerId) || !object(payload) || payload.id !== providerId || payload.org !== 'ufc' || payload.sport !== 'mma'
     || typeof payload.slug !== 'string' || !/^[a-z0-9-]{1,120}$/.test(payload.slug)
     || typeof payload.title !== 'string' || !payload.title.trim() || payload.title.length > 200
     || !['announced', 'scheduled', 'live', 'completed', 'cancelled', 'postponed'].includes(payload.status)
-    || !Array.isArray(payload.card) || payload.card.length < 1 || payload.card.length > 40) fail('MMA event is outside the verified pilot scope.');
+    || (!config && !isUfcMainEvent(payload))
+    || !Array.isArray(payload.card) || payload.card.length > 40) fail('MMA event is outside the UFC scope.');
+  if (!payload.card.length) {
+    if (['announced', 'scheduled'].includes(payload.status)) throw new MmaCardPendingError('UFC bouts have not been published yet.');
+    fail('MMA card is incomplete.');
+  }
   const starts = utc(payload.starts_at)!;
   // A legitimate postponement stays under the same provider ID. Original identity/date are pinned at bootstrap.
-  const event = { tournament_id: config.tournamentId, provider_event_id: providerId, provider_slug: payload.slug,
-    name: config.label, org: 'ufc', sport: 'mma', starts_at: starts, main_card_at: utc(payload.main_card_at, true), status: payload.status as string };
+  const event = { tournament_id: mmaTournamentId(providerId), provider_event_id: providerId, provider_slug: payload.slug,
+    name: config?.label ?? payload.title.trim(), org: 'ufc', sport: 'mma', starts_at: starts, main_card_at: utc(payload.main_card_at, true), status: payload.status as string };
   if (event.main_card_at && Date.parse(event.main_card_at) < Date.parse(starts)) fail('MMA main card precedes the first bell.');
   const fighters = new Map<number, ReturnType<typeof fighter>>();
   const ids = new Set<number>();
@@ -77,7 +83,7 @@ export function normalizeMmaEvent(payload: any, providerId: number, observedAt =
 export type MmaBatch = ReturnType<typeof normalizeMmaEvent>;
 
 export async function readMmaEvent(providerId: number, key: string, transport: typeof fetch = fetch): Promise<MmaBatch> {
-  if (!MMA_PILOT_EVENTS.some(event => event.providerId === providerId)) fail('MMA event is outside the verified pilot scope.');
+  if (!positiveId(providerId)) fail('MMA event identity is invalid.');
   if (!key.trim()) fail('MMA provider key is not configured.');
   try {
     const response = await transport('https://api.ufcalendar.com/v1/events/' + providerId, {
@@ -93,5 +99,50 @@ export async function readMmaEvent(providerId: number, key: string, transport: t
     if (error instanceof MmaProviderError) throw error;
     // Transport/provider errors may reflect the key. Never log or return their text.
     throw new MmaProviderError('MMA provider is unavailable or the response could not be verified.');
+  }
+}
+
+function isUfcMainEvent(value: any) {
+  // UFCalendar's UFC organization also contains development shows. Keep the main UFC calendar only.
+  return typeof value.slug === 'string' && /^ufc(?:-|$)/.test(value.slug)
+    && typeof value.title === 'string' && /\bUFC\b/i.test(value.title)
+    && !/\b(DWCS|contender|ultimate fighter|road to ufc|power slap)\b/i.test(value.title + ' ' + value.slug.replaceAll('-', ' '));
+}
+
+export function normalizeMmaCalendar(envelope: any, now = new Date()) {
+  const start = Date.parse(now.toISOString().slice(0, 10) + 'T00:00:00Z');
+  if (!object(envelope) || !Array.isArray(envelope.data) || envelope.data.length > 100
+    || envelope.error || envelope.meta?.pagination?.has_more !== false) fail('UFC calendar is incomplete.');
+  const ids = new Set<number>();
+  return envelope.data.flatMap((raw: any) => {
+    if (!object(raw) || !positiveId(raw.id) || ids.has(raw.id) || raw.org !== 'ufc' || raw.sport !== 'mma'
+      || typeof raw.title !== 'string' || !raw.title.trim() || raw.title.length > 200
+      || typeof raw.slug !== 'string' || !/^[a-z0-9-]{1,120}$/.test(raw.slug)
+      || !['announced', 'scheduled', 'live', 'completed', 'cancelled', 'postponed'].includes(raw.status)) fail('UFC calendar identity is invalid.');
+    ids.add(raw.id);
+    const starts = utc(raw.starts_at)!;
+    const time = Date.parse(starts);
+    if (time < start - 86400_000 || time >= start + 43 * 86400_000) fail('UFC calendar date is outside the discovery window.');
+    return isUfcMainEvent(raw) && ['announced', 'scheduled', 'live'].includes(raw.status)
+      ? [{ provider_event_id: raw.id as number, starts_at: starts, org: 'ufc', sport: 'mma' }] : [];
+  });
+}
+
+export async function readMmaCalendar(key: string, transport: typeof fetch = fetch, now = new Date()) {
+  if (!key.trim()) fail('MMA provider key is not configured.');
+  const today = Date.parse(now.toISOString().slice(0, 10) + 'T00:00:00Z');
+  const from = new Date(today - 86400_000).toISOString().slice(0, 10);
+  const to = new Date(today + 42 * 86400_000).toISOString().slice(0, 10);
+  try {
+    const response = await transport('https://api.ufcalendar.com/v1/events?org=ufc&from=' + from + '&to=' + to + '&order=asc&limit=100', {
+      headers: { authorization: 'Bearer ' + key.trim() }, redirect: 'error', signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) fail('UFC calendar request failed (HTTP ' + response.status + ').');
+    const text = await response.text();
+    if (text.length > 2_000_000) fail('UFC calendar response is too large.');
+    return normalizeMmaCalendar(JSON.parse(text), now);
+  } catch (error) {
+    if (error instanceof MmaProviderError) throw error;
+    throw new MmaProviderError('UFC calendar is unavailable or could not be verified.');
   }
 }

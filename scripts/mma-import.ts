@@ -45,8 +45,8 @@ async function main() {
     for (const batch of snapshots) console.log(JSON.stringify(await submitMmaBatch(admin, batch, false)));
     const { data: lobby, error: lookupError } = await admin.from('lobbies').select('id').eq('id', 'lobby-c95b9dbc84d962b2ff9b40fd').single();
     if (lookupError || !lobby) throw new MmaProviderError('Pilot lobby could not be verified; catalog imported without attaching.');
-    const { error } = await admin.from('lobby_tournaments').upsert(MMA_PILOT_EVENTS.map(event => ({
-      lobby_id: lobby.id, tournament_id: event.tournamentId, status: 'active',
+    const { error } = await admin.from('lobby_tournaments').upsert([...new Set(snapshots.map(batch => 'ufc-' + batch.event.starts_at.slice(0, 4)))].map(tournamentId => ({
+      lobby_id: lobby.id, tournament_id: tournamentId, status: 'active',
     })), { onConflict: 'lobby_id,tournament_id' });
     if (error) throw new MmaProviderError('MMA catalog imported but pilot lobby attachment failed.');
     console.log(JSON.stringify({ attached_to_pilot: true, events: snapshots.length, snapshots: directory }));

@@ -470,7 +470,7 @@ export const fetchHomeDashboard = async (userId: string, lobbies: Lobby[]) => {
       total_match_count: Number(row.fight_count), settled_match_count: Number(row.settled_count), event_starts_at: row.event_starts_at,
       next_actionable_lock_time: Number(row.urgent_count) > 0 ? row.next_lock : null,
       next_missing_lock_time: row.next_lock, all_known_unlocked_predicted: Number(row.open_count) > 0 && Number(row.missing_count) === 0,
-      schedule_state: completed ? 'completed' : Number(row.fight_count) === 0 ? 'schedule_pending'
+      schedule_state: completed ? 'completed' : Number(row.fight_count) === 0 || Number(row.settled_count) === Number(row.fight_count) ? 'schedule_pending'
         : Number(row.open_count) > 0 ? 'ready' : 'waiting_results', requires_owner_attention: false,
     });
   }

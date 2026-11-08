@@ -8,10 +8,10 @@ import type { summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
 import { PredictionDistribution } from './PredictionDistribution.tsx';
 import { MmaFighterPortrait, MmaPortraitCredit } from './MmaFighterPortrait.tsx';
 
-export function MmaFightCard({ fight, fighters, prediction, community, members, userId, open, busy, lang, onSave }: {
+export function MmaFightCard({ fight, fighters, prediction, community, members, userId, open, busy, lang, eventLabel, onSave }: {
   key?: string; fight: MmaFight; fighters: Map<number, MmaFighter>; prediction?: MmaPrediction;
   community: ReturnType<typeof summarizeMmaPredictions>; members: ReadonlyMap<string, MmaStanding>; userId: string;
-  open: boolean; busy: boolean; lang: Locale; onSave: (winner: number) => Promise<void>;
+  open: boolean; busy: boolean; lang: Locale; eventLabel?: string; onSave: (winner: number) => Promise<void>;
 }) {
   const validPick = prediction?.lineup_version === fight.lineup_version;
   const [selected, setSelected] = useState<number | null>(validPick ? prediction!.predicted_winner_id : null);
@@ -34,6 +34,7 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
         : (translate(lang, "mmaFightCard.awaitingVerifiedResult"));
   return <article className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
     <div className="p-4">
+      {eventLabel && <p className="mb-2 truncate text-[10px] font-black text-slate-500" title={eventLabel}>{eventLabel}</p>}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold uppercase text-slate-400">
         <span>{formatMmaWeightClass(fight.weight_class, lang)}{fight.scheduled_rounds ? ' · ' + pluralMessage(lang, 'rounds', fight.scheduled_rounds) : ''}</span>
         <span className="rounded-full bg-slate-50 px-2 py-0.5 tracking-tighter">{section}</span>

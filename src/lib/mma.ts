@@ -6,7 +6,14 @@ export const MMA_PILOT_EVENTS = [
 ] as const;
 
 export const isMmaTournament = (id: string | null | undefined, sport?: string) =>
-  sport === 'mma' || MMA_PILOT_EVENTS.some(event => event.tournamentId === id);
+  sport === 'mma' || isMmaSeason(id) || /^ufcal-event-[1-9]\d*$/.test(id ?? '')
+  || MMA_PILOT_EVENTS.some(event => event.tournamentId === id);
+
+export const isMmaSeason = (id: string | null | undefined) => /^ufc-20\d{2}$/.test(id ?? '');
+export const mmaTournamentId = (providerId: number) =>
+  MMA_PILOT_EVENTS.find(event => event.providerId === providerId)?.tournamentId ?? 'ufcal-event-' + providerId;
+export const mmaEventName = (event: MmaEvent) => event.event_name
+  || MMA_PILOT_EVENTS.find(item => item.tournamentId === event.tournament_id)?.label || 'UFC';
 
 export type MmaFightStatus = 'scheduled' | 'finished' | 'draw' | 'void' | 'cancelled' | 'awaiting_result';
 export type MmaFighter = { id: number; name: string; country_code: string | null; portrait?: MmaPortrait | null };
@@ -19,6 +26,7 @@ export type MmaFight = {
 };
 export type MmaEvent = {
   tournament_id: string; provider_event_id: number; provider_slug: string;
+  season_tournament_id?: string; event_name?: string;
   starts_at: string; main_card_at: string | null; lock_time_utc: string;
   status: 'announced' | 'scheduled' | 'live' | 'completed' | 'cancelled' | 'postponed';
   source_observed_at: string; rules_version: 'mma-winner-v1';

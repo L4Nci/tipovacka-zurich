@@ -17,12 +17,21 @@ extension; see [the localization contract](localization.md). The targeted legacy
 tournament-winner context-transfer fix is applied in the existing DB; broader
 security readiness remains tracked in [the control matrix](security-readiness-matrix.md).
 
+**Owner decision — 2026-11-08:** UFC uses one annual competition per lobby
+(`UFC 2026`, then a separately enabled `UFC 2027`). Individual cards are rounds
+inside that competition, with event filters/results and an annual leaderboard.
+New cards are discovered automatically; existing picks retain their duel/lobby
+identity. This supersedes separate per-card participation/standings as the only
+UFC competition model; event standings remain available as a view of the year.
+Implementation/release contract: [UFC annual leagues](ufc-season-league.md).
+
 **Owner direction — 2026-11-06:** add MMA as the next prediction format, with
 UFC as the first organization. UFC 334 on 14 November and the announced
 Procházka event on 21 November are candidate small-group tests, conditional on
 verified automated data and an agreed rules contract; they are not release
 commitments. The same persistent lobby should carry the group into the next
-event, with separate participation and standings. The winner-only pilot is now
+event. Initially each card had separate participation/standings; the annual UFC
+decision above replaces that pilot structure. The winner-only pilot is now
 implemented and both cards are imported; see the [MMA runbook](mma-pilot-runbook.md)
 for release verification and remaining limits.
 
