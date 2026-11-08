@@ -110,4 +110,4 @@ passed save/add/clear, lineup reset, first-bell lock, v1/v2 results and rules,
 CZ/EN, 320/390 px mobile and desktop; the final run had no console warnings or
 errors. A private local backup includes affected data, functions, constraints
 and current MMA policies. These are pre-release checks; deployed verification
-and owner acceptance are still pending.
+and owner acceptance are tracked in [release PR #33](https://github.com/L4Nci/tipovacka-zurich/pull/33).
