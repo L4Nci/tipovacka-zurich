@@ -38,7 +38,8 @@ export async function loadMmaLobbyData(client: SupabaseClient, lobbyId: string, 
     Promise.all(chunks(ids).map(chunk => readAllRows<MmaFighter>(client.from('mma_fighters')
       .select('id,name,country_code,portrait').in('id', chunk).order('id')))).then(rows => rows.flat()),
     Promise.all(chunks(eventFights.map(fight => fight.id)).map(chunk => readAllRows<MmaPrediction>(client.from('mma_predictions')
-      .select('lobby_id,fight_id,user_id,predicted_winner_id,lineup_version,points_earned')
+      // Includes optional method when the paired migration is present; also reads the v1 schema during rollout.
+      .select('*')
       .eq('lobby_id', lobbyId).in('fight_id', chunk)
       .order('fight_id').order('user_id')))).then(rows => rows.flat()),
   ]);

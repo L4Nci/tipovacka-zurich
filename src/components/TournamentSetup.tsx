@@ -21,7 +21,7 @@ export function TournamentSetup({ catalog, value, onChange, disabled, lang, erro
     </div>
     {value && !hockey && !mma && <ScoringRulesPreview lang={lang} />}
     {mma && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
-      {translate(lang, "tournamentSetup.mmaPilotCorrectBoutWinner1PointDrawsNo")}
+      {translate(lang, 'mmaMethod.setup')}
     </p>}
     {hockey && <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
       {translate(lang, "tournamentSetup.hockeyFinalScoreIncludingOvertimeAndTheDecidingShootout")}

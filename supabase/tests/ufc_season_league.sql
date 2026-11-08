@@ -79,10 +79,11 @@ UPDATE ufc_season_batches SET payload=jsonb_set(jsonb_set(jsonb_set(jsonb_set(pa
 SELECT public.sync_mma_event(payload,false) FROM ufc_season_batches;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"role":"authenticated","iss":"supabase","sub":"10000000-1111-4111-8111-200000000001"}',true);
-DO $$ BEGIN
-  IF (SELECT points FROM public.get_mma_lobby_leaderboard('ufc-season-qa-a','ufc-2026'))<>2 THEN RAISE EXCEPTION 'Annual points double-counted/missing'; END IF;
-  IF (SELECT points FROM public.get_mma_lobby_leaderboard('ufc-season-qa-a','ufcal-event-98701001'))<>1 THEN RAISE EXCEPTION 'Card points not isolated'; END IF;
-  IF (SELECT points FROM public.get_mma_lobby_leaderboard('ufc-season-qa-a','ufc-2027'))<>1 THEN RAISE EXCEPTION 'Years mixed'; END IF;
+DO $$ DECLARE winner_points integer; BEGIN
+  SELECT CASE rules_version WHEN 'mma-winner-method-v2' THEN 3 ELSE 1 END INTO winner_points FROM public.mma_events WHERE tournament_id='ufcal-event-98701001';
+  IF (SELECT points FROM public.get_mma_lobby_leaderboard('ufc-season-qa-a','ufc-2026'))<>2*winner_points THEN RAISE EXCEPTION 'Annual points double-counted/missing'; END IF;
+  IF (SELECT points FROM public.get_mma_lobby_leaderboard('ufc-season-qa-a','ufcal-event-98701001'))<>winner_points THEN RAISE EXCEPTION 'Card points not isolated'; END IF;
+  IF (SELECT points FROM public.get_mma_lobby_leaderboard('ufc-season-qa-a','ufc-2027'))<>winner_points THEN RAISE EXCEPTION 'Years mixed'; END IF;
   BEGIN
     UPDATE public.mma_predictions SET predicted_winner_id=98701102 WHERE lobby_id='ufc-season-qa-a';
     RAISE EXCEPTION 'Settled bout reopened';

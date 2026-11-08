@@ -1,7 +1,7 @@
 import { translate, intlLocale, type Locale } from '../i18n/index.ts';
 import { useEffect, useId, useRef } from 'react';
 import { Info, X } from 'lucide-react';
-import type { MmaEvent } from '../lib/mma.ts';
+import type { MmaEvent, MmaRulesVersion } from '../lib/mma.ts';
 import { MATCH_TIME_ZONE } from '../lib/matchTime.ts';
 
 export function formatMmaEventTime(value: string, lang: Locale) {
@@ -10,11 +10,12 @@ export function formatMmaEventTime(value: string, lang: Locale) {
   }).format(new Date(value));
 }
 
-export function MmaRulesDialog({ open, event, lang, onClose }: {
-  open: boolean; event?: MmaEvent | null; lang: Locale; onClose: () => void;
+export function MmaRulesDialog({ open, event, lang, rulesVersion = event?.rules_version ?? 'mma-winner-v1', mixedRules = false, onClose }: {
+  open: boolean; event?: MmaEvent | null; lang: Locale; rulesVersion?: MmaRulesVersion; mixedRules?: boolean; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const methodEnabled = rulesVersion === 'mma-winner-method-v2';
   useEffect(() => {
     if (!open) { if (dialog.current?.open) dialog.current.close(); return; }
     if (!dialog.current?.open) dialog.current?.showModal();
@@ -41,19 +42,30 @@ export function MmaRulesDialog({ open, event, lang, onClose }: {
         <X className="h-4 w-4" />
       </button>
     </div>
-    <p className="mb-4 text-sm font-semibold leading-relaxed text-slate-600">{translate(lang, "mmaRulesDialog.pickTheWinnerOfEachBout")}</p>
+    <p className="mb-4 text-sm font-semibold leading-relaxed text-slate-600">{translate(lang, methodEnabled ? 'mmaMethod.rulesIntro' : 'mmaRulesDialog.pickTheWinnerOfEachBout')}</p>
     <div className="space-y-2">
-      {[
+      {(methodEnabled ? [
+        [translate(lang, 'mmaMethod.bothCorrect'), translate(lang, 'mmaMethod.5Points')],
+        [translate(lang, 'mmaMethod.winnerOnly'), translate(lang, 'mmaMethod.3Points')],
+        [translate(lang, 'mmaMethod.methodOnly'), translate(lang, 'mmaRulesDialog.1Point')],
+        [translate(lang, 'mmaMethod.neitherCorrect'), translate(lang, 'mmaRulesDialog.0Points')],
+        [translate(lang, 'mmaRulesDialog.drawNoContestCancelledBout'), translate(lang, 'mmaRulesDialog.0Points')],
+      ] : [
         [translate(lang, "mmaRulesDialog.correctWinner"), translate(lang, "mmaRulesDialog.1Point")],
         [translate(lang, "mmaRulesDialog.incorrectWinner"), translate(lang, "mmaRulesDialog.0Points")],
         [translate(lang, "mmaRulesDialog.drawNoContestCancelledBout"), translate(lang, "mmaRulesDialog.0Points")],
-      ].map(([label, points]) => <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+      ]).map(([label, points]) => <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
         <span className="text-xs font-bold text-slate-700">{label}</span>
         <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-black text-white">{points}</span>
       </div>)}
     </div>
     <p className="mt-4 text-xs leading-relaxed text-slate-500">{translate(lang, "mmaRulesDialog.allPicksLockAtTheFirstBoutIncludingPrelims")}</p>
-    <p className="mt-2 text-xs leading-relaxed text-slate-500">{translate(lang, "mmaRulesDialog.ifTheLineupChangesPickAgainMethodAndFinishing")}</p>
+    <p className="mt-2 text-xs leading-relaxed text-slate-500">{translate(lang, methodEnabled ? 'mmaMethod.optionalHelp' : 'mmaRulesDialog.ifTheLineupChangesPickAgainMethodAndFinishing')}</p>
+    {methodEnabled && <>
+      <p className="mt-2 text-xs leading-relaxed text-slate-500">{translate(lang, 'mmaMethod.dqRules')}</p>
+      <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">{translate(lang, 'mmaMethod.example')}</p>
+    </>}
+    {mixedRules && <p className="mt-3 text-xs leading-relaxed text-slate-500">{translate(lang, 'mmaMethod.mixedRules')}</p>}
     {event && <div className="mt-4 space-y-2 rounded-2xl bg-slate-50 p-3 text-xs text-slate-600">
       <p className="font-bold text-red-600">{translate(lang, "mmaEventView.cardDeadline")}{formatMmaEventTime(event.lock_time_utc, lang)}</p>
       {event.main_card_at && <p>{translate(lang, "mmaRulesDialog.mainCard")}{formatMmaEventTime(event.main_card_at, lang)}</p>}
