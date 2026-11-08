@@ -1,7 +1,7 @@
 import { translate, type Locale } from '../i18n/index.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Clock, Info, RefreshCw, Trophy } from 'lucide-react';
-import { canPredictMmaFight, isMmaSeason, mmaEventName, type MmaFighter, type MmaFight, type MmaPrediction } from '../lib/mma.ts';
+import { canPredictMmaFight, isMmaSeason, mmaEventName, type MmaFighter, type MmaFight, type MmaPrediction, type MmaMethod } from '../lib/mma.ts';
 import { filterMmaSeason, mmaEventStandings } from '../lib/mmaSeason.ts';
 import { fetchMmaLobby, saveMmaPrediction, type MmaLobbyData, type MmaStanding } from '../lib/mmaDb.ts';
 import { summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
@@ -68,9 +68,9 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
   const missingCount = (data?.fights ?? []).filter(fight => (eventFilter === 'all' || fight.tournament_id === eventFilter) && missing(fight)).length;
   const hasOpenFights = (data?.fights ?? []).some(fight => (eventFilter === 'all' || fight.tournament_id === eventFilter)
     && events.has(fight.tournament_id) && canPredictMmaFight(events.get(fight.tournament_id)!, fight, now));
-  const save = async (fight: MmaFight, winner: number) => {
+  const save = async (fight: MmaFight, winner: number, method: MmaMethod | null) => {
     setSaving(fight.id); setError('');
-    try { await saveMmaPrediction(lobbyId, userId, fight, winner); await load(); onPredictionSaved(); }
+    try { await saveMmaPrediction(lobbyId, userId, fight, winner, method, events.get(fight.tournament_id)?.rules_version); await load(); onPredictionSaved(); }
     catch (e: any) { setError(e.message === 'MMA_LINEUP_CHANGED'
       ? (translate(lang, "mmaEventView.theCardChangedRefreshAndPickAgain"))
       : (translate(lang, "mmaEventView.thePickWasNotSavedRefreshAndCheckThe"))); }
@@ -90,7 +90,10 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
         </button>
       </div>
     </header>
-    <MmaRulesDialog open={showRules} event={selectedEvent} lang={lang} onClose={() => setShowRules(false)} />
+    <MmaRulesDialog open={showRules} event={selectedEvent} lang={lang}
+      rulesVersion={selectedEvent?.rules_version ?? (data?.events.some(event => event.rules_version === 'mma-winner-method-v2') ? 'mma-winner-method-v2' : 'mma-winner-v1')}
+      mixedRules={!selectedEvent && new Set(data?.events.map(event => event.rules_version)).size > 1}
+      onClose={() => setShowRules(false)} />
     <main className="space-y-4 p-4">
       {data && <label className="block space-y-2 text-xs font-bold text-slate-500">
         <span>{translate(lang, 'mmaSeason.eventFilter')}</span>
@@ -123,7 +126,8 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
         </div>
         {fights.map(fight => <MmaFightCard key={fight.id} fight={fight} eventLabel={mmaEventName(event)} fighters={people} prediction={picks.get(fight.id)}
         community={communityByFight.get(fight.id)} members={members} userId={userId}
-        open={canPredictMmaFight(event, fight, now)} busy={saving !== null} lang={lang} onSave={winner => save(fight, winner)} />)}
+        open={canPredictMmaFight(event, fight, now)} busy={saving !== null} lang={lang} rulesVersion={event.rules_version}
+        onSave={(winner, method) => save(fight, winner, method)} />)}
       </section>)}
       {data && <section className="rounded-2xl border border-slate-100 bg-white p-4">
         <h2 className="mb-4 flex items-center gap-2 text-sm font-black text-slate-900"><Trophy className="h-4 w-4" />

@@ -18,8 +18,10 @@ The year has an aggregate leaderboard; selecting an event shows that event's
 leaderboard, with a button back to the full year. Upcoming, missing and results
 filters combine with the event selector. Each bout retains a visible event label.
 The home dashboard shows one annual row and the combined missing count per lobby.
-Cancelled, draw and no-contest bouts remain zero points; a correct valid winner
-still earns one point under `mma-winner-v1`. First-bell and lineup locks are unchanged.
+Cancelled, draw and no-contest bouts remain zero points. The approved
+[optional method extension](mma-finish-methods.md) uses 5/3/1/0 under
+`mma-winner-method-v2` for eligible open/new cards. Historical/locked v1 cards
+retain one point for the winner. First-bell and lineup locks are unchanged.
 
 The next year is a distinct competition, enabled separately. No points transfer
 to that leaderboard. Event assignment uses the UTC year first registered from the

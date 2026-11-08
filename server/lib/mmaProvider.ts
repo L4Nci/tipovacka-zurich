@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { MMA_PILOT_EVENTS, mmaTournamentId, type MmaFightStatus } from '../../src/lib/mma.ts';
+import { MMA_PILOT_EVENTS, MMA_PROVIDER_METHODS, mmaTournamentId, type MmaFightStatus, type MmaProviderMethod } from '../../src/lib/mma.ts';
 
 export class MmaProviderError extends Error {}
 export class MmaCardPendingError extends MmaProviderError {}
@@ -53,14 +53,18 @@ export function normalizeMmaEvent(payload: any, providerId: number, observedAt =
     }
     const result = raw.result;
     if (result !== null && !object(result)) fail('MMA result is invalid.');
+    const method = result?.method_normalized ?? null;
+    if (method !== null && !MMA_PROVIDER_METHODS.includes(method)) fail('MMA finish method is invalid.');
     const winner = result?.winner_fighter_id ?? null;
     if (winner !== null && (!positiveId(winner) || !a || !b || (winner !== a.id && winner !== b.id))) fail('MMA winner is not a fighter in this bout.');
     let status: MmaFightStatus = 'scheduled';
     if (raw.status === 'cancelled') status = 'cancelled';
     else if (raw.status === 'no_contest' || result?.method_normalized === 'no_contest') status = 'void';
-    else if (raw.status === 'completed') status = winner !== null ? 'finished' : result?.method_normalized === 'draw' ? 'draw' : 'awaiting_result';
-    else if (winner !== null) fail('MMA pending fight carries a winner.');
+    else if (raw.status === 'completed') status = method === 'draw' ? 'draw' : winner !== null ? 'finished' : 'awaiting_result';
+    else if (winner !== null || method !== null) fail('MMA pending fight carries a result.');
     if (status !== 'finished' && winner !== null) fail('MMA void/cancelled fight carries a winner.');
+    if ((status === 'void' && method !== null && method !== 'no_contest')
+      || (status === 'draw' && method !== null && method !== 'draw')) fail('MMA finish contradicts the bout outcome.');
     const order = raw.ordering ?? index + 1;
     if (!Number.isInteger(order) || order < 1 || order > 100
       || (raw.scheduled_rounds !== null && ![3, 5].includes(raw.scheduled_rounds))
@@ -72,7 +76,8 @@ export function normalizeMmaEvent(payload: any, providerId: number, observedAt =
       card_section: section as string, weight_class: typeof raw.weight_class === 'string' ? raw.weight_class.slice(0, 120) : null,
       scheduled_rounds: raw.scheduled_rounds as number | null, status,
       winner_fighter_id: status === 'finished' ? winner as number : null,
-      method: typeof result?.method === 'string' ? result.method.slice(0, 120) : null, finish_round: result?.round ?? null };
+      method: typeof result?.method === 'string' ? result.method.slice(0, 120) : null,
+      method_normalized: method as MmaProviderMethod | null, finish_round: result?.round ?? null };
   }).sort((a: any, b: any) => a.provider_fight_id - b.provider_fight_id);
   const people = [...fighters.values()].sort((a, b) => a!.id - b!.id);
   if (!people.length || !Number.isFinite(observedAt.getTime())) fail('MMA observation is invalid.');

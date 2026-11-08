@@ -1,5 +1,11 @@
 # Kompletní checklist pro další vývoj Tipovačky
 
+**Ukončení MMA schváleno — 8. 11. 2026:** KO/TKO, Submise, Na body jako volitelný
+doplněk k povinnému vítězi. Samostatný pruh uložených tipů v lobby. Bodování v2:
+vítěz i ukončení 5 / pouze vítěz 3 / pouze ukončení 1 / jinak 0; remíza, no contest
+a zrušený duel 0. Nová pravidla jen pro dosud otevřené nebodované a nové karty,
+historické/uzamčené v1 beze změny. [Kontrakt a ověření](docs/mma-finish-methods.md).
+
 **Schváleno — 8. 11. 2026:** UFC má jednu roční soutěž v lobby, eventy jako její
 kola, souhrnné roční i jednotlivé eventové pořadí a filtr karet/výsledků.
 Nové karty se přidávají automaticky; další rok se zapíná samostatně, bez přenosu

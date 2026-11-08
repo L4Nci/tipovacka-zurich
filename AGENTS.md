@@ -4,6 +4,11 @@ Tipovačka is currently being rebuilt and tested in the existing Supabase projec
 
 ## Product Context
 
+**Finish-method approval, 8 November:** optional KO/TKO, Submission and Decision,
+a separate saved-pick distribution and v2 points 5/3/1/0 are authorized. Apply v2
+only to eligible open/unscored and future cards; preserve locked/historical v1.
+Winner picks remain required and method picks optional. See [the method contract](docs/mma-finish-methods.md).
+
 **Approved 8 November:** implement annual UFC leagues inside each lobby, with
 automatic card discovery, event filters/results and season/event leaderboards.
 Preserve existing picks, duel IDs, scoring and locks. The next year is a separate

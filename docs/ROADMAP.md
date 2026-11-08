@@ -25,6 +25,12 @@ identity. This supersedes separate per-card participation/standings as the only
 UFC competition model; event standings remain available as a view of the year.
 Implementation/release contract: [UFC annual leagues](ufc-season-league.md).
 
+**Follow-up approval — 2026-11-08:** add optional KO/TKO, Submission and Decision
+predictions and a separate lobby method distribution. Version v2 awards 5 for
+winner+method, 3 for winner only, 1 for method only and 0 otherwise. Eligible open
+and future cards adopt it; locked/historical winner-only cards keep their rules.
+Finishing-round predictions remain later work. See [the method contract](mma-finish-methods.md).
+
 **Owner direction — 2026-11-06:** add MMA as the next prediction format, with
 UFC as the first organization. UFC 334 on 14 November and the announced
 Procházka event on 21 November are candidate small-group tests, conditional on
@@ -37,8 +43,9 @@ for release verification and remaining limits.
 
 The owner accepted winner prediction with optional method-of-victory and round
 bonuses as the MMA direction; predict the finishing round, not the exact clock
-time. The pilot uses versioned winner-only scoring (1 point for a correct
-winner); method/round bonuses remain to be specified and implemented.
+time. The original pilot used versioned winner-only scoring (1 point for a correct
+winner). The method extension above supersedes it for eligible new/open cards;
+finishing-round bonuses remain to be specified and implemented.
 Creator/YouTube communities are an accepted use case for the same persistent
 lobby; paid community access is an idea, not an implemented entitlement or an
 approved payment/pricing model. Missing predictions should be immediately

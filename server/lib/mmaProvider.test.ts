@@ -39,6 +39,19 @@ test('MMA rejects foreign identity, impossible winner, duplicate fight and ambig
   assert.throws(() => normalizeMmaEvent({ ...event(), card: [bout(), bout()] }, 3533), MmaProviderError);
   assert.throws(() => normalizeMmaEvent({ ...event(), starts_at: '2026-11-21T15:00:00' }, 3533), MmaProviderError);
 });
+test('verified finish vocabulary is preserved for scoring and contradictory or premature finishes fail closed', () => {
+  const raw = event(); raw.card[0].status = 'completed';
+  raw.card[0].result = { winner_fighter_id: 1, method: 'Technical Submission', method_normalized: 'technical_submission', round: 2 };
+  assert.equal(normalizeMmaEvent(raw, 3533).fights[0].method_normalized, 'technical_submission');
+  raw.card[0].result.method_normalized = 'invented';
+  assert.throws(() => normalizeMmaEvent(raw, 3533), MmaProviderError);
+  raw.card[0].result.method_normalized = 'draw';
+  assert.throws(() => normalizeMmaEvent(raw, 3533), MmaProviderError);
+  raw.card[0].status = 'announced'; raw.card[0].result = { winner_fighter_id: null, method_normalized: 'ko_tko' };
+  assert.throws(() => normalizeMmaEvent(raw, 3533), MmaProviderError);
+  raw.card[0].status = 'no_contest';
+  assert.throws(() => normalizeMmaEvent(raw, 3533), MmaProviderError);
+});
 test('winner-only contract gives points only to a valid current lineup and never opens at lock', () => {
   assert.equal(mmaWinnerPoints(1, 1, 'finished', 1, 1), 1);
   assert.equal(mmaWinnerPoints(1, 2, 'finished', 1, 1), 0);

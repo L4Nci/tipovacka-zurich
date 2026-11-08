@@ -1,4 +1,10 @@
 import { translate, type Locale, type MessageKey } from './index.ts';
+import type { MmaMethod } from '../lib/mma.ts';
+
+export function formatMmaMethod(method: MmaMethod, locale: Locale): string {
+  const keys = { ko_tko: 'mmaMethod.ko_tko', submission: 'mmaMethod.submission', decision: 'mmaMethod.decision' } as const;
+  return translate(locale, keys[method]);
+}
 
 const weightClasses: Record<string, MessageKey> = {
   strawweight: 'mma.weight.strawweight', flyweight: 'mma.weight.flyweight',
