@@ -1,14 +1,29 @@
 # Zadání: landing page Fan Tipovačka
 
-Stav 6. 11. 2026 — zadání k návrhu, nikoli pokyn ke stavbě nebo publikaci.
+Původní zadání 6. 11. 2026. **Pokyn vlastníka 9. 11.: začít stavět první
+landing podle připraveného brandkitu, obsahu a front-end zadání.** První vydání
+je izolovaný soukromý Sites web; pracovní hra na Netlify pokračuje samostatně.
 Vychází z přijaté stálé lobby a [marketingového plánu](marketing-strategy-2026-11-06.md).
+
+Aktualizace 8. 11.: [obsahový manuál](website-content-manual.md) doplňuje
+konkrétní texty, návod, ukázky a rozdělení práce. [Revize profilu](profile-review-2026-11-08.md)
+řeší návaznost na hráčskou vizitku. První implementace používá [brandkit v1](brandkit-v1.md)
+a [front-end handoff](frontend-landing-handoff.md).
+
+**První implementace, 9. 11.:** soukromé vydání je dostupné na
+[Fan Tipovačka — landing v1](https://fan-tipovacka-landing-v1.l4nci.chatgpt.site).
+Obsahuje CS/EN, lokální ukázku MMA bodování, FAQ a přechod do skutečné aplikace
+přes registraci nebo kód pozvánky. Přístup vyžaduje účet vlastníka přes ChatGPT;
+veřejná kampaň zatím neběží. [Ověření a rozdíly proti konceptům](landing-first-build-review-2026-11-09.md)
+oddělují technicky ověřené chování od čekajícího přijetí vlastníkem.
 
 ## Cíl a první člověk
 
 Pomoci organizátorovi party založit společnou tipovačku a pozvat ostatní.
 Hráč přicházející z pozvánky má jít přímo do své lobby/soutěže. Primárně parta
 kamarádů; navazující použití jsou komunita tvůrce a hospoda. Jedna značka,
-stejný model lobby, samostatné pořadí každého eventu.
+stejný model lobby, samostatné pořadí každé soutěže. UFC používá roční ligu,
+jednotlivé karty jsou její eventy s filtrem a vlastním pohledem na pořadí.
 
 Pracovní hlavní sdělení: **„Kdo z vaší party opravdu rozumí sportu?“**
 Vysvětlení: **„Tipujte zápasy, porovnávejte body a vyzvěte se znovu na dalším
@@ -29,8 +44,9 @@ Pozvaný hráč: přímo konkrétní lobby a event → viditelné kam jde → p�
 první otevřený tip. Nevracet ho přes obecný rozcestník sportů nebo nové
 zakládání lobby. Nevyžadovat znovu opsat kód, který už přinesl odkaz.
 
-Po prvním tipu zobrazit potvrzení a zbývající úkoly ve stejné lobby. Po eventu
+Po prvním tipu zobrazit potvrzení a zbývající úkoly ve stejné lobby. Po soutěži
 nabídnout další soutěž téže partě; účast není automatická a body začínají od nuly.
+UFC přidává nové karty do stejné roční ligy; nový rok je samostatná soutěž.
 Jde o návrh cílového průchodu, ne potvrzení jeho současného nasazení.
 
 ## Obsah jedné hlavní stránky
@@ -41,7 +57,8 @@ Jde o návrh cílového průchodu, ne potvrzení jeho současného nasazení.
 3. Ukázka jednoho tipu a jeho bodů; vysvětlit uzávěrku a automatické výsledky.
    Konkrétní pravidla vždy odpovídají zvolenému sportu.
 4. Skutečně podporované soutěže s jasným stavem. Připravovaný sport nezobrazovat
-   jako funkční. UFC stránka až po ověření winner-only pilotu.
+   jako funkční. UFC ukázky už mohou vycházet z vydané roční ligy a volitelného
+   ukončení s bodováním v2 5/3/1/0; historické karty mají vlastní původní pravidla.
 5. Proč se vrátit: další zápasy, chybějící tipy ve vlastní lobby, nové pořadí
    dalšího eventu se stejnou komunitou.
 6. Stručné FAQ: účet, soukromí lobby, body, uzávěrka, oprava výsledku a pozvánka.
@@ -53,17 +70,23 @@ k ověření, nikoli součást nabídky prvního vydání.
 
 ## Vizuální zadání a podklady od Viktora
 
-Vyjít z charakteru existující aplikace a skutečné hry. Určit vlastní typografii,
-hierarchii a práci s fotografií/produktem podle referencí. Ukázky musí být
+**Potvrzeno vlastníkem 9. 11. 2026:** zachovat pracovní název Fan Tipovačka
+a současný bílý/červený sportovní styl. Navázat na existující typografii,
+karty a ovládání; návrhem zpřesnit hierarchii a práci s produktem. Ukázky musí být
 čitelné na mobilu; dekorace nesmějí přebít vysvětlení nebo hlavní akci.
 
-Viktor dodá 3–5 oblíbených webů, u každého jednu větu proč, případně příklad,
-který nechce napodobit. Nemusí to být sportovní weby. Před vizuálním návrhem
-uzavřít pracovní název/veřejnou doménu a tón češtiny.
+Další referenční weby jsou dobrovolné a neblokují pokračování. Veřejnou doménu
+a finální veřejné texty doplnit před publikací; pracovní návrh může pokračovat
+s potvrzeným názvem a stylem.
 
-Následný postup: text a průchod → tři vizuální směry → výběr jednoho →
-implementace → skutečný mobilní a desktopový test. Designový směr se teď
-nevybírá generickým starterem. Žádné vymyšlené recenze, partneři nebo počty hráčů.
+Novější podklad 9. 11.: vlastník dodal Azure `#3283BE`, Snow `#FEFDFE`
+a Coral `#FD614B` pro [návrh brandkitu](brandkit-v1.md). Rozložení, CTA,
+typografie a čitelnost mají pořád navazovat na existující sportovní aplikaci.
+
+Původně plánované tři alternativní směry nahradil pokyn vlastníka začít první
+implementaci vybraného brandkitu. Vznikly tři koordinované sekční koncepty
+jednoho směru, implementace a mobilní/desktopová kontrola. Následuje zpětná vazba
+vlastníka. Žádné vymyšlené recenze, partneři nebo počty hráčů.
 Historickou ukázku použít jen v povoleném rozsahu a bez odhalení soukromých údajů.
 
 ## SEO, AI vyhledávání a jazyky
