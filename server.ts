@@ -4,6 +4,7 @@ import path from "path";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import "dotenv/config";
+import { registerBillingTestRoutes, registerBillingLiveRoutes } from "./server/lib/billingTestRoutes.ts";
 import { handleFootballDataSyncRequest } from "./server/lib/footballDataSync.ts";
 import { getSupabaseAdmin } from "./server/lib/supabaseAdmin.ts";
 import {
@@ -57,6 +58,8 @@ const isValidScore = (score: unknown): score is number =>
 
 async function startServer() {
   const app = express();
+  registerBillingTestRoutes(app);
+  registerBillingLiveRoutes(app);
   app.use(express.json());
   app.use(cookieParser());
   app.use(cors());

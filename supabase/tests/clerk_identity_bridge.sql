@@ -245,7 +245,7 @@ SELECT set_config('request.jwt.claims',jsonb_build_object(
 SET LOCAL ROLE authenticated;
 DO $test$
 BEGIN
-  IF public.current_player_id() IS NULL THEN RAISE EXCEPTION 'Existing UUID identity stopped resolving.'; END IF;
+  IF public.current_player_id() IS NOT NULL THEN RAISE EXCEPTION 'Retired Supabase UUID identity still resolves.'; END IF;
 END;
 $test$;
 RESET ROLE;

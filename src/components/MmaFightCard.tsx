@@ -89,7 +89,7 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
         {winner ? (translate(lang, "mmaFightCard.winner")) + winner.name : state}
         {resultMethod && <span className="mt-1 block text-xs font-normal text-slate-500">{resultMethod}{fight.finish_round ? ' · ' + fight.finish_round + (translate(lang, "mmaFightCard.round")) : ''}</span>}
       </p> : open ? <button type="button" disabled={selected === null || busy || saved} onClick={() => selected !== null && void onSave(selected, methodEnabled ? selectedMethod : null)}
-        className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white transition-colors disabled:bg-slate-100 disabled:text-slate-400">
+        className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-fan-primary px-4 py-3 text-sm font-black text-fan-snow transition-colors hover:bg-fan-primary-hover focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-fan-primary disabled:bg-slate-100 disabled:text-slate-400">
         {saved && <CheckCircle2 className="h-4 w-4" />}
         {busy ? (translate(lang, "authScreen.saving")) : saved ? (translate(lang, "mmaFightCard.predictionSaved"))
           : prediction ? (translate(lang, "mmaFightCard.updatePrediction")) : (translate(lang, "mmaFightCard.savePrediction"))}
@@ -115,11 +115,11 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
             const person = members.get(pick.user_id);
             const own = pick.user_id === userId;
             return <li key={pick.user_id} className={'flex min-w-20 max-w-36 flex-col items-center rounded-xl border bg-white px-3 py-2 ' +
-              (own ? 'border-red-500 ring-2 ring-red-500' : 'border-slate-100')}>
+              (own ? 'border-fan-primary ring-2 ring-fan-primary' : 'border-slate-100')}>
               <div className="mb-1 flex items-center gap-1">
                 <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white text-sm shadow-sm"
                   style={{ backgroundColor: person?.avatar_bg || '#fee2e2' }}>{person?.avatar_emoji || '😀'}</span>
-                <span className={'max-w-16 truncate text-[9px] font-black uppercase ' + (own ? 'text-red-600' : 'text-slate-500')}
+                <span className={'max-w-16 truncate text-[9px] font-black uppercase ' + (own ? 'text-fan-primary' : 'text-slate-500')}
                   title={person?.username}>{own ? (translate(lang, "mmaFightCard.you")) : person?.username}</span>
               </div>
               <span className="text-center text-xs font-bold leading-snug text-slate-700">{fighters.get(pick.predicted_winner_id)?.name}</span>
