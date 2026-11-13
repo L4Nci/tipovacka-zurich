@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.ts";
+import { translate, type Locale } from '../i18n/index.ts';
 import { getClerkAccessToken } from "./clerkSupabase.ts";
 import { normalizeAccountProfile, type AccountProfile } from "./clerkAccount.ts";
 import { calculatePoints } from "./scoring.ts";
@@ -124,8 +125,8 @@ const fetchPredictionCountsByMatchId = async (
 };
 
 /** Identity and internal player UUID are resolved atomically by the database. */
-export const bootstrapMyAccount = async (): Promise<AccountProfile> => {
-  if (!await getClerkAccessToken()) throw new Error("Přihlášení vypršelo. Přihlas se prosím znovu.");
+export const bootstrapMyAccount = async (locale: Locale = 'en'): Promise<AccountProfile> => {
+  if (!await getClerkAccessToken()) throw new Error(translate(locale, 'account.sessionExpired'));
   const { data, error } = await supabase.rpc("bootstrap_my_account").abortSignal(AbortSignal.timeout(15_000));
   if (error) throw error;
   return normalizeAccountProfile(data);
@@ -135,11 +136,11 @@ export const completeMyProfile = async (
   displayName: string,
   avatarEmoji: string,
   avatarBg: string,
-  locale: "cs" | "en",
+  locale: Locale,
 ): Promise<AccountProfile> => {
   const name = displayName.trim();
   if (name.length < 2 || name.length > 40) {
-    throw new Error(locale === "en" ? "Use 2–40 characters for your display name." : "Zobrazované jméno musí mít 2–40 znaků.");
+    throw new Error(translate(locale, 'account.displayNameLength'));
   }
   const { data, error } = await supabase.rpc("complete_my_profile", {
     p_display_name: name,

@@ -1,0 +1,24 @@
+.public-play{min-height:100dvh;background:#FEFDFE;color:#0F172A;font-family:"Fan Inter",system-ui,sans-serif;padding:0 24px 40px}
+.public-play-header{max-width:1040px;margin:auto;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:26px 0;border-bottom:1px solid #e5eaf0}
+.public-play-brand{display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:inherit;font-size:19px;letter-spacing:-.6px;white-space:nowrap}
+.public-play-brand img{width:40px;height:40px}.public-play-brand strong{font-weight:800}
+.public-play-language select{min-height:44px;max-width:160px;background:transparent;border:1px solid #d4dde7;border-radius:12px;padding:0 10px;font:inherit;font-size:13px;color:#334155}
+.public-play-intro{max-width:760px;margin:65px auto 35px;text-align:center}
+.public-play-eyebrow{display:inline-block;padding:8px 12px;border-radius:99px;background:#eaf3fa;color:#24618C;font-size:12px;font-weight:700}
+.public-play-intro h1{font-size:clamp(32px,5vw,50px);line-height:1.08;font-weight:800;letter-spacing:-2px;margin:19px 0}
+.public-play-intro>p:last-child{max-width:530px;margin:auto;font-size:16px;line-height:1.65;color:#475569}
+.public-play-catalog{max-width:760px;display:grid;gap:14px;margin:auto}
+.public-play-privacy{max-width:660px;margin:0 auto 23px;color:#526279;text-align:center;font-size:12px;line-height:1.6}
+.public-play-card{display:grid;grid-template-columns:56px 1fr auto;align-items:center;gap:18px;background:#fff;border:1px solid #dbe3ec;border-radius:20px;padding:25px;box-shadow:0 3px 0 #f2f5f8}
+.public-play-sport{width:56px;height:64px;display:grid;place-items:center;background:#eaf3fa;border-radius:15px;color:#24618C;font-size:19px;font-weight:800;letter-spacing:-1px}
+.public-play-sport.is-mma{background:#fff0ec;color:#92321f;font-size:15px;letter-spacing:0}
+.public-play-card h2{font-size:20px;line-height:1.25;font-weight:800;margin:0;letter-spacing:-.5px;overflow-wrap:anywhere}
+.public-play-season{font-size:13px;margin:4px 0 0;color:#475569}.public-play-facts{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;color:#526279;font-size:12px;line-height:1.5}.public-play-facts span{display:inline-flex;align-items:center;gap:5px}
+.public-play-start{background:#24618C;color:#FEFDFE;border:0;border-radius:12px;min-height:46px;padding:12px 15px;display:inline-flex;align-items:center;justify-content:center;gap:10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.public-play-start:hover{background:#1b4d71}.public-play-start:disabled{background:#e8edf2;color:#536174;cursor:default}
+.public-play button:focus-visible,.public-play a:focus-visible,.public-play select:focus-visible{outline:3px solid #24618C;outline-offset:4px}
+.public-play-notice{padding:32px;text-align:center;border:1px dashed #bdcad8;border-radius:20px;color:#475569;font-size:14px;line-height:1.6}
+.public-play-notice button{color:#24618C;text-decoration:underline;min-height:44px;font-weight:700}
+.public-play-join-error{color:#b91c1c;background:#fef2f2;border-radius:12px;padding:14px;font-size:14px}.public-play-progress{color:#475569;text-align:center;font-size:14px}
+.public-play-footer{max-width:760px;margin:27px auto 0;display:flex;justify-content:center}.public-play-footer button{display:inline-flex;gap:8px;align-items:center;color:#475569;min-height:44px;font:inherit;font-size:13px;text-decoration:underline;text-underline-offset:4px;cursor:pointer}
+@media(max-width:600px){.public-play{padding:0 18px 30px}.public-play-header{padding:19px 0}.public-play-brand{font-size:16px;gap:8px}.public-play-brand img{width:34px;height:34px}.public-play-language select{font-size:12px;max-width:120px}.public-play-intro{margin-top:38px;text-align:left}.public-play-intro h1{letter-spacing:-1.2px}.public-play-intro>p:last-child{font-size:15px}.public-play-card{grid-template-columns:48px 1fr;gap:13px;padding:20px}.public-play-sport{width:48px;height:56px}.public-play-card h2{font-size:18px}.public-play-start{grid-column:1/-1;width:100%;min-height:48px}.public-play-facts{gap:7px;font-size:11px}}

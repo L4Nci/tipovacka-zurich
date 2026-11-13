@@ -1,6 +1,5 @@
 import { ClerkProvider, useAuth, useClerk, useUser } from "@clerk/react";
-import { csCZ } from '@clerk/localizations/cs-CZ';
-import { enUS } from '@clerk/localizations/en-US';
+import { getClerkLocalization } from '../i18n/clerkLocalization.ts';
 import { useLocale } from '../i18n/LocaleProvider.tsx';
 import { createContext, Fragment, useCallback, useContext, useLayoutEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -24,7 +23,7 @@ export function AppClerkProvider({ publishableKey, children }: { publishableKey:
     throw new Error("Přihlášení vyžaduje platný Clerk publishable klíč.");
   }
   return (
-    <ClerkProvider publishableKey={publishableKey} localization={locale === 'cs' ? csCZ : enUS} appearance={{ elements: { profileSection__danger: { display: 'none' } } }}>
+    <ClerkProvider publishableKey={publishableKey} localization={getClerkLocalization(locale)} appearance={{ elements: { profileSection__danger: { display: 'none' } } }}>
       <ClerkSessionBridge>{children}</ClerkSessionBridge>
     </ClerkProvider>
   );
