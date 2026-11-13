@@ -4,6 +4,114 @@ Tipovačka is currently being rebuilt and tested in the existing Supabase projec
 
 ## Product Context
 
+**Billing deployment, 13 November:** after the owner reset the approval limit,
+the Netlify server environment import and isolated billing release succeeded.
+The current published deploy is `6af6f29b6ff8ff48500fde06`; all 27 previously
+published public assets kept their hashes. The FanTip sandbox snapshot webhook
+is enabled, and an actual Stripe `refund.updated` event reached the Netlify
+route and completed in the private TEST inbox. TEST runtime is enabled only for
+the approved Clerk owner allowlist; Live processing, checkout and public sales
+remain off. The authorized TEST recovery HTTP endpoint returned 200 with an
+empty queue. The owner's later signed-session HTTP sandbox purchase was
+confirmed by their screenshot and hosted ledger: one completed TEST Checkout,
+one paid TEST funding period, eight completed events, zero ordinary subscriptions.
+A deployed scheduled invocation remains to verify. No unrelated
+working-tree changes were released or committed. See
+[billing readiness](docs/stripe-sandbox-readiness-2026-11-12.md).
+
+**Billing execution, 13 November:** on the owner's "proveď" instruction, the
+approved disabled Live migration was applied in the existing Supabase project
+as hosted version `20261113085132` (source
+`20261112101432_billing_live_preparation.sql`). Postflight found zero offers,
+grants and ordinary subscriptions, all Live private tables under RLS, no
+anon/authenticated Live RPC grants, and unchanged profile/prediction/plan/
+subscription digests. A Live inbox mode default was corrected before apply and
+locally rollback-tested; hosted mode/rollback smoke passed. A FanTip TEST
+webhook endpoint `we_1UbGMYC66ykHzmj6cySVhlDA` was created with snapshot API
+`2026-10-28.endive`. At that point it was disabled while deployment was blocked;
+its signing secret was only in ignored local `.env` and private temp artifacts.
+The first Netlify environment import was interrupted by an automatic approval
+review usage limit, not a safety finding. That state was superseded by the
+deployment above. See dated execution status in
+[billing readiness](docs/stripe-sandbox-readiness-2026-11-12.md).
+
+**Billing decisions, 13 November:** while dividing responsibilities, the owner
+explicitly approved the prepared disabled Live migration (including its
+subscriptions constraint/trigger), accepted the sandbox verification step and
+billing deployment with sales disabled. Record these approvals; do not request
+the same approval again. The owner later instructed execution of the scoped
+billing work, without authorizing release of unrelated working-tree changes. No final
+sales activation was requested. Five owned VIP lobbies is a tentative proposal
+("5?"), not an accepted quota. Seller (OSVČ versus s.r.o.), IČ and tax model
+remain open owner TODOs; the owner will prepare the domain, also still open.
+See the dated responsibility/TODO table in
+[billing readiness](docs/stripe-sandbox-readiness-2026-11-12.md).
+
+**Billing preparation, 12 November:** the owner requested turnkey payment
+preparation in the dedicated billing chat. Shared TEST/Live SDK engine, scoped
+ledger ports, routes/recovery and standalone screens were prepared locally;
+all UI/runtime gates were then off. Hosted TEST migration `20261112152311` is applied. A real
+FanTip sandbox test-card Checkout, canonical funding proof, cancellation and
+full test refund passed without normal VIP grants. Live projection is locally
+rollback-tested; its initial hosted apply was rejected by automatic approval
+review, then explicitly approved by the owner and applied. No Live objects or
+charges were authorized by preparation. See
+[billing readiness](docs/stripe-sandbox-readiness-2026-11-12.md) for actual
+evidence, remote/source migration mapping and final offer/identity/tax gates.
+Main App/product preview,
+scoring and other product work remain in the original chat.
+
+**P0/P1 implementation, 10 November:** the owner explicitly requested completing
+P0/P1 with delegated implementation. Public CL/PL/annual-UFC entry reuses dedicated
+system-organizer lobbies and existing prediction/scoring/cron paths; do not revive
+the undeployed Official 020–023 engine. The registry and five-language profile
+migrations are applied in the existing Supabase project, with the public gate
+false and no pools provisioned. Three hosted transactional suites passed with
+ROLLBACK. Game CS/EN/DE/PL/SK catalogs, brand/PWA basics and the private Sites
+hero/showcase are local, unreleased work; DE/PL/SK still require human review.
+See [current verification](docs/public-entry-verification-2026-11-10.md).
+All admin dashboard/navigation/status UI is deferred until a new explicit request.
+The owner confirmed on 10 November that VIP includes custom or default scoring,
+then accepted first own lobby free, invited players free and one personal
+VIP at CZK49 monthly or CZK499 annually, without a five-player paywall. This
+supersedes the earlier CZK29/49 monthly A/B proposal. The owner reports current
+cash operating costs of CZK0; cost and conversion scenarios are not actual
+expenses or sales. This authorizes preparation, not sales.
+The exact VIP lobby quota, seller, final offer and
+production domain remain open. Following the fee/lifecycle comparison for the
+annual offer, the owner selected Stripe for the first TEST integration and
+requested the official plugin/MCP implementation planner before runtime wiring.
+Plugin installation succeeded; authenticate FanTip sandbox (not legacy Test
+mode or Live), verify tool availability and use the planner. Sandbox outcomes
+must not grant normal VIP through existing non-mode-scoped entitlement readers.
+See [the billing contract](docs/billing-contract.md) and
+[MCP handoff](docs/stripe-mcp-handoff-2026-11-10.md).
+This goal is not permission to purchase, publish a
+campaign or release an arbitrary new package without review.
+
+**Priority correction,9 November:** defer admin-dashboard/navigation/metrics UI
+work until the owner explicitly reopens it. The sole near-term operator is the
+owner. Manual result entry is not the intended operating workflow; fixtures,
+results and points must remain automatic. A future compact per-provider sync
+status (OK/warning/problem, with evidence of freshness) is only a deferred idea,
+not an implementation request. Keep auth/RLS/key checks, minimal operational
+alerts and backups in launch scope independently of any admin UI.
+Public entry/funnel work takes priority. The owner asked to offer CL, PL and
+annual UFC publicly; use one entry flow with competition-specific rules and
+standings, preserving private lobbies and existing picks. Verify football/MMA
+paths in small blocks; do not activate undeployed Official/prize features.
+
+**Security follow-up,9 November:** the owner authorized dependency remediation
+for issue26, verification of permissions and retirement of non-Clerk logins, and
+explicitly selected an enabled Clerk profile as platform admin. Migration
+`20261109204030_clerk_only_identity_retirement` is applied; current_player_id
+no longer accepts Supabase UUID identities.13 native users and55 sessions were
+removed after backup and rollback rehearsal; historical profiles, memberships,
+lobbies and all predictions remain. See [the retirement runbook](docs/clerk-only-retirement-runbook-2026-11-09.md).
+Do not restore legacy-login compatibility in active tests. Dependency updates
+are locally verified and unreleased; no commit/push/deploy was authorized for
+this follow-up. Production Clerk and real signed-session checks remain pending.
+
 **Finish-method approval, 8 November:** optional KO/TKO, Submission and Decision,
 a separate saved-pick distribution and v2 points 5/3/1/0 are authorized. Apply v2
 only to eligible open/unscored and future cards; preserve locked/historical v1.
@@ -22,7 +130,10 @@ first-bell lock. UFCalendar is the verified Free source; `MMA_SYNC_ENABLED`
 gates adaptive polling through the existing protected cron endpoint. The
 bootstrap RLS/scoring suite passed with ROLLBACK before import. See
 [the MMA runbook](docs/mma-pilot-runbook.md) for release verification and limits.
-Landing remains a brief, not an implementation request.
+On 9 November the owner authorized building the first landing from the prepared
+brandkit/content/handoff using Sites. Implement and verify an isolated owner-private
+Sites version; this does not replace the Netlify game or authorize new game-data,
+auth, scoring or analytics changes. See [the landing brief](docs/landing-page-brief.md).
 
 **Expansion, 5 November evening:** the owner requested Premier League, then NHL
 and Czech Extraliga. PL and NHL are active in Testovací rodeo. ELH's 363 imported

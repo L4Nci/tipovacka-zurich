@@ -8,6 +8,92 @@ It is not a feature backlog, TODO list, sprint plan, GitHub Issue list, technica
 
 ## Planning update — 2026-11-03
 
+**VIP pricing decision — 10 November 2026:** one personal Fan VIP at **CZK49
+per month or CZK499 per year**, with the same functionality and a customer-chosen
+interval. First own lobby and invited players are free; no five-player paywall
+or sporting advantage. This supersedes the earlier CZK29/49 monthly A/B idea
+and the price/model questions in older dated notes below. Exact VIP lobby quota,
+renewal/expiry terms, gateway and seller remain open. The owner reports current
+cash operating costs of CZK0; future budget examples are scenarios. This is
+preparation and validation, not enabled billing or release approval. See
+[the billing contract](billing-contract.md).
+
+**Public-entry implementation decision — 10 November 2026:** the owner requested
+`/goal dokončit P0 a P1` on 9 November, authorizing implementation in small verified
+blocks. The public CL/PL/annual-UFC path now uses a thin private registry pointing
+to newly provisioned system-organizer lobbies, one competition/season per pool.
+One entry flow and direct campaign links lead to explicit Clerk participation;
+each pool has separate standings. Private groups, independent picks, history,
+existing result adapters, scoring and locks remain unchanged. New annual UFC
+cards belong to that year's joined competition; a new year requires a separate
+join. This implements the accepted organizer model without a parallel game
+engine or migration of private lobbies.
+
+The registry/RPC source and the existing football/MMA sync integration passed
+transactional tests on a local copy of current hosted schema definitions.
+The registry and five-language profile migrations are now applied in the same
+hosted project, and the permission/profile/scoring suites passed there with
+ROLLBACK. The frontend identity-return lifecycle passed a local StrictMode
+simulation. Pool provisioning, actual Clerk-to-public-game session acceptance
+and frontend release remain pending. New pools start unpublished and the independent public-entry
+gate defaults off. See [the backend decision and runbook](public-competition-backend-2026-11-10.md)
+and [the launch blocks](public-launch-p0-p1-blocks-2026-11-09.md).
+
+The undeployed Official 020–023 participation/scoring/prize backend is not the
+implementation target for this public entry and stays disabled. Sponsored prizes,
+paid entry and partner operations retain their own future product/legal scope.
+Authorization to implement P0/P1 does not approve a price, purchase, launch date
+or public release; paid P0 functions still need the concrete sales contract.
+
+**Priority correction —9 November2026:** the owner deferred all admin-dashboard
+and admin-navigation work until a new explicit request. Manual result entry is
+not the planned operating workflow; existing automatic provider sync remains
+the basis. A compact future per-provider sync indicator is a deferred idea.
+Necessary auth/RLS/key controls, basic failure alerts and backup checks remain
+launch requirements without building an administration product.
+The next product focus is public entry and first-pick activation. The owner
+asked about all three launch competitions: Champions League, Premier League and
+annual UFC. Target one public entry with direct campaign links, separate rules
+and standings; validate the two formats (football/MMA) in bounded steps.
+
+**Bounded follow-up —9 November2026:** owner-approved retirement of native
+Supabase login is completed with preserved history and a designated Clerk admin;
+the resolver is Clerk-only. Dependency issue26 has a locally verified compatible
+patch, not a released build. The owner proposed VIP cosmetics, lobby appearance,
+additional owned lobbies and configurable scoring with no competitive advantage.
+The [concrete proposal](vip-and-public-entry-proposal-2026-11-09.md) recommends
+one personal VIP product; exact limits, price and scoring scope remain decisions,
+not enabled paywalls. The newer priority correction above defers operations
+panel changes as well; keep necessary monitoring outside that UI.
+
+**Public-launch scope — 2026-11-09:** the owner initially requested a read-only
+readiness audit and an approval-based P0/P1 plan, then authorized implementation
+through the goal recorded above. P0 means a verified public product,
+including paid cosmetics/VIP and owner features (reconfirmed), CS/EN/DE/PL,
+mobile/PWA/desktop access and one free public challenge without prizes.
+Slovak localization and expanded acquisition/retention are P1. Existing private
+lobby and annual UFC models remain the foundation. The later public-pool decision
+above replaces the former Official-reuse candidate: current provider sync rejects
+the undeployed Official prediction system, so the approved public path reuses
+normal lobby predictions and does not activate that older backend. See the
+[current-state audit](public-launch-p0-p1-audit-2026-11-09.md) and
+[bounded implementation blocks](public-launch-p0-p1-blocks-2026-11-09.md).
+The audit itself remains evidence, not a release authorization. Subsequent
+implementation follows the owner's goal and coordinated validation; publication
+is a separate step.
+
+**Owner decision — 2026-11-09:** the first public release is intended to include
+paid cosmetics/VIP without sporting advantage and expanded lobby-owner/creator
+features. The seller identity, concrete bundles, prices and one-time versus
+recurring payment model are still undecided. This supersedes the earlier
+assumption that all monetization would wait until after launch; it does not
+activate billing, prize entry or creator payouts. Security, privacy, consumer
+terms and provider/image rights must be resolved before selling. See the
+[public-launch review](public-launch-security-privacy-legal-2026-11-09.md).
+The owner also requested the first landing implementation and visual alignment
+of the game entry with the brandkit; the isolated private landing is published,
+while auth-entry styling is prepared locally. See [the landing brief](landing-page-brief.md).
+
 **Localization foundation — 2026-11-06:** the owner approved consolidating Czech
 and English, including embedded Clerk UI, into shared typed catalogs and one
 canonical locale preference. The implementation accepts the historical `cz`
@@ -61,8 +147,8 @@ a product-readiness target, not a claim that the current app is ready for scale.
 The [readiness and work split](product-readiness-2026-11-06.md) proposes a
 February operational target, leaving March/April for marketing and refinement.
 The proposed preparation dates, MMA structure and launch criteria are in the
-[MMA and Worlds plan](mma-and-worlds-launch-plan.md). Landing-page work remains
-planning only until the owner requests implementation.
+[MMA and Worlds plan](mma-and-worlds-launch-plan.md). Landing implementation was
+requested on 9 November; the newer decision above supersedes its planning-only state.
 
 **Multi-sport expansion — 2026-11-05:** the owner chose Premier League, then NHL
 and Czech Extraliga. PL/NHL are active in the same DB and Testovací rodeo. Imported
@@ -190,16 +276,22 @@ ongoing or historical competitions.
 
 Personal cosmetics belong to the player; organizer identity belongs to the
 lobby; a partner and declared prizes belong to a specific competition. Sponsor
-branding does not grant administrative access. Public competitions, prize
-operations and company branding remain later work; they do not expand the first
-private pilot or approve pricing, payments, a partner portal or an enterprise
-product. Paid customization cannot change sporting scores or locking rules.
+branding does not grant administrative access. The subsequent P0/P1 goal brings
+the CL/PL/annual-UFC public entry into implementation scope. Prize operations,
+company branding, a partner portal and an enterprise product remain separate
+future work. The public-pool implementation does not approve their pricing,
+payments or activation. Paid customization cannot change sporting scores or
+locking rules.
 
 The existing local Official Events implementation still has separate tables
-and flows. Those describe the current code, not the accepted target model.
-Reuse, deferral or conversion requires its own audit and implementation scope.
-Existing migration dependencies, result safeguards and historical data must be
-preserved until an explicit replacement plan is verified.
+and flows. Those describe older disabled code, not the accepted public-entry
+implementation. The bounded decision is to defer that backend and provision
+fresh system-organizer pools using existing lobby predictions and scoring;
+see [the reviewed architecture](public-competition-backend-2026-11-10.md).
+No old Official migration is applied and no historical private data is converted.
+Existing result safeguards, rules versions and prediction identities are
+preserved. Publication controls discovery/new entry and does not revoke the
+ordinary access of previously joined members.
 
 ## Product Stage
 
@@ -634,8 +726,8 @@ The following questions are not decided in the repository and should not be gues
 - What exact shape should post-tournament history and Hall of Fame take?
 - What level of operational monitoring is appropriate for a solo-owner live product?
 - Which admin powers should remain owner-only, and which can belong to lobby owners?
-- How should public sharing work: shareable lobby invites, public leaderboards, or both?
-- What is the exact Premium model, if any?
+- Which anonymous leaderboard/profile sharing should follow the approved public competition entry and existing lobby invitations?
+- What exact cosmetics, VIP lobby quota, renewal/expiry/transfer terms and seller details complete the approved personal VIP at CZK49/month or CZK499/year for P0?
 - Which capabilities may Premium add without weakening the Free experience?
 - When is the product ready to intentionally target pubs, sports communities, companies, or schools beyond the first private-group customers?
 - What does long-term non-owner development responsibility look like in practice?
