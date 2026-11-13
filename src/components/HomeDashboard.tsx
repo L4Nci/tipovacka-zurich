@@ -380,7 +380,7 @@ const LobbyWorldCard = ({
       : copy?.cta || (translate(lang, "homeDashboard.openLobby"));
   const cardHeight = isCompleted ? 'min-h-[236px]' : 'min-h-[264px]';
   const ctaStyle = isActionable
-    ? 'border border-red-600 bg-red-600 text-white shadow-sm hover:bg-red-700'
+    ? 'border border-fan-primary bg-fan-primary text-fan-snow shadow-sm hover:bg-fan-primary-hover'
     : isCompleted
       ? 'border border-slate-300 bg-white/75 text-slate-900 shadow-none backdrop-blur-sm hover:bg-white'
       : isQuietLobbyAction
@@ -418,7 +418,7 @@ const LobbyWorldCard = ({
         type="button"
         onClick={() => onOpenLobby(lobby)}
         aria-label={translate(lang, "homeDashboard.openLobby_1d1429", { value1: lobby.name })}
-        className="absolute inset-0 z-10 cursor-pointer rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500"
+        className="absolute inset-0 z-10 cursor-pointer rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fan-primary"
       />
 
       <div className={`pointer-events-none relative z-20 flex ${cardHeight} flex-col p-5`}>
@@ -450,7 +450,7 @@ const LobbyWorldCard = ({
                 {attention.contexts.map(context => <button key={context.tournament_id} type="button"
                   onClick={event => { event.stopPropagation(); onOpenContext(context, true, 'matches'); }}
                   aria-label={(translate(lang, "homeDashboard.predict_ada658")) + lobby.name + ' · ' + context.tournament_name}
-                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-left text-xs font-bold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+                  className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-left text-xs font-bold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fan-primary">
                   <span className="min-w-0 break-words">{context.tournament_name}</span>
                   <span className="flex shrink-0 items-center gap-1 text-red-600">
                     {context.actionable_match_count || context.missing_match_count || 0}
@@ -469,7 +469,7 @@ const LobbyWorldCard = ({
             }}
             disabled={loading}
             aria-label={`${ctaLabel}: ${lobby.name}`}
-            className={`pointer-events-auto mt-5 inline-flex min-h-11 max-w-full items-center justify-center gap-2 self-start rounded-xl px-4 text-[10px] font-black uppercase tracking-wider transition-[transform,background-color,border-color] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none ${ctaStyle}`}
+            className={`pointer-events-auto mt-5 inline-flex min-h-11 max-w-full items-center justify-center gap-2 self-start rounded-xl px-4 text-[10px] font-black uppercase tracking-wider transition-[transform,background-color,border-color] duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fan-primary focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50 motion-reduce:transform-none motion-reduce:transition-none ${ctaStyle}`}
           >
             {isCompleted && <CheckCircle2 className="h-4 w-4" />}
             {loading ? (translate(lang, "homeDashboard.loading")) : ctaLabel}
@@ -502,7 +502,7 @@ const AddLobbySheet = ({
 }) => {
   if (mode !== 'menu' && mode !== 'official') return null;
 
-  const optionClassName = 'flex w-full items-center gap-3 border-b border-slate-100 px-4 py-4 text-left last:border-b-0 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500';
+  const optionClassName = 'flex w-full items-center gap-3 border-b border-slate-100 px-4 py-4 text-left last:border-b-0 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fan-primary';
   const pickerEvents = officialEvents.filter(shouldShowOfficialEventInPicker);
 
   return createPortal(
@@ -525,7 +525,7 @@ const AddLobbySheet = ({
                 type="button"
                 onClick={() => onSetMode('menu')}
                 aria-label={translate(lang, "homeDashboard.backToChoices")}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fan-primary"
               >
                 <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -540,7 +540,7 @@ const AddLobbySheet = ({
             type="button"
             onClick={() => onSetMode('none')}
             aria-label={translate(lang, "homeDashboard.close")}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fan-primary"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

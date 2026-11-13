@@ -1,5 +1,33 @@
 # Kompletní checklist pro další vývoj Tipovačky
 
+**Rozhodnutí 10. 11. 2026:** jeden osobní VIP **49 Kč měsíčně / 499 Kč ročně**,
+první vlastní lobby a pozvaní hráči zdarma; VIP nabízí naše výchozí nebo vlastní
+bodování bez osobní bodové výhody. Nahrazuje dřívější A/B návrh 29/49 Kč měsíčně;
+nepřidávat pětičlenný paywall. Přesná kvóta VIP lobby, životní cyklus a brána
+zůstávají k dopracování. Prodejce předběžně OSVČ, definitivně nerozhodnuto.
+Vlastník uvedl nynější peněžní provozní náklady 0 Kč; jiné rozpočty jsou scénáře.
+[Cenový a platební kontrakt](docs/billing-contract.md) není zapnutí prodeje.
+Veřejný registry
+základ a pět jazyků jsou v jediné DB ověřené, veřejný gate zůstává false.
+[Současná implementace a ověření](docs/public-entry-verification-2026-11-10.md).
+
+**Posun9.11.2026:** schválené opravy dependencies #26 jsou lokálně ověřené
+(npm audit0), zatím bez vydání. Staré native přihlášení bylo na nový výslovný
+pokyn vlastníka odstraněno: Clerk-only resolver, určený Clerk admin,13 starých
+loginů a55 sessions pryč, historie zachovaná. [Výsledek a limity](docs/clerk-only-retirement-runbook-2026-11-09.md).
+Nový [návrh VIP a veřejného vstupu](docs/vip-and-public-entry-proposal-2026-11-09.md)
+odděluje bezpečnostní realizaci od nabídky; její novější cenové rozhodnutí je výše.
+Vlastník upřednostnil RLS/klíče před velkým admin dashboardem; před startem stačí
+provozní minimum, správné metriky a ověřená záloha/obnova.
+
+**Veřejné placené spuštění — 9. 11. 2026:** vlastník chce při prvním veřejném
+vydání kosmetiku/VIP bez vlivu na výhru a rozšířené funkce pro majitele lobby
+a tvůrce. Prodávající, přesný balíček a model platby zůstávají k rozhodnutí;
+nejde o zapnutí plateb, cen nebo placeného vstupu do turnaje. [Dnešní revize](docs/public-launch-security-privacy-legal-2026-11-09.md)
+určuje bezpečnostní, cookies, právní a licenční podmínky před prodejem.
+Vizuální sjednocení vstupu do hry s brandkitem je autorizované a připravené
+lokálně; logika účtu a data se v tomto balíku nemění.
+
 **Ukončení MMA schváleno — 8. 11. 2026:** KO/TKO, Submise, Na body jako volitelný
 doplněk k povinnému vítězi. Samostatný pruh uložených tipů v lobby. Bodování v2:
 vítěz i ukončení 5 / pouze vítěz 3 / pouze ukončení 1 / jinak 0; remíza, no contest

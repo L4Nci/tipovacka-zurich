@@ -1,36 +1,38 @@
 {
-  "name": "IIHF 2026 Predictor (Unofficial Fan App)",
-  "short_name": "MS 2026 Fan",
-  "description": "Mistrovství světa v hokeji 2026 - Tipovačka",
+  "id": "/",
+  "name": "Fan Tipovačka",
+  "short_name": "Fan Tipovačka",
+  "description": "Tipuj sportovní výsledky s partou, sleduj body a společné pořadí.",
+  "lang": "cs",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#2563eb",
+  "background_color": "#FEFDFE",
+  "theme_color": "#FEFDFE",
   "icons": [
     {
-      "src": "/16x16.png",
-      "sizes": "16x16",
-      "type": "image/png"
-    },
-    {
-      "src": "/32x32.png",
-      "sizes": "32x32",
-      "type": "image/png"
-    },
-    {
-      "src": "/180x180.png",
-      "sizes": "180x180",
-      "type": "image/png"
-    },
-    {
-      "src": "/192x192.png",
+      "src": "/brand/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/512x512.png",
+      "src": "/brand/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/brand/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

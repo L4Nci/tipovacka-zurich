@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Derived from fan-mark.svg; 80% mark scale keeps the trophy inside the maskable safe zone. -->
+  <rect width="48" height="48" fill="#3283BE"/>
+  <g transform="translate(4.8 4.8) scale(.8)">
+<rect width="48" height="48" rx="13" fill="#3283BE"/>
+  <path d="M14 13H8v5c0 6 4 9 11 9M34 13h6v5c0 6-4 9-11 9" stroke="#FEFDFE" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M14 9h20l-2.6 13.5a7.5 7.5 0 0 1-14.8 0L14 9Z" fill="#FEFDFE"/>
+  <path d="M27 9h7l-2.6 13.5a7.5 7.5 0 0 1-5 5.7L28 18h-6l5-9Z" fill="#FD614B"/>
+  <path d="M22 28h4v7h6v4H16v-4h6v-7Z" fill="#FEFDFE"/>
+  </g>
+</svg>

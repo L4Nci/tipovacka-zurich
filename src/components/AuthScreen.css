@@ -1,0 +1,191 @@
+/* Auth-only aliases keep the game typography unchanged. Font licenses: public/fonts/. */
+@font-face {
+  font-family: 'Fan Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/inter-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Fan Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/inter-latin-ext-400.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Fan Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter-latin-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Fan Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter-latin-ext-600.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Fan Barlow Condensed';
+  font-style: italic;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/barlow-condensed-latin-800.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Fan Barlow Condensed';
+  font-style: italic;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/fonts/barlow-condensed-latin-ext-800.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+.auth-screen {
+  --auth-azure: #3283BE;
+  --auth-snow: #FEFDFE;
+  --auth-coral: #FD614B;
+  --auth-ink: #0F172A;
+  --auth-link: #24618C;
+  background: var(--auth-snow);
+  color: var(--auth-ink);
+  font-family: 'Fan Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+.auth-panel {
+  border: 1px solid #dbe3ec;
+  background: var(--auth-snow);
+  box-shadow: 0 12px 40px rgb(15 23 42 / 7%);
+}
+
+.auth-brand-icon {
+  color: var(--auth-snow);
+  background: var(--auth-azure);
+}
+
+.auth-wordmark {
+  color: var(--auth-ink);
+  font-family: 'Fan Barlow Condensed', Impact, sans-serif;
+  font-size: clamp(2rem, 8vw, 2.75rem);
+  font-weight: 800;
+  font-style: italic;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.auth-wordmark span {
+  color: var(--auth-azure);
+}
+
+.auth-tagline,
+.auth-languages button[aria-pressed='true'] {
+  color: var(--auth-link);
+}
+
+.auth-languages button {
+  min-height: 44px;
+  padding-inline: 12px;
+  color: #475569;
+}
+
+.auth-languages button[aria-pressed='true'] {
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  text-decoration-thickness: 2px;
+}
+
+.auth-invite {
+  color: var(--auth-link);
+  background: #edf5fa;
+}
+
+.auth-screen .auth-panel .auth-clerk-root,
+.auth-screen .auth-panel .auth-clerk-cardbox,
+.auth-screen .auth-panel .auth-clerk-card,
+.auth-screen .auth-panel .auth-clerk-footer {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auth-screen .auth-panel .auth-clerk-cardbox,
+.auth-screen .auth-panel .auth-clerk-card {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.auth-screen .auth-panel .auth-clerk-card {
+  padding: 0;
+}
+
+.auth-screen .auth-panel .auth-clerk-footer {
+  background: var(--auth-snow);
+}
+
+.auth-screen .auth-panel .auth-primary,
+.auth-screen .auth-panel .auth-clerk-primary {
+  min-height: 48px;
+  color: var(--auth-ink);
+  background: var(--auth-coral);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  box-shadow: none;
+  font-weight: 600;
+  text-transform: none;
+  transition: background-color 160ms ease;
+}
+
+.auth-screen .auth-panel .auth-primary:hover:not(:disabled),
+.auth-screen .auth-panel .auth-clerk-primary:hover:not(:disabled) {
+  background: #f3533e;
+  color: var(--auth-ink);
+}
+
+.auth-screen .auth-panel .auth-clerk-primary:disabled {
+  opacity: 0.6;
+}
+
+.auth-name-input,
+.auth-screen .auth-panel .auth-clerk-input {
+  min-height: 48px;
+  border: 1px solid #64748b;
+  background: var(--auth-snow);
+  color: var(--auth-ink);
+  font-size: 16px;
+}
+
+.auth-screen .auth-panel .auth-clerk-social {
+  min-height: 44px;
+}
+
+.auth-screen .auth-panel .auth-clerk-link {
+  color: var(--auth-link);
+}
+
+.auth-screen :is(button, a, input):focus-visible {
+  outline: 3px solid var(--auth-link);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-screen .auth-panel .auth-primary,
+  .auth-screen .auth-panel .auth-clerk-primary {
+    transition: none;
+  }
+}
