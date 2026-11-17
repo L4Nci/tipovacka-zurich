@@ -85,7 +85,7 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
         <h1 className="min-w-0 text-2xl font-black italic tracking-tight text-slate-950">{title}</h1>
         <button type="button" onClick={() => setShowRules(true)} aria-haspopup="dialog" aria-expanded={showRules}
           aria-label={translate(lang, "mmaEventView.rulesAndScoring")}
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-400 shadow-sm transition-colors hover:border-slate-200 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-100 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-200 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fan-primary">
           <Info className="h-5 w-5" />
         </button>
       </div>
@@ -105,7 +105,7 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
       </label>}
       <div className="flex flex-wrap items-center gap-2">
         {(['all', 'missing', 'results'] as const).map(value => <button key={value} onClick={() => setFilter(value)}
-          className={'min-h-10 rounded-full px-4 py-1.5 text-[10px] font-black transition-colors ' + (filter === value ? 'bg-red-600 text-white shadow-lg shadow-red-100' : 'border border-slate-100 bg-white text-slate-400 hover:border-slate-200')}>
+          className={'min-h-11 rounded-full px-4 py-1.5 text-[10px] font-black transition-colors ' + (filter === value ? 'bg-fan-primary text-fan-snow shadow-lg shadow-fan-soft' : 'border border-slate-100 bg-white text-slate-500 hover:border-slate-200')}>
           {value === 'all' ? (translate(lang, 'mmaSeason.upcoming')) : value === 'results' ? (translate(lang, "results"))
             : (translate(lang, "app.missing")) + (data ? ' (' + missingCount + ')' : '')}
         </button>)}

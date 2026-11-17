@@ -2,7 +2,7 @@ export type Player = {
   id: string;
   username: string;
   display_name?: string | null;
-  locale?: 'cs' | 'en';
+  locale?: 'cs' | 'en' | 'de' | 'pl' | 'sk';
   email?: string | null;
   role: 'player' | 'admin';
   lobby_role?: 'owner' | 'admin' | 'member';

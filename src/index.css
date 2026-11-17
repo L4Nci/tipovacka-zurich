@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+@theme {
+  --color-fan-primary: #24618C;
+  --color-fan-primary-hover: #1B4D71;
+  --color-fan-soft: #EAF3FA;
+  --color-fan-coral: #FD614B;
+  --color-fan-snow: #FEFDFE;
+  --color-fan-ink: #0F172A;
+}

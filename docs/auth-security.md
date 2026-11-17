@@ -1,83 +1,101 @@
 # Authentication and Platform Authorization
 
-This document describes the current production security boundary for
-authentication and platform-level authorization.
+Updated 9 November 2026 to match the Clerk rebuild. This describes source
+boundaries in the current development/tuning project, not certification of
+deployed settings. The earlier Supabase-only description was obsolete.
+See the [public-launch review](public-launch-security-privacy-legal-2026-11-09.md)
+for checks, remaining proof gaps and paid-launch prerequisites.
 
 ## Identity and roles
 
-- Browser authentication is provided by Supabase Auth.
-- A Supabase session is the only source of truth for signed-in state. The app
-  restores it with `getSession()` and follows subsequent changes through
-  `onAuthStateChange()`.
-- `auth.users.id` / `session.user.id` is the application identity. A cached
-  profile or OAuth metadata is never caller authorization.
-- Server endpoints derive the caller from a verified Supabase Bearer token or
-  `auth.uid()`.
-- Request fields such as `userId`, `role`, or `isAdmin` are never authoritative
-  caller identity.
-- `SUPABASE_SERVICE_ROLE_KEY` is server-only and must never be exposed to
-  frontend code.
-- `profiles.role` is the current platform-admin source. Migration
-  `008_authorization_hardening.sql` prevents authenticated clients from changing
-  this column while preserving existing admin accounts.
-- Profile identity fields such as username, avatar, and profile color remain
-  user-editable under RLS.
-- Lobby roles are lobby-scoped and never grant platform-admin access.
+- Browser authentication uses Clerk through AppClerkProvider and
+  ClerkSessionBridge. Clerk signed-in state and a fresh access-token getter
+  drive account bootstrap and authenticated requests.
+- The shared Supabase client uses native third-party auth via accessToken.
+  persistSession, autoRefreshToken and detectSessionInUrl are false.
+  A cached Supabase browser session is not a fallback identity.
+- The database resolves the verified Clerk issuer/subject through the private
+  identity bridge to an internal player UUID. Supabase Third-Party Auth must
+  verify the JWT cryptographically before SQL claims are trusted.
+- current_player_id() is Clerk-only after migration20261109204030.
+  Both historical Supabase issuer/UUID forms now resolve to NULL. On9 November,
+  the owner-selected enabled Clerk profile became the platform admin and13 old
+  native Auth users plus55 sessions were removed; historical profiles and all
+  game relationships remain. See the [retirement runbook](clerk-only-retirement-runbook-2026-11-09.md).
+  Native provider/sign-up configuration remains a separate pre-launch check.
+- Request fields, browser storage, profile display names and OAuth metadata
+  never establish caller identity, platform role or paid capabilities.
+- SUPABASE_SERVICE_ROLE_KEY is server-only. Public Supabase/Clerk client
+  configuration does not replace RLS or server authorization.
+- Protected profiles.role is the platform-admin authority. Lobby owner/admin
+  roles remain scoped to their lobby and do not grant platform-admin access.
+- Membership create/join/management uses authenticated guarded RPCs and the
+  cumulative grants/policies in the migration chain. Do not infer effective
+  policy from one early permissive migration alone.
 
-The Phase 009 frontend supports e-mail/password, confirmation-pending,
-password-recovery, and feature-flagged Google/Apple OAuth flows. Provider setup
-and redirect requirements are documented in [oauth-setup.md](oauth-setup.md).
-OAuth metadata may suggest a display name only; it cannot set platform or lobby
-roles.
+Source anchors: src/lib/clerkSession.tsx, src/lib/clerkSupabase.ts,
+server/lib/clerkIdentity.ts, server/lib/clerkAuthorization.ts and
+supabase/migrations/20261104095025_clerk_identity_bridge.sql.
 
-Migration 008 prevents self-join inserts from assigning an `owner` or `admin`
-lobby role, pins the privileged helper functions' `search_path`, and removes
-public/anonymous execution grants. The prepared Phase 010 foundation moves
-create/join to authenticated atomic RPCs and closes direct membership writes in
-a separate enforcement cutover; see
-[membership-security.md](membership-security.md).
+## Privileged endpoints and synchronization
 
-## Admin endpoints
+Named /api/admin/* endpoints require a verified Clerk Bearer token and an
+authoritative platform-admin role unless they are explicitly scheduler-secret
+routes. The verifier pins the configured issuer/JWKS, RS256 and required session
+claims, checks authorized parties and resolves an enabled internal identity.
+Missing/invalid tokens return 401; a valid non-admin identity returns 403.
 
-`POST /api/admin/set-tournament-winner` and
-`POST /api/admin/match-result` require
-`Authorization: Bearer <Supabase access token>`.
+The shared football/hockey/MMA sync uses its independent protected scheduler
+secret and write/feature gates. Historical TheSportsDB sync routes have their
+own scheduler-secret contract. A player's session cannot substitute for cron
+authority, and a cron secret does not create player/admin sessions.
 
-The server validates the token with Supabase Auth and then reads the protected
-platform role. Missing or invalid tokens return `401`; authenticated non-admin
-users return `403`. Tournament-winner preview, explicit confirmation,
-deterministic `10`/`0` long-term scoring, and tournament-completion checks are
-unchanged.
+Local Express and Netlify Functions use shared authorization helpers but remain
+separate deployment entrypoints. A local route's existence does not prove the
+same route is wired on Netlify. Test both the deployed API and direct Supabase
+Data API/RPC boundary; guarding only browser buttons is insufficient.
 
-The local Express route and production Netlify Functions use the same
-authorization boundary.
+## Account lifecycle and paid capabilities
 
-## Deployment
+Clerk account management currently hides its danger section. Coordinated
+export/deletion/revocation across Clerk, private mappings, profiles, lobby
+ownership and game data is not implemented. Enabling only Clerk account deletion
+would not establish complete product erasure.
 
-Migration 008 is deployed in production. For a new environment:
+Paid entitlements are separate server-managed capabilities, not profiles.role
+or lobby membership roles. Current entitlement tables revoke client writes and
+offer caller-scoped readers. The subscriber foreign key was repaired on10November to `profiles(id) ON DELETE
+RESTRICT`, preserving internal Clerk player UUIDs. The hosted transactional
+identity/capability suite passed with ROLLBACK. This does not implement the
+absent payment/webhook lifecycle; see [billing readiness](billing-foundation-readiness-2026-11-10.md). A payment redirect is not payment proof.
 
-1. Apply only `008_authorization_hardening.sql` through the controlled migration
-   process.
-2. Verify trigger, policy, helper `search_path`, and grants from the database
-   catalog.
-3. Deploy the server and Netlify endpoint changes.
-4. Verify `401`/`403` behavior without executing a result or winner write.
+## Verification and migrations
 
-Rollback is limited to restoring the previous helper definitions and grants,
-restoring the previous lobby-members INSERT policy, dropping
-`public.is_lobby_owner(text)`, and dropping the profile-role protection trigger
-and function. No row migration is involved.
+Migration history is cumulative. Do not deploy only migration 008 or copy its
+old standalone rollback instructions into a new environment. Use the current
+migration chain, inspect deployed grants/policies/issuers, and validate the
+chosen change with the smallest relevant transactional suite.
 
-The rollback-only regression scenario in
-`supabase/tests/008_authorization_hardening.sql` is intended for local or staging
-Supabase after the migration is installed. It does not update production profile
-rows.
+Existing verification includes local Clerk tests, membership/identity SQL
+scenarios, prediction context and result/time guards, the seasonal-winner fix,
+and MMA lock/scoring suites from their respective releases. SQL claim emulation
+does not verify a real OAuth flow or cryptographic token signature.
 
-Migration 009 was deployed separately on 2026-07-23. It hardens
-`handle_new_user()`, assigns new profiles the fixed role `player`, preserves
-existing profile rows, and repaired the one Auth identity that had no profile.
-See [oauth-setup.md](oauth-setup.md) for the verified rollout state and external
-provider checklist.
+The9 November retirement suite and updated identity-bridge suite passed with
+ROLLBACK after deployment. They cover legacy-token denial, Clerk caller
+resolution, disabled/foreign identities, metadata role spoofing, cross-lobby
+read/write denial and preservation of historical player/game rows. The17 Clerk
+unit tests and tournament-winner endpoint scenarios also passed. Production
+Clerk and real signed browser/admin sessions still need their release checks.
 
-Future paid-plan entitlements must use a separate server-managed entitlement or
-subscription model. They must not be encoded in `profiles.role` or a lobby role.
+The working Netlify operations summary was subsequently opened successfully in
+the owner's real signed-in Safari admin session. The existing Admin tab appears
+inside score-based competitions, not Home or UFC. Other signed-role/action
+checks and production Clerk remain pending; see the retirement runbook.
+
+The 9 November source audit found no newly confirmed exploit in its reviewed
+portion; coverage is partial. Real signed role/cross-lobby/revocation tests,
+production Clerk settings, admin MFA, anti-abuse, dependency reachability and
+restore/incident exercises remain launch requirements. See the
+[security matrix](security-readiness-matrix.md) and
+[current launch plan](public-launch-security-privacy-legal-2026-11-09.md).

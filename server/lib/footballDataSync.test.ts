@@ -133,6 +133,66 @@ test('HTTP reports conflicts/busy state and hides reflected upstream secrets', a
   assert.equal(result.statusCode, 502); assert(!result.body.includes(secret));
 });
 
+test('shared cron transport exposes a failed hockey or MMA result even when another competition wrote successfully', async () => {
+  for (const failedCompetition of ['NHL', 'ufc-demo-card', 'MMA_CALENDAR']) {
+    const summary = {
+      dry_run: false, wrote_to_db: true, failed: true, busy: false, conflicts: [],
+      competitions: {
+        CL: { wrote_to_db: true, unchanged: 144, conflicts: [] },
+        PL: { wrote_to_db: true, unchanged: 380, conflicts: [] },
+        [failedCompetition]: { failed: true, error: 'Provider response could not be verified.' },
+      },
+    };
+    const http = await handleFootballDataSyncRequest(request({ dryRun: false }), {
+      secret, tokenConfigured: true, writesEnabled: true, sync: async () => summary,
+    });
+    assert.equal(http.statusCode, 502, failedCompetition);
+    assert.equal(http.headers['cache-control'], 'no-store');
+    const body = JSON.parse(http.body);
+    assert.equal(body.failed, true);
+    // A failed tick is not a claim that successful independent writes rolled back.
+    assert.equal(body.wrote_to_db, true);
+    assert.equal(body.competitions.CL.unchanged, 144);
+    assert.equal(body.competitions[failedCompetition].failed, true);
+    assert.equal(http.body.includes(secret), false);
+  }
+});
+
+test('shared cron keeps partial-write busy/conflict responses non-successful and retains diagnostics', async () => {
+  for (const issue of [
+    { busy: true, conflicts: [] },
+    { busy: false, conflicts: [{ match_id: 'demo-match', reason: 'inconsistent_provider_revision' }] },
+  ]) {
+    const summary = { dry_run: false, wrote_to_db: true, failed: false,
+      competitions: { PL: { wrote_to_db: true }, NHL: issue }, ...issue };
+    const http = await handleFootballDataSyncRequest(request({ dryRun: false }), {
+      secret, tokenConfigured: true, writesEnabled: true, sync: async () => summary,
+    });
+    assert.equal(http.statusCode, 409);
+    assert.deepEqual(JSON.parse(http.body), summary);
+  }
+});
+
+test('healthy ticks and intentionally deferred or optional work remain 200 without asserting provider freshness', async () => {
+  const summary = {
+    dry_run: false, wrote_to_db: true, failed: false, busy: false, conflicts: [],
+    competitions: {
+      CL: { wrote_to_db: true, unchanged: 144 },
+      PL: { wrote_to_db: true, unchanged: 380 },
+      NHL: { wrote_to_db: true },
+      ELH: { skipped: true, disabled: true },
+      MMA_CALENDAR: { skipped: true, reason: 'Calendar cached or monthly request budget exhausted.' },
+      'ufc-demo-card': { skipped: true, reason: 'Not due or monthly request budget exhausted.' },
+      MMA_PORTRAITS: { wrote_to_db: false, warning: 'Portrait cache could not be refreshed.' },
+    },
+  };
+  const http = await handleFootballDataSyncRequest(request({ dryRun: false }), {
+    secret, tokenConfigured: true, writesEnabled: true, sync: async () => summary,
+  });
+  assert.equal(http.statusCode, 200);
+  assert.deepEqual(JSON.parse(http.body), summary);
+});
+
 test('all 45 knockout fixtures extend the same 36-club catalog with stable identities', () => {
   let id = 1000;
   const games = Object.entries({ PLAYOFFS: 16, LAST_16: 16, QUARTER_FINALS: 8, SEMI_FINALS: 4, FINAL: 1 })

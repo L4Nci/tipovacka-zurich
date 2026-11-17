@@ -1,4 +1,4 @@
-import { translate, getMessages, type Locale } from './i18n/index.ts';
+import { translate, getMessages, normalizeLocale, loadLocaleResources, type Locale } from './i18n/index.ts';
 import { LocalizedText, useLocale } from './i18n/LocaleProvider.tsx';
 import React, { Component, Suspense, lazy, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -61,6 +61,8 @@ import {
   calculatePoints
 } from './lib/db.ts';
 import AuthScreen from './components/AuthScreen.tsx';
+import { PublicPlayScreen } from './components/PublicPlayScreen.tsx';
+import { usePublicPlay } from './lib/usePublicPlay.ts';
 import { HomeDashboard, type AddLobbyMode } from './components/HomeDashboard.tsx';
 import { isUntippedMatchForDisplay, type HomeDashboardSummary } from './lib/homeDashboard.ts';
 import { shouldRefreshHomeMembership } from './lib/membership.ts';
@@ -473,7 +475,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
               disabled={isLocked || drawPredictionBlocked || isSaving}
               className={`w-full py-4 rounded-2xl font-black shadow-lg transition-all disabled:shadow-none flex items-center justify-center gap-2 ${
                 isLocked ? 'bg-slate-100 text-slate-400' :
-                showSuccess ? 'bg-green-500 text-white shadow-green-100' : 'bg-red-600 text-white shadow-red-200'
+                showSuccess ? 'bg-green-500 text-white shadow-green-100' : 'bg-fan-primary text-fan-snow shadow-fan-soft'
               }`}
             >
               {isSaving ? (
@@ -553,7 +555,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                         <div 
                           key={p.player_id} 
                           className={`px-3 py-2 rounded-xl border flex flex-col items-center min-w-[70px] transition-colors ${
-                            p.player_id === userId ? 'ring-2 ring-red-500 border-red-500 shadow-sm z-10' : ''
+                            p.player_id === userId ? 'ring-2 ring-fan-primary border-fan-primary shadow-sm z-10' : ''
                           } ${
                             pPoints === 5 ? 'bg-indigo-50/60 border-indigo-100 text-indigo-950 font-bold shadow-sm' :
                             pPoints === 3 ? 'bg-emerald-50/60 border-emerald-100 text-emerald-950 font-bold shadow-sm' :
@@ -563,7 +565,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
                         >
                         <div className="flex items-center gap-1 mb-0.5">
                           <UserAvatar player={{ username: p.username || translate(lang, "app.player"), avatar_emoji: p.avatar_emoji, avatar_bg: p.avatar_bg }} size="sm" />
-                          <span className={`text-[9px] font-black uppercase truncate max-w-[55px] ${p.player_id === userId ? 'text-red-600' : ''}`}>
+                          <span className={`text-[9px] font-black uppercase truncate max-w-[55px] ${p.player_id === userId ? 'text-fan-primary' : ''}`}>
                             {p.player_id === userId ? 'VY' : p.username}
                           </span>
                           <TeamFlag code={(p as any).winner_flag || (p as any).tournament_winner_id} className="w-4 h-3 grayscale-[0.5] opacity-80" />
@@ -825,7 +827,7 @@ const TournamentWinnerScreen = ({
             buttonStateClass = 'bg-slate-50 border-transparent opacity-40 grayscale cursor-not-allowed';
           }
           if (isSelected) {
-            buttonStateClass = 'bg-red-600 border-red-600 scale-105 shadow-lg shadow-red-100 z-[1]';
+            buttonStateClass = 'bg-fan-primary border-fan-primary scale-105 shadow-lg shadow-fan-soft z-[1]';
           }
 
           return (
@@ -842,7 +844,7 @@ const TournamentWinnerScreen = ({
                   animate={{ scale: 1 }}
                   className="absolute -top-1 -right-1 bg-white rounded-full p-0.5 shadow-sm"
                 >
-                  <CheckCircle2 className="w-3 h-3 text-red-600" />
+                  <CheckCircle2 className="w-3 h-3 text-fan-primary" />
                 </motion.div>
               )}
               <TeamFlag code={tm.flag_code || tm.id} logoUrl={tm.logo_url} name={tm.name} className={tm.logo_url ? 'w-10 h-10 mb-1' : 'w-10 h-6 mb-1'} />
@@ -1462,12 +1464,15 @@ export default function App() {
     const requestId = ++authSyncRequestRef.current;
     setAuthStatus('initializing');
     setError('');
-    void bootstrapMyAccount().then(profile => {
+    void bootstrapMyAccount(languageRef.current).then(async profile => {
+      const profileLocale = normalizeLocale(profile.locale);
+      if (!profile.needs_profile_completion) await loadLocaleResources(profileLocale);
       if (!active || requestId !== authSyncRequestRef.current) return;
       authenticatedUserIdRef.current = clerkSession.subject;
       setUser(profile);
       // An unfinished profile keeps the visitor's chosen language for onboarding.
-      if (!profile.needs_profile_completion) setLang(profile.locale === 'en' ? 'en' : 'cs');
+      if (!profile.needs_profile_completion) await setLang(profileLocale);
+      if (!active || requestId !== authSyncRequestRef.current) return;
       setAuthStatus(profile.needs_profile_completion ? 'profile_onboarding' : 'authenticated');
     }).catch((failure: unknown) => {
       if (!active || requestId !== authSyncRequestRef.current) return;
@@ -1871,7 +1876,7 @@ export default function App() {
   };
 
   const openHomeContext = (
-    summary: HomeDashboardSummary,
+    summary: Pick<HomeDashboardSummary, 'lobby_id' | 'lobby_name' | 'tournament_id'>,
     showOnlyMissing: boolean,
     destination: 'matches' | 'results' = 'matches'
   ) => {
@@ -1887,6 +1892,22 @@ export default function App() {
     setTab(destination);
     window.scrollTo({ top: 0 });
   };
+
+  const publicEntry = usePublicPlay({
+    enabled: !getInviteCodeFromLocation(window.location.pathname, window.location.search) && !officialEventSlugInput,
+    authenticated: authStatus === 'authenticated' && Boolean(user),
+    subject: clerkSession.subject || null,
+    onJoined: (participation, competition) => {
+      // This navigation selects both IDs atomically; don't clear its tournament
+      // in the older lobby-only selection effect.
+      previousActiveLobbyIdRef.current = participation.lobby_id;
+      openHomeContext({
+        lobby_id: participation.lobby_id,
+        lobby_name: competition.name,
+        tournament_id: participation.tournament_id,
+      }, true, competition.status === 'closed' ? 'results' : 'matches');
+    },
+  });
 
   const clearInviteAddress = () => {
     if (getInviteCodeFromLocation(window.location.pathname, window.location.search)) {
@@ -2140,9 +2161,10 @@ export default function App() {
 
   const handleChangeLanguage = async (nextLanguage: Locale) => {
     if (!user) return;
+    await loadLocaleResources(nextLanguage);
     const profile = await completeMyProfile(user.display_name || user.username, user.avatar_emoji || '😀', user.avatar_bg || '#fee2e2', nextLanguage);
     setUser(previous => previous ? { ...previous, ...profile } : previous);
-    setLang(nextLanguage);
+    await setLang(nextLanguage);
   };
 
   const handleLogout = async () => {
@@ -2152,6 +2174,7 @@ export default function App() {
 
     try {
       await clerkSession.logout();
+      publicEntry.clearPending();
       clearAuthenticatedState();
       setAuthStatus('signed_out');
     } catch (logoutFailure: any) {
@@ -2519,6 +2542,18 @@ export default function App() {
     state: onboardingState
   });
 
+  if (publicEntry.route && (authStatus === 'authenticated' || !publicEntry.authRequested && !clerkSession.signedIn)) {
+    return <PublicPlayScreen
+      lang={lang} competitions={publicEntry.competitions} selectedSlug={publicEntry.route.slug}
+      loading={publicEntry.loading} loadFailed={publicEntry.loadFailed}
+      joinFailed={publicEntry.joinFailed} joining={publicEntry.joining}
+      signedIn={authStatus === 'authenticated'} onStart={publicEntry.start}
+      onSelect={publicEntry.navigate} onRetry={publicEntry.retry}
+      onHome={() => { publicEntry.leave(); if (user) goHome(); }}
+      onLanguageChange={authStatus === 'authenticated' ? handleChangeLanguage : setLang}
+    />;
+  }
+
   if (authStatus !== 'authenticated' || !user) {
     return (
       <AuthScreen
@@ -2527,6 +2562,10 @@ export default function App() {
         username={user?.display_name || ''}
         error={error || logoutError}
         invitePending={Boolean(joinCodeInput || officialEventSlugInput)}
+        continuationLabel={publicEntry.route?.slug ? translate(lang, 'publicPlay.continue', {
+          competition: publicEntry.competitions.find(item => item.slug === publicEntry.route?.slug)?.name || publicEntry.route.slug,
+        }) : undefined}
+        onBack={publicEntry.route ? publicEntry.cancelAuthentication : undefined}
         signedIn={clerkSession.signedIn}
         busy={isLoggingOut}
         onRetry={() => setAuthRetry(previous => previous + 1)}
@@ -2769,6 +2808,12 @@ export default function App() {
         </header>
         
         <div className="flex-1">
+          {publicEntry.competitions.length > 0 ? <div className="px-4 pt-5 sm:px-6">
+              <button type="button" onClick={() => { setJoinCodeInput(''); setLobbyFormActive('none'); publicEntry.navigate(null); }}
+              className="w-full rounded-2xl border border-[#24618C]/20 bg-[#eaf3fa] p-4 text-left text-sm font-bold text-[#24618C] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#24618C]">
+              {translate(lang, 'publicPlay.title')} <span aria-hidden="true">→</span>
+            </button>
+          </div> : null}
           <HomeDashboard
             lang={lang}
             lobbies={lobbies}
@@ -3046,7 +3091,7 @@ export default function App() {
                     <button
                       type="submit"
                       disabled={isLobbyMutationSubmitting}
-                      className="w-full py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-wait text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer"
+                      className="w-full py-2.5 bg-fan-primary hover:bg-fan-primary-hover disabled:bg-slate-200 disabled:cursor-wait text-fan-snow text-[10px] font-black uppercase tracking-wider rounded-xl transition-colors active:scale-95 transition-transform cursor-pointer"
                     >
                       {isLobbyMutationSubmitting ? translate(lang, "officialEventView.joining") : translate(lang, "app.join")}
                     </button>
@@ -3160,7 +3205,7 @@ export default function App() {
                 onClick={() => setMatchFilter(f.id)}
                 className={`flex-none px-4 py-1.5 rounded-full text-[10px] font-black transition-all ${
                   matchFilter === f.id 
-                    ? 'bg-red-600 text-white shadow-lg shadow-red-100' 
+                    ? 'bg-fan-primary text-fan-snow shadow-lg shadow-fan-soft'
                     : 'bg-white text-slate-400 border-slate-100 border hover:border-slate-200'
                 }`}
               >
@@ -3353,19 +3398,19 @@ export default function App() {
       {/* Navigation */}
       {activeLobby && activeTournamentId && (
         <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t px-2 py-3 flex justify-around items-center rounded-t-[2rem] z-50 transition-colors border-slate-100">
-        <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'matches' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
+        <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'matches' ? 'text-fan-primary scale-110' : 'text-slate-400'}`}>
           <Calendar className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.matches}</span>
         </button>
-        <button onClick={() => setTab('results')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'results' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
+        <button onClick={() => setTab('results')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'results' ? 'text-fan-primary scale-110' : 'text-slate-400'}`}>
           <CheckCircle2 className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.results}</span>
         </button>
-        <button onClick={() => setTab('leaderboard')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'leaderboard' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
+        <button onClick={() => setTab('leaderboard')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'leaderboard' ? 'text-fan-primary scale-110' : 'text-slate-400'}`}>
           <TrophyIcon className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.rank}</span>
         </button>
-        <button onClick={() => setTab('winner')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'winner' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
+        <button onClick={() => setTab('winner')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'winner' ? 'text-fan-primary scale-110' : 'text-slate-400'}`}>
           <Trophy className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">{t.winnerTab}</span>
         </button>

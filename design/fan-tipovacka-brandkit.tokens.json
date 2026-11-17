@@ -1,0 +1,31 @@
+{
+  "name": "Fan Tipovačka",
+  "version": "0.1.0",
+  "status": "proposal",
+  "scope": "landing and profile design reference; not imported by the live app",
+  "colors": {
+    "azure": "#3283BE",
+    "snow": "#FEFDFE",
+    "coral": "#FD614B",
+    "ink": "#0F172A",
+    "azureStrong": "#24618C"
+  },
+  "semantic": {
+    "background": "snow",
+    "text": "ink",
+    "primaryAction": "coral",
+    "onPrimaryAction": "ink",
+    "alternateAction": "azureStrong",
+    "onAlternateAction": "snow",
+    "linkOnSnow": "azureStrong"
+  },
+  "typography": {
+    "heading": { "family": "Barlow Condensed", "weight": 800, "style": "italic" },
+    "body": { "family": "Inter", "weight": 400 },
+    "label": { "family": "Inter", "weight": 600 }
+  },
+  "spacePx": [4, 8, 12, 16, 24, 32, 48, 64, 96],
+  "radiusPx": { "button": 12, "card": 24 },
+  "controls": { "minTargetHeightPx": 44 },
+  "motion": { "microMs": 160, "contentMs": 240, "reducedMotionMs": 0 }
+}

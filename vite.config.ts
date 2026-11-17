@@ -6,6 +6,11 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      rollupOptions: {
+        input: { main: path.resolve(__dirname, 'index.html'), billingTest: path.resolve(__dirname, 'billing-test.html'), billing: path.resolve(__dirname, 'billing.html') },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

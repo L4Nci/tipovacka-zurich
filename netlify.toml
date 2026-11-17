@@ -3,6 +3,22 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[functions."billing-test-scheduled"]
+  schedule = "*/10 * * * *"
+
+[functions."billing-live-scheduled"]
+  schedule = "5-59/10 * * * *"
+
+[[redirects]]
+  from = "/api/billing/live/*"
+  to = "/.netlify/functions/billing-live/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/billing/test/*"
+  to = "/.netlify/functions/billing-test/:splat"
+  status = 200
+
 [[redirects]]
   from = "/api/admin/sync-football-data"
   to = "/.netlify/functions/sync-football-data"

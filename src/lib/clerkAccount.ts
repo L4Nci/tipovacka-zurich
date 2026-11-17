@@ -1,4 +1,5 @@
 import type { Player } from "../types.ts";
+import { locales, normalizeLocale } from '../i18n/index.ts';
 
 export type AccountProfile = Player & { needs_profile_completion: boolean };
 
@@ -19,7 +20,9 @@ export const normalizeAccountProfile = (value: unknown): AccountProfile => {
     role: profile.role as Player["role"],
     avatar_emoji: typeof profile.avatar_emoji === "string" ? profile.avatar_emoji : "😀",
     avatar_bg: typeof profile.avatar_bg === "string" ? profile.avatar_bg : "#fee2e2",
-    locale: profile.locale === "en" ? "en" : "cs",
+    locale: typeof profile.locale === 'string' &&
+      (profile.locale === 'cz' || Object.hasOwn(locales, profile.locale))
+      ? normalizeLocale(profile.locale) : 'cs',
     needs_profile_completion: profile.needs_profile_completion,
   };
 };

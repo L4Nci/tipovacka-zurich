@@ -1,5 +1,13 @@
 # Bezpečnostní připravenost — kontrolní matice
 
+**Aktualizace 9. 11. 2026:** [nová revize a plán placeného spuštění](public-launch-security-privacy-legal-2026-11-09.md)
+obsahují nový dokončený Standard scan s částečným pokrytím (68 plně čtených
+souborů, 0 nových potvrzených nálezů), čerstvé DB/HTTP pozorování a npm advisory
+inventář. V hostované DB má všech 25 public tabulek RLS. To neuzavírá kontrolu
+každé policy ani runtime oprávnění. Starší řádky níže zachovávají důkazy z 6. 11.,
+nepředstavují stav všech dnešních souborů. Platby vyžadují opravu identity
+subscriptions/Clerk a dosud neexistující ověřený platební životní cyklus.
+
 6. 11. 2026. **Celý produkt není bezpečnostně uzavřený.** Žádný rozumný audit
 neslibuje všechny možné scénáře. Stav musí stát na konkrétních ověřených hranicích.
 
@@ -17,9 +25,9 @@ penetrační test ani certifikace veřejného provozu.
 | Staré zápasové tipy/uzávěrky | Kontroly starého i nového řádku a výsledku v DB | Hraniční souběhy a kompletní kontrola každé alternativní cesty |
 | Starý tip na vítěze turnaje | Opraveno v hostované DB migrací `20261106165806`; útok potvrzen před opravou, po opravě odmítnut; rollback sada a nezávislá revize | Skutečné prohlížečové relace a hraniční souběhy nejsou touto SQL sadou pokryté |
 | Nový MMA pilot | 7 zdrojových/sync testů, skutečně prošlá bootstrap DB/RLS sada s ROLLBACK; ověřeno odstranění fixtures | Nasazená cesta se skutečným Clerk účtem a souběhy/živé výsledky |
-| Klíče | Server-only proměnné; finální frontend bundle neobsahoval 6 kontrolovaných secret hodnot | Nastavení Netlify, logy a přístupová práva/rotace |
-| Závislosti | `npm audit`: 11 hlášených balíčků, včetně 1 critical a 6 high; nepřibyly instalací překladů | Dosah na aplikaci zatím není potvrzen; samostatná [triage #26](https://github.com/L4Nci/tipovacka-zurich/issues/26) |
-| Historické přihlášení | Kompatibilita Supabase UUID je záměrně stále v DB | Rozhodnutí o vyřazení, revokaci a obnově admin účtu; nespoléhat na skrytý starý formulář |
+| Klíče |9.11.: offline env kontrola a porovnání3 aktuálně nakonfigurovaných serverových secret hodnot v19 frontend souborech bez nálezu; historická kontrola6 hodnot je níže | Nastavení Netlify, logy a přístupová práva/rotace |
+| Závislosti |9.11.: kompatibilní opravy Express/Vite/esbuild/tsx a transitives; fresh npm audit0; cílené parser/proxy kontroly, typecheck a oba buildy prošly. [Ověření #26](/Users/viktor/.codex/state/plugins/codex-security/scans/tipovacka-zurich/artifacts-c9f902ed35d77c53dca7b3de9220fa7f90edeff3a4d77962b3b0ea6e86eed0bf/findings/dependency-26-fix-2026-11-09.md) | Lokální patch není vydaný; issue zůstává otevřená do akceptace. Registry0 není certifikace produktu. |
+| Historické přihlášení |9.11.: Clerk-only resolver nasazen;13 native loginů a55 sessions odstraněno, historie zachována, vlastník určil ověřeného Clerk admina. Obě SQL/RLS sady prošly s ROLLBACK. [Výsledek](clerk-only-retirement-runbook-2026-11-09.md) | Nativní provider/signup konfigurace, skutečný přihlášený admin průchod a produkční Clerk zůstávají release kontroly |
 | Cookies/analytics | Analytics SDK zatím nezapojené; portréty načítají veřejné soubory z `d33t2v9cbr12gb.cloudfront.net` bez referreru | Skutečný cookie/network inventář včetně externího image CDN, souhlasy, odvolání, správce, retence, export/výmaz a procesory |
 | Zneužití a kapacita | Dílčí aplikační a provider limity | Rate/abuse test, zátěž před uzávěrkou, quota alerty, dohled |
 | Obnova a incident | Předchozí zálohy existují | Vyzkoušet obnovu, revokaci klíče, zastavení zápisů a návrat verze |

@@ -1,8 +1,9 @@
 import { translate, locales, supportedLocales, type Locale } from '../i18n/index.ts';
 import { SignIn, SignUp } from '@clerk/react';
 import { useState, type ReactNode } from 'react';
-import { Trophy } from 'lucide-react';
+import { BrandMark } from './BrandMark.tsx';
 import type { AuthStatus } from '../types.ts';
+import './AuthScreen.css';
 
 type AuthScreenProps = {
   status: AuthStatus;
@@ -10,21 +11,44 @@ type AuthScreenProps = {
   username: string;
   error: string;
   invitePending: boolean;
+  continuationLabel?: string;
+  onBack?: () => void;
   signedIn: boolean;
   busy: boolean;
   onRetry: () => void;
   onLogout: () => Promise<void>;
-  onLanguageChange: (language: Locale) => void;
+  onLanguageChange: (language: Locale) => Promise<void>;
   onCompleteProfileOnboarding: (displayName: string) => Promise<void>;
 };
 
 const clerkAppearance = {
-  variables: { colorPrimary: '#dc2626', borderRadius: '1rem' },
-  elements: { rootBox: 'w-full', cardBox: 'w-full shadow-none', card: 'w-full shadow-none border-0 p-0' },
+  variables: {
+    colorPrimary: '#24618C',
+    colorPrimaryForeground: '#FEFDFE',
+    colorForeground: '#0F172A',
+    colorMutedForeground: '#475569',
+    colorBackground: '#FEFDFE',
+    colorInput: '#FEFDFE',
+    colorInputForeground: '#0F172A',
+    colorRing: '#24618C',
+    fontFamily: '"Fan Inter", sans-serif',
+    fontFamilyButtons: '"Fan Inter", sans-serif',
+    borderRadius: '0.75rem',
+  },
+  elements: {
+    rootBox: 'auth-clerk-root',
+    cardBox: 'auth-clerk-cardbox',
+    card: 'auth-clerk-card',
+    footer: 'auth-clerk-footer',
+    formButtonPrimary: 'auth-clerk-primary',
+    formFieldInput: 'auth-clerk-input',
+    socialButtonsBlockButton: 'auth-clerk-social',
+    footerActionLink: 'auth-clerk-link',
+  },
 };
 
 export default function AuthScreen({
-  status, lang, username, error, invitePending, signedIn, busy,
+  status, lang, username, error, invitePending, continuationLabel, onBack, signedIn, busy,
   onRetry, onLogout, onLanguageChange, onCompleteProfileOnboarding,
 }: AuthScreenProps) {
   const [displayName, setDisplayName] = useState(username);
@@ -41,20 +65,23 @@ export default function AuthScreen({
 
   return (
     <AuthShell>
-      <div className="mb-6 flex flex-col items-center text-center">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-600 text-white"><Trophy className="h-8 w-8" /></div>
-        <h1 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900">Fan Tipovačka</h1>
-        <p className="mt-2 text-xs font-bold text-red-600">{translate(lang, "authScreen.predictMatchesBeatYourFriends")}</p>
+      <div className="auth-brand mb-6 flex flex-col items-center text-center">
+        <BrandMark className="mb-4 h-14 w-14" />
+        <h1 className="auth-wordmark"><span>Fan</span> Tipovačka</h1>
+        <p className="auth-tagline mt-2 text-sm font-semibold">{translate(lang, "authScreen.predictMatchesBeatYourFriends")}</p>
       </div>
-      <div className="mb-5 flex justify-center gap-4 text-xs font-bold">
+      <div className="auth-languages mb-5 flex justify-center gap-2 text-sm font-semibold">
         {supportedLocales.map(locale => <button key={locale} type="button" lang={locale} aria-pressed={lang === locale}
-          onClick={() => onLanguageChange(locale)} className={lang === locale ? 'text-red-600' : 'text-slate-400'}>{locales[locale].label}</button>)}
+          onClick={() => { void onLanguageChange(locale).catch(() => setLocalError(translate(lang, 'locale.loadError'))); }}>{locales[locale].label}</button>)}
       </div>
-      {invitePending ? (
-        <p className="mb-5 rounded-2xl bg-red-50 p-3 text-center text-xs font-semibold leading-relaxed text-red-700">
-          {translate(lang, "authScreen.yourInvitationIsSavedAfterSignInAndProfile")}
+      {continuationLabel || invitePending ? (
+        <p className="auth-invite mb-5 rounded-2xl p-3 text-center text-sm font-semibold leading-relaxed">
+          {continuationLabel || translate(lang, "authScreen.yourInvitationIsSavedAfterSignInAndProfile")}
         </p>
       ) : null}
+      {onBack && !signedIn ? <button type="button" onClick={onBack} className="mb-4 min-h-11 w-full text-sm font-semibold text-[#24618C]">
+        ← {translate(lang, 'publicPlay.title')}
+      </button> : null}
       {status === 'initializing' ? (
         <p className="py-6 text-center text-sm text-slate-500" role="status">{translate(lang, "authScreen.preparingYourAccount")}</p>
       ) : status === 'profile_onboarding' ? (
@@ -72,15 +99,15 @@ export default function AuthScreen({
           <p className="text-center text-xs leading-relaxed text-slate-500">{translate(lang, "authScreen.otherPlayersWillSeeThisNameYouCanChange")}</p>
           <label className="block text-xs font-bold text-slate-600">
             {translate(lang, "authScreen.displayName")}
-            <input required minLength={2} maxLength={40} autoComplete="nickname" value={displayName} onChange={event => setDisplayName(event.target.value)} className="mt-2 w-full rounded-2xl bg-slate-50 p-4 text-sm outline-none focus:ring-2 focus:ring-red-600" />
+            <input required minLength={2} maxLength={40} autoComplete="nickname" value={displayName} onChange={event => setDisplayName(event.target.value)} className="auth-name-input mt-2 w-full rounded-xl p-4 text-base" />
           </label>
-          <button type="submit" disabled={saving || busy} className="min-h-12 w-full rounded-2xl bg-red-600 text-xs font-black text-white disabled:opacity-60">{saving ? (translate(lang, "authScreen.saving")) : (translate(lang, "authScreen.continue"))}</button>
+          <button type="submit" disabled={saving || busy} className="auth-primary min-h-12 w-full rounded-xl text-sm font-semibold disabled:opacity-60">{saving ? (translate(lang, "authScreen.saving")) : (translate(lang, "authScreen.continue"))}</button>
         </form>
       ) : signedIn ? (
         <div className="space-y-3 text-center">
           <h2 className="text-lg font-black text-slate-900">{translate(lang, "authScreen.yourAccountCouldNotBePrepared")}</h2>
           <p className="text-xs leading-relaxed text-slate-500">{translate(lang, "authScreen.youAreStillSignedInPleaseTryLoadingYour")}</p>
-          <button type="button" onClick={onRetry} disabled={busy} className="min-h-12 w-full rounded-2xl bg-red-600 text-xs font-black text-white disabled:opacity-60">{translate(lang, "authScreen.tryAgain")}</button>
+          <button type="button" onClick={onRetry} disabled={busy} className="auth-primary min-h-12 w-full rounded-xl text-sm font-semibold disabled:opacity-60">{translate(lang, "authScreen.tryAgain")}</button>
         </div>
       ) : registering ? (
         <SignUp routing="hash" signInUrl={signInUrl.href} forceRedirectUrl={returnUrl.href} appearance={clerkAppearance} />
@@ -94,5 +121,5 @@ export default function AuthScreen({
 }
 
 function AuthShell({ children }: { children: ReactNode }) {
-  return <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4"><div className="w-full max-w-md rounded-3xl border border-slate-100 bg-white p-6 shadow-xl sm:p-8">{children}</div></div>;
+  return <div className="auth-screen flex min-h-screen items-center justify-center p-4"><div className="auth-panel w-full max-w-md rounded-3xl p-6 sm:p-8">{children}</div></div>;
 }
