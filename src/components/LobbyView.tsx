@@ -48,16 +48,19 @@ const getLobbyRulesText = (longDescription?: string | null) => {
   }
 
   const lowerLongText = longText.toLocaleLowerCase('cs-CZ');
-  const markerIndex = rulesStartMarkers
-    .map(marker => lowerLongText.indexOf(marker.toLocaleLowerCase('cs-CZ')))
-    .filter(index => index >= 0)
-    .sort((a, b) => a - b)[0];
+  const marker = rulesStartMarkers
+    .map(value => ({ value, index: lowerLongText.indexOf(value.toLocaleLowerCase('cs-CZ')) }))
+    .filter(candidate => candidate.index >= 0)
+    .sort((a, b) => a.index - b.index)[0];
 
-  if (markerIndex === undefined) {
+  if (!marker) {
     return '';
   }
 
-  return longText.slice(markerIndex).trim();
+  return longText
+    .slice(marker.index + marker.value.length)
+    .replace(/^[\s:;,.\-–—]+/, '')
+    .trim();
 };
 
 interface LobbyViewProps {
@@ -721,39 +724,17 @@ export function LobbyView({
                 className="flex w-full items-center justify-between gap-3 text-left"
                 aria-expanded={isRulesExpanded}
               >
-                <span>
-                  <h2 className="block text-xs font-bold text-slate-400 uppercase tracking-widest">
-                    {translate(lang, "lobbyView.rules")}
-                  </h2>
-                  <span className="mt-1 block text-[11px] font-semibold text-slate-500">
-                    {translate(lang, "lobbyView.gameRulesAndTournamentRules")}
-                  </span>
-                </span>
+                <h2 className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                  {translate(lang, "lobbyView.tournamentRules")}
+                </h2>
                 <span className="flex items-center gap-2">
                   <LockKeyhole className="h-3.5 w-3.5 text-slate-300" aria-label={translate(lang, "lobbyView.readOnly")} />
                   <ChevronRight className={`w-4 h-4 shrink-0 text-slate-400 transition-transform md:hidden ${isRulesExpanded ? 'rotate-90' : ''}`} />
                 </span>
               </button>
-              <div className={`${isRulesExpanded ? 'mt-4 block' : 'hidden'} space-y-4 md:mt-4 md:block`}>
-                <div>
-                  <h3 className="text-[10px] font-black uppercase text-slate-500">
-                    {translate(lang, "lobbyView.gameRules")}
-                  </h3>
-                  <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">
-                    {translate(lang, "lobbyView.predictionsAlwaysBelongToOneLobbyAndTournamentThey")}
-                  </p>
-                </div>
-                <div className="border-t border-slate-100 pt-4">
-                  <h3 className="text-[10px] font-black uppercase text-slate-500">
-                    {translate(lang, "lobbyView.tournamentRules")}
-                  </h3>
-                  <div className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                    <p className="whitespace-pre-wrap text-xs font-medium leading-relaxed text-slate-600">
-                      {rulesText || (translate(lang, "lobbyView.tournamentRulesAreNotAvailableYet"))}
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <p className={`${isRulesExpanded ? 'mt-4 block' : 'hidden'} whitespace-pre-wrap text-xs font-medium leading-relaxed text-slate-600 md:mt-4 md:block`}>
+                {rulesText || (translate(lang, "lobbyView.tournamentRulesAreNotAvailableYet"))}
+              </p>
             </div>
           )}
 

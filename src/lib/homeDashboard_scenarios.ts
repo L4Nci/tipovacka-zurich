@@ -62,6 +62,19 @@ const pending = summarizeHomeDashboardContext(
 assert.equal(pending.schedule_state, 'schedule_pending');
 assert.equal(classifyHomeDashboardSummary(pending), 'owner_attention');
 
+const partlyPublishedSchedule = summarizeHomeDashboardContext(
+  { ...context, lobby_role: 'owner' },
+  [
+    match(),
+    match({ id: 'match-tba', home_participant_id: 'football-tba', away_participant_id: 'football-tba-2' })
+  ],
+  new Set(['match-1']),
+  now
+);
+assert.equal(partlyPublishedSchedule.schedule_state, 'ready');
+assert.equal(partlyPublishedSchedule.all_known_unlocked_predicted, true);
+assert.equal(classifyHomeDashboardSummary(partlyPublishedSchedule), 'all_predicted');
+
 const completed = summarizeHomeDashboardContext(
   { ...context, actual_tournament_winner_id: 'football-esp' },
   [match({ status: 'finished', home_score: 1, away_score: 2, lock_time_utc: '2026-06-10T12:00:00.000Z' })],
