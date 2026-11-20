@@ -1,23 +1,6 @@
-export const calculatePoints = (ph: number, pa: number, mh: number, ma: number, sport: 'football' | 'hockey' = 'football'): number => {
-  if (ph === mh && pa === ma) return 5;
-  if (sport === 'football') {
-    const isActualDraw = mh === ma;
-    const isPredictedDraw = ph === pa;
-    if (isActualDraw) {
-      if (isPredictedDraw) return 2; // Correctly predicted draw, not exact
-    } else {
-      const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
-      if (correctWinner) {
-        if (ph - pa === mh - ma) return 3; // Correct winner + correct goal difference
-        return 2; // Correct winner without correct goal difference
-      }
-    }
-  } else {
-    // Hockey
-    if ((ph > pa && mh > ma) || (pa > ph && ma > mh) || (ph === pa && mh === ma)) return 2;
-  }
-  return 0;
-};
+import { calculatePoints, TOURNAMENT_WINNER_POINTS } from './scoring.ts';
+
+export { calculatePoints };
 
 /**
  * Validates predictions - Hockey (ms-hockey-2026) cannot have draws.
@@ -40,25 +23,15 @@ export function validateMatchResultScore(home: number, away: number, sport: 'foo
 }
 
 /**
- * Validates longterm prediction scoring - 4 points for each correct prediction.
- * Supported types:
- * - tournament_winner
- * - top_scoring_team
- * - group_winner_A through group_winner_L
- * - semifinalist_1 through semifinalist_4
+ * Validates the only currently supported long-term prediction.
  */
 export function calculateLongtermPoints(
   predictionType: string,
   predictedValue: string,
-  actualValues: string[] // List of correct answers or acceptable values (e.g. actual semifinalist IDs)
+  actualValues: string[]
 ): number {
-  if (predictionType.startsWith('semifinalist_')) {
-    // For semifinalists, order/position does not matter
-    // If the predicted team is in the actual list of semifinalists, it is correct (4 points)
-    return actualValues.includes(predictedValue) ? 4 : 0;
-  }
-  // Standard match: if predicted value is in correct answers (for single answer, actualValues has 1 element)
-  return actualValues.includes(predictedValue) ? 4 : 0;
+  if (predictionType !== 'tournament_winner') return 0;
+  return actualValues.includes(predictedValue) ? TOURNAMENT_WINNER_POINTS : 0;
 }
 
 type TestScenario = {
@@ -359,7 +332,7 @@ export function runTests() {
   console.log("-----------------------------------------");
 
   console.log("\n=========================");
-  console.log("RUNNING LONGTERM PREDICTIONS AUDIT TESTS (4 POINTS EACH)");
+  console.log(`RUNNING LONGTERM PREDICTIONS AUDIT TESTS (${TOURNAMENT_WINNER_POINTS} POINTS)`);
   console.log("=========================");
 
   const longtermTests = [
@@ -368,7 +341,7 @@ export function runTests() {
       type: "tournament_winner",
       predicted: "cze",
       actual: ["cze"],
-      expected: 4
+      expected: TOURNAMENT_WINNER_POINTS
     },
     {
       name: "tournament_winner wrong prediction (SVK vs CZE)",
@@ -378,31 +351,10 @@ export function runTests() {
       expected: 0
     },
     {
-      name: "top_scoring_team correct prediction (GER)",
-      type: "top_scoring_team",
-      predicted: "ger",
-      actual: ["ger"],
-      expected: 4
-    },
-    {
-      name: "group_winner_A correct prediction (FRA)",
-      type: "group_winner_A",
-      predicted: "fra",
-      actual: ["fra"],
-      expected: 4
-    },
-    {
-      name: "semifinalist_1 correct prediction (order independent, predicted ARG, actual [ARG, FRA, CRO, MAR])",
+      name: "unsupported long-term prediction type earns nothing",
       type: "semifinalist_1",
       predicted: "arg",
-      actual: ["arg", "fra", "cro", "mar"],
-      expected: 4
-    },
-    {
-      name: "semifinalist_2 wrong prediction (order independent, predicted BRA, actual [ARG, FRA, CRO, MAR])",
-      type: "semifinalist_2",
-      predicted: "bra",
-      actual: ["arg", "fra", "cro", "mar"],
+      actual: ["arg"],
       expected: 0
     }
   ];

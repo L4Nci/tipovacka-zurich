@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authorizeClerkPlatformAdmin, clerkAuthorizationErrorResponse } from "./clerkAuthorization.ts";
+import { TOURNAMENT_WINNER_POINTS } from "../../src/lib/scoring.ts";
 
 const DEFAULT_TOURNAMENT_ID = "fifa-world-cup-2026";
-const TOURNAMENT_WINNER_POINTS = 10;
 
 type TournamentWinnerInput = {
   teamId?: string | null;

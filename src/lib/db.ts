@@ -1182,7 +1182,7 @@ export const fetchLobbyLeaderboard = async (
       match?.away_score !== null &&
       match?.home_score !== undefined &&
       match?.away_score !== undefined;
-    const points = hasFinishedScore
+    const classifiedPoints = hasFinishedScore
       ? calculatePoints(
           p.predicted_home_score,
           p.predicted_away_score,
@@ -1192,16 +1192,12 @@ export const fetchLobbyLeaderboard = async (
         )
       : (p.points_earned || 0);
 
-    curr.total += points;
-    if (points === 5) curr.exact++;
-    else if (points > 0) curr.outcome++;
+    // Result sync is authoritative for awarded points. Recalculation here is
+    // used only to classify the prediction for the detailed breakdown.
+    curr.total += p.points_earned || 0;
+    if (classifiedPoints === 5) curr.exact++;
+    else if (classifiedPoints > 0) curr.outcome++;
     userPointsMap.set(p.user_id, curr);
-  });
-
-  ltPointsMap.forEach((pts, uid) => {
-    const curr = userPointsMap.get(uid) || { total: 0, exact: 0, outcome: 0 };
-    curr.total += pts;
-    userPointsMap.set(uid, curr);
   });
 
   const resolved: Player[] = (members || []).map(m => {
@@ -1210,6 +1206,7 @@ export const fetchLobbyLeaderboard = async (
     const rawLobby = (m as any).lobby;
     const lobby = Array.isArray(rawLobby) ? rawLobby[0] : rawLobby;
     const stats = userPointsMap.get(m.user_id) || { total: 0, exact: 0, outcome: 0 };
+    const longtermPoints = ltPointsMap.get(m.user_id) || 0;
 
     return {
       id: m.user_id,
@@ -1221,7 +1218,9 @@ export const fetchLobbyLeaderboard = async (
       avatar_emoji: prof?.avatar_emoji || "😀",
       avatar_bg: prof?.avatar_bg || "#fee2e2",
       tournament_winner_id: ltWinnerMap.get(m.user_id) || undefined,
-      total_points: stats.total,
+      match_points: stats.total,
+      longterm_points: longtermPoints,
+      total_points: stats.total + longtermPoints,
       exact_hits: stats.exact,
       outcome_hits: stats.outcome
     };

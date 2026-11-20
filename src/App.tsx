@@ -65,6 +65,7 @@ import { PublicPlayScreen } from './components/PublicPlayScreen.tsx';
 import { usePublicPlay } from './lib/usePublicPlay.ts';
 import { HomeDashboard, type AddLobbyMode } from './components/HomeDashboard.tsx';
 import { isUntippedMatchForDisplay, type HomeDashboardSummary } from './lib/homeDashboard.ts';
+import { buildLeaderboardWithStreaks } from './lib/leaderboard.ts';
 import { shouldRefreshHomeMembership } from './lib/membership.ts';
 import {
   canStartLobbyNavigation,
@@ -2335,155 +2336,13 @@ export default function App() {
 
   const leaderboardWithStreaks = useMemo(() => {
     const isHockey = isHockeyTournament(activeTournamentId, tournamentCatalog.find(t => t.id === activeTournamentId)?.sport_id);
-
-    // Determine the most recently finished match to calculate "previous" state
-    const finishedMatchesSorted = [...matches]
-      .filter(m => m.home_score !== null && m.away_score !== null)
-      .sort((a, b) => new Date(b.start_time_utc).getTime() - new Date(a.start_time_utc).getTime());
-    
-    const lastFinishedMatchId = finishedMatchesSorted[0]?.id;
-    const finalWinnerIds = new Set(teams.filter(tm => tm.is_final_winner === 1).map(tm => tm.id));
-
-    // Current ranks - only use finished matches for scoring
-    const calculateRanks = (excludeMatchId?: string) => {
-      const statsByUserId = new Map<string, {
-        id: string;
-        username: string;
-        total: number;
-        exact: number;
-        outcomeHits: number;
-        goalDifferenceHits: number;
-        winnerHits: number;
-        drawHits: number;
-        currentStreak: number;
-        tempStreak: number;
-        history: { points: number, res: 'W' | 'L' | 'E' }[];
-      }>();
-
-      leaderboard.forEach(player => {
-        statsByUserId.set(player.id, {
-          id: player.id,
-          username: player.username,
-          total: 0,
-          exact: 0,
-          outcomeHits: 0,
-          goalDifferenceHits: 0,
-          winnerHits: 0,
-          drawHits: 0,
-          currentStreak: 0,
-          tempStreak: 0,
-          history: []
-        });
-      });
-
-      allPredictions.forEach(pr => {
-        const scoreH = (pr as any).home_score;
-        const scoreA = (pr as any).away_score;
-        const isFinished = scoreH !== null && scoreA !== null && scoreH !== undefined && scoreA !== undefined;
-        if (!isFinished || (excludeMatchId && pr.match_id === excludeMatchId)) return;
-
-        const stats = statsByUserId.get(pr.player_id);
-        if (!stats) return;
-
-        const mh = (pr as any).home_score;
-        const ma = (pr as any).away_score;
-        const ph = pr.predicted_home_score;
-        const pa = pr.predicted_away_score;
-
-        const pts = calculatePoints(ph, pa, mh, ma, isHockey ? 'hockey' : 'football');
-
-        stats.total += pts;
-        if (pts === 5) stats.exact++;
-        else if (pts > 0) {
-          stats.outcomeHits++;
-
-          if (!isHockey) {
-            const isActualDraw = mh === ma;
-            const isPredictedDraw = ph === pa;
-            const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
-
-            if (isActualDraw && isPredictedDraw) {
-              stats.drawHits++;
-            } else if (correctWinner && ph - pa === mh - ma) {
-              stats.goalDifferenceHits++;
-            } else if (correctWinner) {
-              stats.winnerHits++;
-            }
-          }
-        }
-
-        if (pts > 0) stats.tempStreak++;
-        else stats.tempStreak = 0;
-        stats.currentStreak = stats.tempStreak;
-        stats.history.push({ points: pts, res: pts === 5 ? 'E' : pts > 0 ? 'W' : 'L' });
-      });
-
-      leaderboard.forEach(player => {
-        if (player.tournament_winner_id && finalWinnerIds.has(player.tournament_winner_id)) {
-          const stats = statsByUserId.get(player.id);
-          if (stats) stats.total += 10;
-        }
-      });
-
-      return Array.from(statsByUserId.values())
-        .map(({ tempStreak, ...stats }) => stats)
-        .sort((a, b) => b.total - a.total || b.exact - a.exact || b.outcomeHits - a.outcomeHits || a.username.localeCompare(b.username));
-    };
-
-    const currentResults = calculateRanks();
-    const prevResults = lastFinishedMatchId ? calculateRanks(lastFinishedMatchId) : currentResults;
-    const currentStatsByUserId = new Map(currentResults.map((result, index) => [result.id, { ...result, index }]));
-    const prevIndexByUserId = new Map(prevResults.map((result, index) => [result.id, index]));
-
-    const finishedPredictionsByUserId = new Map<string, Prediction[]>();
-    allPredictions.forEach(pr => {
-      const mh = (pr as any).home_score;
-      const ma = (pr as any).away_score;
-      if (mh === null || ma === null || mh === undefined || ma === undefined) return;
-
-      const existing = finishedPredictionsByUserId.get(pr.player_id);
-      if (existing) {
-        existing.push(pr);
-      } else {
-        finishedPredictionsByUserId.set(pr.player_id, [pr]);
-      }
-    });
-
-    return leaderboard.map(p => {
-      const stats = currentStatsByUserId.get(p.id);
-      const prevIndex = prevIndexByUserId.get(p.id) ?? -1;
-      const currentIndex = stats?.index ?? -1;
-      const userPredsAll = (finishedPredictionsByUserId.get(p.id) || [])
-        .slice()
-        .sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
-      
-      let bestStreak = 0;
-      let temp = 0;
-      userPredsAll.forEach(pr => {
-        const mh = (pr as any).home_score;
-        const ma = (pr as any).away_score;
-        const ph = pr.predicted_home_score;
-        const pa = pr.predicted_away_score;
-        const pts = calculatePoints(ph, pa, mh, ma, isHockey ? 'hockey' : 'football');
-        if (pts > 0) temp++; else temp = 0;
-        bestStreak = Math.max(bestStreak, temp);
-      });
-
-      return {
-        ...p,
-        total_points: stats?.total ?? 0,
-        exact_hits: stats?.exact ?? 0,
-        outcome_hits: stats?.outcomeHits ?? 0,
-        goal_difference_hits: stats?.goalDifferenceHits ?? 0,
-        winner_hits: stats?.winnerHits ?? 0,
-        draw_hits: stats?.drawHits ?? 0,
-        currentStreak: stats?.currentStreak ?? 0,
-        bestStreak,
-        history: stats?.history.slice(-10) ?? [],
-        rankChange: (prevIndex === -1 || currentIndex === -1) ? 0 : prevIndex - currentIndex
-      };
-    }).sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0) || (b.exact_hits ?? 0) - (a.exact_hits ?? 0) || (b.outcome_hits ?? 0) - (a.outcome_hits ?? 0) || a.username.localeCompare(b.username));
-  }, [leaderboard, allPredictions, teams, matches]);
+    return buildLeaderboardWithStreaks(
+      leaderboard,
+      allPredictions,
+      matches,
+      isHockey ? 'hockey' : 'football'
+    );
+  }, [leaderboard, allPredictions, matches, activeTournamentId, tournamentCatalog]);
 
 
   const currentUserStats = useMemo(() => {
