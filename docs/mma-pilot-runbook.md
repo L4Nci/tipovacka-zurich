@@ -163,11 +163,33 @@ starý/nesprávný/expirující token nesmí přepsat novější metadata. Tyto 
 spustit jen `service_role`; hráčská oprávnění se nerozšiřují.
 
 `npm run mma:portraits -- --dry-run` pouze čte stav cache, bez API požadavků.
-`--write --fighters=196,102,116` cíleně připraví několik profilů; `--write --limit=50`
+`--write --fighters=196,102,116` cíleně připraví chybějící portréty; `--write --limit=50`
 postupně zpracuje až 50 splatných profilů, po 11 s. Všechny zápisy procházejí
 stejnou DB rezervací, nikdy neresetují cache/kvótu a předem zálohují tabulku
 bojovníků do privátního dočasného adresáře. Rychlé opakování může správně skončit
 skipem. Budoucí nové zápasy/bojovníci se postupně doplní existujícím cronem.
+
+### Kontrola před UFC Qatar, 20. 11. 2026
+
+Karta měla 11 fotek pro 24 bojovníků. Listopadových 100 rezervací zahrnovalo
+75 různých bojovníků podle posledního pokusu v cache, nejen Qatar. Čítač měří
+API rezervace, ne počet fotek. Po expiraci může aktuální fronta znovu vybrat
+i profil, který fotku už má. Oprava
+`20261120140127_mma_portrait_cache_priority.sql` je od 20. 11. nasazená pod
+hostovanou verzí `20261120142225`. Vynechává bojovníky s uloženou fotkou,
+upřednostňuje nejbližší ještě otevřenou kartu a v ní dosud neověřené profily.
+Podlimit fotek je 150 bez resetu čítačů; společná hranice 800 a výsledkový strop
+900 zůstaly stejné. Účet UFCalendar ověřený přes `/v1/usage` má měsíční kvótu 1000.
+
+Po nasazení proběhlo šest cílených kontrol UFC Qatar. Všechny odpovědi byly
+bez použitelné fotky a uložily se do negativní cache. Karta má nadále 11/24;
+žádný bojovník na kartě nezůstal bez kontroly. Portrétové rezervace vzrostly ze
+100 na 106. Kontrolní otisky duelů, tipů včetně bodů, neportrétových údajů
+bojovníků a funkce rezervující výsledkovou synchronizaci zůstaly stejné.
+
+Další měsíční okno samo nedoplní archivní kartu: běžný worker vybírá
+jen aktivní karty. Pro doplnění chybějících fotek je nutný doložený zdroj;
+promo fotky bez ověřeného oprávnění nejsou fallback.
 
 Ověření: `npm run test:mma` zahrnuje profilovou identitu, výběr fotky, hosty/licence,
 chybějící a prázdné obrázky, ochranu klíče a oddělení selhání od výsledků.
