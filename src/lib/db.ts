@@ -3,6 +3,7 @@ import { translate, type Locale } from '../i18n/index.ts';
 import { getClerkAccessToken } from "./clerkSupabase.ts";
 import { normalizeAccountProfile, type AccountProfile } from "./clerkAccount.ts";
 import { calculatePoints } from "./scoring.ts";
+import { resolveTournamentWinnerId } from "./leaderboard.ts";
 import { isMmaTournament } from "./mma.ts";
 import { isDrawPrediction, requiresFootballWinner, isHockeyTournament } from "./matchRules.ts";
 import {
@@ -822,11 +823,7 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
     lobby = data;
     tournamentId = explicitTournamentId || lobby.tournament_id;
     lobbyName = lobby.name;
-    actualWinnerId = (lobby as any)?.lobby_tournaments
-      ?.find((row: any) => row.tournament_id === tournamentId)
-      ?.tournament?.actual_tournament_winner_id ||
-      (lobby as any)?.tournament?.actual_tournament_winner_id ||
-      null;
+    actualWinnerId = resolveTournamentWinnerId(tournamentId, lobby);
   } catch (err: any) {
     console.warn("fetchLobbyDashboard original query failed. Attempting fallback.", err);
     try {
@@ -848,7 +845,7 @@ export const fetchLobbyDashboard = async (lobbyId: string, userId: string, expli
       lobby = data;
       tournamentId = explicitTournamentId || lobby.tournament_id;
       lobbyName = lobby.name;
-      actualWinnerId = (lobby as any)?.tournament?.actual_tournament_winner_id || null;
+      actualWinnerId = resolveTournamentWinnerId(tournamentId, lobby);
     } catch (fallbackErr: any) {
       console.warn("fetchLobbyDashboard actual_tournament_winner_id lookup failed. Trying bare minimum.", fallbackErr);
       const { data, error: bareErr } = await supabase
@@ -1080,7 +1077,7 @@ export const fetchMatchPredictions = async (lobbyId: string, matchId: string) =>
  */
 export const fetchLobbyLeaderboard = async (
   lobbyId: string,
-  tournamentId?: string,
+  tournamentId: string,
   preloadedPredictions?: Prediction[]
 ) => {
   // 1. Get all members of the lobby
@@ -1123,7 +1120,7 @@ export const fetchLobbyLeaderboard = async (
       }
     }));
   } else {
-    let predsQuery = supabase
+    const predsQuery = supabase
       .from("predictions")
       .select(`
         user_id,
@@ -1138,33 +1135,28 @@ export const fetchLobbyLeaderboard = async (
         )
       `)
       .eq("lobby_id", lobbyId)
+      .eq("match.tournament_id", tournamentId)
       .order("user_id", { ascending: true })
       .order("lobby_id", { ascending: true })
       .order("match_id", { ascending: true });
-
-    if (tournamentId) {
-      predsQuery = predsQuery.eq('match.tournament_id', tournamentId);
-    }
 
     preds = await fetchAllSupabaseRows<any>(predsQuery, "fetchLobbyLeaderboard predictions");
   }
 
   // 2b. Get longterm predictions of this lobby to aggregate points and determine chosen winners
-  let ltQuery = supabase
+  const ltQuery = supabase
     .from("longterm_predictions")
     .select("user_id, predicted_participant_id, points_earned")
     .eq("lobby_id", lobbyId)
-    .eq("prediction_type", "tournament_winner");
+    .eq("tournament_id", tournamentId)
+    .eq("prediction_type", "tournament_winner")
+    .order("user_id");
 
-  if (tournamentId) {
-    ltQuery = ltQuery.eq("tournament_id", tournamentId);
-  }
-
-  const { data: ltPreds, error: ltPredsErr } = await ltQuery;
-
-  if (ltPredsErr) {
-    console.warn("Error fetching longterm_predictions, skipping:", ltPredsErr);
-  }
+  const ltPreds = await fetchAllSupabaseRows<{
+    user_id: string;
+    predicted_participant_id: string;
+    points_earned: number | null;
+  }>(ltQuery, "fetchLobbyLeaderboard winner picks");
 
   const ltWinnerMap = new Map<string, string>();
   const ltPointsMap = new Map<string, number>();
@@ -1340,11 +1332,11 @@ export const fetchAllData = async (userId: string, lobbyId?: string, tournamentI
 
   const formattedPreds = await fetchFormattedLobbyPredictions(
     activeLobbyId!,
-    targetTournamentId,
+    finalTournamentId,
     matches,
     "fetchAllData predictions"
   );
-  const leaderboard = await fetchLobbyLeaderboard(activeLobbyId!, targetTournamentId, formattedPreds);
+  const leaderboard = await fetchLobbyLeaderboard(activeLobbyId!, finalTournamentId, formattedPreds);
 
   // Map participants to Teams interface for compatibility in profile selection
   const teams: Team[] = participants.map(p => ({
@@ -1486,6 +1478,7 @@ export const fetchCriticalAppData = async (userId: string, lobbyId?: string, tou
 };
 
 export const fetchDeferredAppData = async (lobbyId: string, tournamentId: string | undefined, matches: Match[]) => {
+  if (!tournamentId) throw new Error("Missing tournament context for leaderboard.");
   if (isMmaTournament(tournamentId)) return { leaderboard: [] as Player[], allPredictions: [] as Prediction[] };
   const allPredictions = await fetchFormattedLobbyPredictions(lobbyId, tournamentId, matches, "fetchDeferredAppData predictions");
   const leaderboard = await fetchLobbyLeaderboard(lobbyId, tournamentId, allPredictions);

@@ -4,7 +4,8 @@ import type { Match, Player, Prediction, Team } from '../types.ts';
 import {
   buildLeaderboardWithStreaks,
   hasAwardedTournamentWinner,
-  resolveLeaderboardPickTeam
+  resolveLeaderboardPickTeam,
+  resolveTournamentWinnerId
 } from './leaderboard.ts';
 
 const match: Match = {
@@ -115,4 +116,25 @@ test('team badges resolve per player and the winner badge requires an awarded pi
   assert.equal(hasAwardedTournamentWinner(alpha, 'team-a'), true);
   assert.equal(hasAwardedTournamentWinner(beta, 'team-a'), false);
   assert.equal(hasAwardedTournamentWinner({ ...alpha, longterm_points: 0 }, 'team-a'), false);
+});
+
+test('winner lookup does not borrow the primary winner for another tournament', () => {
+  const primaryLobby = {
+    tournament_id: 'world-cup',
+    tournament: { actual_tournament_winner_id: 'spain' }
+  };
+  const lobby = {
+    ...primaryLobby,
+    lobby_tournaments: [
+      { tournament_id: 'premier-league', tournament: { actual_tournament_winner_id: null } },
+      { tournament_id: 'hockey', tournament: { actual_tournament_winner_id: 'czechia' } },
+      { tournament_id: 'world-cup', tournament: { actual_tournament_winner_id: 'spain' } }
+    ]
+  };
+
+  assert.equal(resolveTournamentWinnerId('premier-league', lobby), null);
+  assert.equal(resolveTournamentWinnerId('hockey', lobby), 'czechia');
+  assert.equal(resolveTournamentWinnerId('world-cup', lobby), 'spain');
+  assert.equal(resolveTournamentWinnerId('premier-league', primaryLobby), null);
+  assert.equal(resolveTournamentWinnerId('world-cup', primaryLobby), 'spain');
 });

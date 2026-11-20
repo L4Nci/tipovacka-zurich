@@ -24,6 +24,25 @@ type CalculatedStats = {
   history: LeaderboardHistory[];
 };
 
+type WinnerRecord = { actual_tournament_winner_id?: string | null };
+
+export const resolveTournamentWinnerId = (
+  tournamentId: string,
+  lobby: {
+    tournament_id?: string | null;
+    tournament?: WinnerRecord | null;
+    lobby_tournaments?: { tournament_id: string; tournament?: WinnerRecord | null }[] | null;
+  }
+): string | null => {
+  const linkedTournament = lobby.lobby_tournaments
+    ?.find(row => row.tournament_id === tournamentId)?.tournament;
+  if (linkedTournament) return linkedTournament.actual_tournament_winner_id ?? null;
+
+  return lobby.tournament_id === tournamentId
+    ? lobby.tournament?.actual_tournament_winner_id ?? null
+    : null;
+};
+
 export const resolveLeaderboardPickTeam = (
   player: Pick<Player, 'tournament_winner_id'>,
   teams: Team[],

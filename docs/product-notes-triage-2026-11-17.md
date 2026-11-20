@@ -10,6 +10,7 @@ authorize deployment or product-scope changes.
 | --- | --- | --- |
 | Tournament rules feel crowded | Keep one read-only tournament-rules text block. Remove the duplicate generic rules explanation and nested panel. | `src/components/LobbyView.tsx` |
 | Home says a schedule is pending although known matches exist | The current classifier already treats a partly published schedule as ready. Keep that behavior protected by a regression scenario. | `src/lib/homeDashboard_scenarios.ts` |
+| Wrong team, bonus or champion in tournament standings | Use each player's stored pick and awarded points, and resolve the champion only within the selected tournament. A finished primary tournament must not supply a champion to another tournament. | `src/lib/db.ts`, `src/lib/leaderboard.test.ts` |
 
 ## Already implemented or superseded
 
@@ -26,8 +27,6 @@ authorize deployment or product-scope changes.
 
 | Note | Required evidence before changing code |
 | --- | --- |
-| Wrong teams or badges in leaderboard | Lobby, tournament, user, expected team and displayed team. Verify whether the row represents a long-term winner pick, tournament champion or a profile badge. |
-| Winner view is wrong when users picked different teams | Exact lobby/tournament and two affected users. Compare stored long-term picks with the winner read model before changing presentation or scoring. |
 | MMA and hockey should use the same product language as football | Compare the current match, results, standings and leaderboard screens at 390 px. Preserve sport-specific prediction controls while sharing hierarchy and feedback patterns. |
 | Day filters (`Dnes`, `Zítra`, date) | Validate that the active competition has enough matches per day to make the extra control reduce work rather than add another navigation layer. |
 | More concrete scoring examples | Check the current in-product scoring preview first. Use real upcoming teams/fighters only when they are authoritative and available; never hard-code an example that can become misleading. |
@@ -55,7 +54,7 @@ authorize deployment or product-scope changes.
 
 ## Suggested next review order
 
-1. Reproduce the leaderboard/winner reports with named QA contexts.
+1. Review the leaderboard fix in a lobby with both a finished and an open tournament.
 2. Review MMA and hockey presentation side by side at mobile width.
 3. Decide the production domain, then finish Clerk and landing release gates.
 4. Run the separate public-pool acceptance before enabling the global gate.
