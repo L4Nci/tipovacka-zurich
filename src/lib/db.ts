@@ -1015,7 +1015,7 @@ export const savePrediction = async (userId: string, lobbyId: string, matchId: s
 /**
  * Fetch all lobby predictions for other members to expand (FÁZE S10 inside lobby)
  */
-export const fetchMatchPredictions = async (lobbyId: string, matchId: string) => {
+export const fetchMatchPredictions = async (lobbyId: string, matchId: string, tournamentId?: string) => {
   const { data, error } = await supabase
     .from("predictions")
     .select(`
@@ -1034,12 +1034,13 @@ export const fetchMatchPredictions = async (lobbyId: string, matchId: string) =>
 
   if (error) throw error;
 
-  // Fetch longterm predictions in this lobby
-  const { data: ltPreds, error: ltPredsErr } = await supabase
+  // Do not decorate a pick with the player's team from another tournament.
+  const { data: ltPreds, error: ltPredsErr } = tournamentId ? await supabase
     .from("longterm_predictions")
     .select("user_id, predicted_participant_id")
     .eq("lobby_id", lobbyId)
-    .eq("prediction_type", "tournament_winner");
+    .eq("tournament_id", tournamentId)
+    .eq("prediction_type", "tournament_winner") : { data: [], error: null };
 
   if (ltPredsErr && ltPredsErr.code !== "PGRST205") {
     throw ltPredsErr;

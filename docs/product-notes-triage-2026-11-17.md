@@ -27,7 +27,7 @@ authorize deployment or product-scope changes.
 
 | Note | Required evidence before changing code |
 | --- | --- |
-| MMA and hockey should use the same product language as football | Compare the current match, results, standings and leaderboard screens at 390 px. Preserve sport-specific prediction controls while sharing hierarchy and feedback patterns. |
+| MMA and hockey should use the same product language as football | Signed-in 390 × 844 review in the same lobby: Results and Standings opened in all three sports without horizontal overflow. The shared bottom bar is implemented locally. Open: align MMA's compact list with football's rank/points hierarchy while retaining the card and season filters; replace hockey's football-only draw and goal-difference tiles with relevant stats after verifying their read model. No scoring changes. |
 | Day filters (`Dnes`, `Zítra`, date) | Validate that the active competition has enough matches per day to make the extra control reduce work rather than add another navigation layer. |
 | More concrete scoring examples | Check the current in-product scoring preview first. Use real upcoming teams/fighters only when they are authoritative and available; never hard-code an example that can become misleading. |
 
@@ -35,7 +35,7 @@ authorize deployment or product-scope changes.
 
 | Topic | Current state / next gate |
 | --- | --- |
-| MMA fighter thumbnails | Automatic portrait refresh exists and preserves the last good image. The monthly provider budget is currently exhausted, so no additional safe refresh is due until the next quota window. |
+| MMA fighter thumbnails | Qatar: 11/24 after all 24 profiles were checked. The deployed queue skips already cached portraits; another cron tick will not supply the missing images. [Issue #28](https://github.com/L4Nci/tipovacka-zurich/issues/28) tracks the 13 missing licensed portraits and the 24/24 acceptance target. |
 | Clerk development mode | Requires the final production domain and production Clerk configuration. Do not hide the development banner with CSS. |
 | Public landing page | A private Sites v1 exists. Public release still needs the final domain, production Clerk path, final legal/privacy/contact content, real product media and owner acceptance. |
 | Landing benefits and automatic results | The draft already communicates automatic fixtures/results. Final copy and evidence belong in the landing source, not the game repository. |

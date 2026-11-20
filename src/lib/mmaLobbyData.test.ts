@@ -13,7 +13,8 @@ function fixtureClient(denyStandings = false) {
     mma_events: [{ tournament_id: 'ufc-334-2026', season_tournament_id: 'ufc-2026', tournament: { name: 'UFC 334' } }],
     mma_fights: [{ id: 'bout-a', tournament_id: 'ufc-334-2026', fighter_a_id: 1, fighter_b_id: 2, ordering: 1 }],
     mma_fighters: fighters,
-    mma_predictions: [...picks, { ...picks[0], lobby_id: 'private-other-lobby' }, { ...picks[0], fight_id: 'other-event-bout' }],
+    mma_predictions: [...picks, { ...picks[0], lobby_id: 'private-other-lobby', predicted_winner_id: 1 },
+      { ...picks[0], fight_id: 'other-event-bout' }],
     standings: members,
   };
   class Query {
@@ -35,7 +36,8 @@ function fixtureClient(denyStandings = false) {
   }
   return { requests, client: { from: (table: string) => new Query(table), rpc: (name: string, args: any) => {
     assert.equal(name, 'get_mma_lobby_leaderboard');
-    assert.deepEqual(args, { p_lobby_id: 'kobra', p_tournament_id: 'ufc-334-2026' });
+    assert.ok(['kobra', 'private-other-lobby'].includes(args.p_lobby_id));
+    assert.equal(args.p_tournament_id, 'ufc-334-2026');
     return new Query('standings');
   } } as any };
 }
@@ -55,6 +57,15 @@ test('a failed membership check stops community prediction reads instead of show
   const { client, requests } = fixtureClient(true);
   await assert.rejects(loadMmaLobbyData(client, 'kobra', 'ufc-334-2026', 'member-0'), /MMA_LOBBY_LOAD_FAILED/);
   assert.equal(requests.some(request => request.table === 'mma_predictions'), false);
+});
+
+test('the same user and duel can have different picks in two lobbies', async () => {
+  const { client } = fixtureClient();
+  const first = await loadMmaLobbyData(client, 'kobra', 'ufc-334-2026', 'member-0');
+  const second = await loadMmaLobbyData(client, 'private-other-lobby', 'ufc-334-2026', 'member-0');
+
+  assert.deepEqual(first.predictions.map(pick => [pick.lobby_id, pick.predicted_winner_id]), [['kobra', 2]]);
+  assert.deepEqual(second.predictions.map(pick => [pick.lobby_id, pick.predicted_winner_id]), [['private-other-lobby', 1]]);
 });
 
 test('annual league loads cards under the parent season and keeps the lobby prediction context', async () => {
