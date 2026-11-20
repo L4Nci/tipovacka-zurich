@@ -6,7 +6,6 @@ import {
   Trophy, 
   Calendar, 
   CheckCircle2, 
-  ShieldCheck, 
   ChevronRight, 
   Trophy as TrophyIcon,
   Clock,
@@ -37,6 +36,8 @@ import { formatMatchKickoff, MATCH_TIME_ZONE } from './lib/matchTime.ts';
 import { TournamentSetup } from './components/TournamentSetup.tsx';
 import { isMmaTournament } from './lib/mma.ts';
 import { PredictionDistribution } from './components/PredictionDistribution.tsx';
+import { CompetitionBottomNav } from './components/CompetitionBottomNav.tsx';
+import { summarizeScorePredictions } from './lib/scorePredictionDistribution.ts';
 import { 
   fetchAllData, 
   fetchCriticalAppData,
@@ -65,6 +66,7 @@ import { PublicPlayScreen } from './components/PublicPlayScreen.tsx';
 import { usePublicPlay } from './lib/usePublicPlay.ts';
 import { HomeDashboard, type AddLobbyMode } from './components/HomeDashboard.tsx';
 import { isUntippedMatchForDisplay, type HomeDashboardSummary } from './lib/homeDashboard.ts';
+import { buildLeaderboardWithStreaks } from './lib/leaderboard.ts';
 import { shouldRefreshHomeMembership } from './lib/membership.ts';
 import {
   canStartLobbyNavigation,
@@ -279,12 +281,12 @@ export const MatchCard: React.FC<MatchCardProps> = ({
     return () => clearInterval(timer);
   }, [lockTime, isLocked, isFinished]);
 
-  const fetchOthers = async (forceRefresh = false) => {
-    if (!showOthers || forceRefresh === true) {
+  const fetchOthers = async () => {
+    if (!showOthers) {
       try {
-        const data = await fetchMatchPredictions(lobbyId || '', match.id);
+        const data = await fetchMatchPredictions(lobbyId || '', match.id, match.tournament_id);
         setOthers(data);
-        if (forceRefresh !== true) setShowOthers(true);
+        setShowOthers(true);
       } catch (err) {
         console.error(err);
       }
@@ -300,14 +302,10 @@ export const MatchCard: React.FC<MatchCardProps> = ({
     try {
       await onPredict(home, away);
       setShowSuccess(true);
-      
-      // Auto-refresh others if drawer is open
-      if (showOthers) {
-        const data = await fetchMatchPredictions(lobbyId || '', match.id);
-        setOthers(data);
-      }
-      
       setTimeout(() => setShowSuccess(false), 2000);
+      if (showOthers) {
+        void fetchMatchPredictions(lobbyId || '', match.id, match.tournament_id).then(setOthers, console.error);
+      }
     } catch (err) {
       // Error handled by parent alert
     } finally {
@@ -325,30 +323,14 @@ export const MatchCard: React.FC<MatchCardProps> = ({
 
   const points = getPoints();
 
-  const predictionStats = useMemo(() => {
-    if (matchPredictionsLoading && matchPredictions.length === 0 && (match.total_predictions || 0) > 0) {
-      return { home: 0, away: 0, draw: 0, isEmpty: true, isLoading: true };
-    }
-
-    const predictionsForDistribution = footballWinnerRequired
-      ? matchPredictions.filter(p => p.predicted_home_score !== p.predicted_away_score)
-      : matchPredictions;
-    const total = predictionsForDistribution.length;
-    if (total === 0) return { home: 0, away: 0, draw: 0, isEmpty: true, isLoading: false };
-    
-    const homeWins = predictionsForDistribution.filter(p => p.predicted_home_score > p.predicted_away_score).length;
-    const draws = footballWinnerRequired ? 0 : predictionsForDistribution.filter(p => p.predicted_home_score === p.predicted_away_score).length;
-    const awayWins = predictionsForDistribution.filter(p => p.predicted_away_score > p.predicted_home_score).length;
-    
-    return {
-      home: Math.round((homeWins / total) * 100),
-      draw: Math.round((draws / total) * 100),
-      away: Math.round((awayWins / total) * 100),
-      isEmpty: false,
-      isLoading: false
-    };
-  }, [footballWinnerRequired, match.total_predictions, matchPredictions, matchPredictionsLoading]);
-  const hasOwnPrediction = match.predicted_home_score !== null && match.predicted_away_score !== null;
+  const predictionStats = useMemo(() => summarizeScorePredictions(
+    showOthers ? others : matchPredictions,
+    userId && match.predicted_home_score != null && match.predicted_away_score != null
+      ? { player_id: userId, predicted_home_score: match.predicted_home_score, predicted_away_score: match.predicted_away_score }
+      : null,
+    !isHockey && !footballWinnerRequired
+  ), [showOthers, others, matchPredictions, userId, match.predicted_home_score, match.predicted_away_score, isHockey, footballWinnerRequired]);
+  const hasOwnPrediction = match.predicted_home_score != null && match.predicted_away_score != null;
   const fallbackOtherPredictionsCount = Math.max((match.total_predictions || 0) - (hasOwnPrediction ? 1 : 0), 0);
   const otherPredictionsCount = showOthers
     ? others.filter(p => p.player_id !== userId).length
@@ -412,7 +394,7 @@ export const MatchCard: React.FC<MatchCardProps> = ({
             <PredictionDistribution homeLabel={homeOutcomeLabel} awayLabel={awayOutcomeLabel}
               homePercent={predictionStats.home} awayPercent={predictionStats.away}
               drawPercent={!isHockey && !footballWinnerRequired ? predictionStats.draw : undefined}
-              loading={predictionStats.isLoading} lang={lang} />
+              loading={!showOthers && matchPredictionsLoading && fallbackOtherPredictionsCount > 0} lang={lang} />
 
             <div className="bg-slate-50 rounded-2xl p-3 flex flex-col items-center justify-center transition-colors">
               <div className="flex items-center justify-center gap-4">
@@ -2188,11 +2170,16 @@ export default function App() {
   };
 
   const savePrediction = async (matchId: string, h: number, a: number) => {
+    const navigationId = lobbyNavigationRequestRef.current;
+    const loadId = criticalLoadRequestRef.current;
+    const isCurrentContext = () => navigationId === lobbyNavigationRequestRef.current &&
+      loadId === criticalLoadRequestRef.current;
     try {
       const existingMatch = matches.find(match => match.id === matchId);
       const hadPrediction = existingMatch?.predicted_home_score !== null && existingMatch?.predicted_home_score !== undefined;
 
       await savePredDB(user?.id || '', activeLobbyId || '', matchId, h, a);
+      if (!isCurrentContext()) return;
 
       setMatches(prev => prev.map(match => (
         match.id === matchId
@@ -2206,7 +2193,7 @@ export default function App() {
       )));
 
       setAllPredictions(prev => {
-        if (prev.length === 0 || !user) return prev;
+        if (!user) return prev;
 
         let found = false;
         const updated = prev.map(prediction => {
@@ -2239,7 +2226,8 @@ export default function App() {
         ];
       });
     } catch (err: any) {
-      alert(err.message);
+      if (isCurrentContext()) alert(err.message);
+      throw err;
     }
   };
 
@@ -2335,155 +2323,13 @@ export default function App() {
 
   const leaderboardWithStreaks = useMemo(() => {
     const isHockey = isHockeyTournament(activeTournamentId, tournamentCatalog.find(t => t.id === activeTournamentId)?.sport_id);
-
-    // Determine the most recently finished match to calculate "previous" state
-    const finishedMatchesSorted = [...matches]
-      .filter(m => m.home_score !== null && m.away_score !== null)
-      .sort((a, b) => new Date(b.start_time_utc).getTime() - new Date(a.start_time_utc).getTime());
-    
-    const lastFinishedMatchId = finishedMatchesSorted[0]?.id;
-    const finalWinnerIds = new Set(teams.filter(tm => tm.is_final_winner === 1).map(tm => tm.id));
-
-    // Current ranks - only use finished matches for scoring
-    const calculateRanks = (excludeMatchId?: string) => {
-      const statsByUserId = new Map<string, {
-        id: string;
-        username: string;
-        total: number;
-        exact: number;
-        outcomeHits: number;
-        goalDifferenceHits: number;
-        winnerHits: number;
-        drawHits: number;
-        currentStreak: number;
-        tempStreak: number;
-        history: { points: number, res: 'W' | 'L' | 'E' }[];
-      }>();
-
-      leaderboard.forEach(player => {
-        statsByUserId.set(player.id, {
-          id: player.id,
-          username: player.username,
-          total: 0,
-          exact: 0,
-          outcomeHits: 0,
-          goalDifferenceHits: 0,
-          winnerHits: 0,
-          drawHits: 0,
-          currentStreak: 0,
-          tempStreak: 0,
-          history: []
-        });
-      });
-
-      allPredictions.forEach(pr => {
-        const scoreH = (pr as any).home_score;
-        const scoreA = (pr as any).away_score;
-        const isFinished = scoreH !== null && scoreA !== null && scoreH !== undefined && scoreA !== undefined;
-        if (!isFinished || (excludeMatchId && pr.match_id === excludeMatchId)) return;
-
-        const stats = statsByUserId.get(pr.player_id);
-        if (!stats) return;
-
-        const mh = (pr as any).home_score;
-        const ma = (pr as any).away_score;
-        const ph = pr.predicted_home_score;
-        const pa = pr.predicted_away_score;
-
-        const pts = calculatePoints(ph, pa, mh, ma, isHockey ? 'hockey' : 'football');
-
-        stats.total += pts;
-        if (pts === 5) stats.exact++;
-        else if (pts > 0) {
-          stats.outcomeHits++;
-
-          if (!isHockey) {
-            const isActualDraw = mh === ma;
-            const isPredictedDraw = ph === pa;
-            const correctWinner = (ph > pa && mh > ma) || (pa > ph && ma > mh);
-
-            if (isActualDraw && isPredictedDraw) {
-              stats.drawHits++;
-            } else if (correctWinner && ph - pa === mh - ma) {
-              stats.goalDifferenceHits++;
-            } else if (correctWinner) {
-              stats.winnerHits++;
-            }
-          }
-        }
-
-        if (pts > 0) stats.tempStreak++;
-        else stats.tempStreak = 0;
-        stats.currentStreak = stats.tempStreak;
-        stats.history.push({ points: pts, res: pts === 5 ? 'E' : pts > 0 ? 'W' : 'L' });
-      });
-
-      leaderboard.forEach(player => {
-        if (player.tournament_winner_id && finalWinnerIds.has(player.tournament_winner_id)) {
-          const stats = statsByUserId.get(player.id);
-          if (stats) stats.total += 10;
-        }
-      });
-
-      return Array.from(statsByUserId.values())
-        .map(({ tempStreak, ...stats }) => stats)
-        .sort((a, b) => b.total - a.total || b.exact - a.exact || b.outcomeHits - a.outcomeHits || a.username.localeCompare(b.username));
-    };
-
-    const currentResults = calculateRanks();
-    const prevResults = lastFinishedMatchId ? calculateRanks(lastFinishedMatchId) : currentResults;
-    const currentStatsByUserId = new Map(currentResults.map((result, index) => [result.id, { ...result, index }]));
-    const prevIndexByUserId = new Map(prevResults.map((result, index) => [result.id, index]));
-
-    const finishedPredictionsByUserId = new Map<string, Prediction[]>();
-    allPredictions.forEach(pr => {
-      const mh = (pr as any).home_score;
-      const ma = (pr as any).away_score;
-      if (mh === null || ma === null || mh === undefined || ma === undefined) return;
-
-      const existing = finishedPredictionsByUserId.get(pr.player_id);
-      if (existing) {
-        existing.push(pr);
-      } else {
-        finishedPredictionsByUserId.set(pr.player_id, [pr]);
-      }
-    });
-
-    return leaderboard.map(p => {
-      const stats = currentStatsByUserId.get(p.id);
-      const prevIndex = prevIndexByUserId.get(p.id) ?? -1;
-      const currentIndex = stats?.index ?? -1;
-      const userPredsAll = (finishedPredictionsByUserId.get(p.id) || [])
-        .slice()
-        .sort((a, b) => new Date((a as any).start_time_utc).getTime() - new Date((b as any).start_time_utc).getTime());
-      
-      let bestStreak = 0;
-      let temp = 0;
-      userPredsAll.forEach(pr => {
-        const mh = (pr as any).home_score;
-        const ma = (pr as any).away_score;
-        const ph = pr.predicted_home_score;
-        const pa = pr.predicted_away_score;
-        const pts = calculatePoints(ph, pa, mh, ma, isHockey ? 'hockey' : 'football');
-        if (pts > 0) temp++; else temp = 0;
-        bestStreak = Math.max(bestStreak, temp);
-      });
-
-      return {
-        ...p,
-        total_points: stats?.total ?? 0,
-        exact_hits: stats?.exact ?? 0,
-        outcome_hits: stats?.outcomeHits ?? 0,
-        goal_difference_hits: stats?.goalDifferenceHits ?? 0,
-        winner_hits: stats?.winnerHits ?? 0,
-        draw_hits: stats?.drawHits ?? 0,
-        currentStreak: stats?.currentStreak ?? 0,
-        bestStreak,
-        history: stats?.history.slice(-10) ?? [],
-        rankChange: (prevIndex === -1 || currentIndex === -1) ? 0 : prevIndex - currentIndex
-      };
-    }).sort((a, b) => (b.total_points ?? 0) - (a.total_points ?? 0) || (b.exact_hits ?? 0) - (a.exact_hits ?? 0) || (b.outcome_hits ?? 0) - (a.outcome_hits ?? 0) || a.username.localeCompare(b.username));
-  }, [leaderboard, allPredictions, teams, matches]);
+    return buildLeaderboardWithStreaks(
+      leaderboard,
+      allPredictions,
+      matches,
+      isHockey ? 'hockey' : 'football'
+    );
+  }, [leaderboard, allPredictions, matches, activeTournamentId, tournamentCatalog]);
 
 
   const currentUserStats = useMemo(() => {
@@ -2779,7 +2625,8 @@ export default function App() {
 
   if (activeLobby && activeTournamentId && isMmaTournament(activeTournamentId)) {
     return <Suspense fallback={<AuthenticatedAppSkeleton t={t} error="" onRetry={() => undefined} />}>
-      <LazyMmaEventView lobbyId={activeLobby.id} lobbyName={activeLobby.name} tournamentId={activeTournamentId}
+      <LazyMmaEventView key={JSON.stringify([user.id, activeLobby.id, activeTournamentId])}
+        lobbyId={activeLobby.id} lobbyName={activeLobby.name} tournamentId={activeTournamentId}
         userId={user.id} lang={lang} onBack={() => setActiveTournamentId(null)}
         initialFilter={tab === 'results' ? 'results' : matchFilter === 'untipped' ? 'missing' : 'all'}
         onPredictionSaved={() => void loadHomeDashboard()} />
@@ -3230,7 +3077,7 @@ export default function App() {
               </h2>
               {scheduledMatchesForView.slice(0, visibleMatchCount).map(m => (
                  <MatchCard 
-                   key={m.id} 
+                   key={JSON.stringify([user.id, activeLobbyId, m.id])}
                    match={m} 
                    lobbyId={activeLobbyId || ''}
                    userId={user.id}
@@ -3300,7 +3147,7 @@ export default function App() {
               </h2>
               {finishedMatchesForView.slice(0, visibleMatchCount).map(m => (
                  <MatchCard 
-                   key={m.id} 
+                   key={JSON.stringify([user.id, activeLobbyId, m.id])}
                    match={m} 
                    lobbyId={activeLobbyId || ''}
                    isFinished 
@@ -3397,30 +3244,13 @@ export default function App() {
 
       {/* Navigation */}
       {activeLobby && activeTournamentId && (
-        <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white/80 backdrop-blur-lg border-t px-2 py-3 flex justify-around items-center rounded-t-[2rem] z-50 transition-colors border-slate-100">
-        <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'matches' ? 'text-fan-primary scale-110' : 'text-slate-400'}`}>
-          <Calendar className="w-6 h-6" />
-          <span className="text-[10px] font-bold uppercase">{t.matches}</span>
-        </button>
-        <button onClick={() => setTab('results')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'results' ? 'text-fan-primary scale-110' : 'text-slate-400'}`}>
-          <CheckCircle2 className="w-6 h-6" />
-          <span className="text-[10px] font-bold uppercase">{t.results}</span>
-        </button>
-        <button onClick={() => setTab('leaderboard')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'leaderboard' ? 'text-fan-primary scale-110' : 'text-slate-400'}`}>
-          <TrophyIcon className="w-6 h-6" />
-          <span className="text-[10px] font-bold uppercase">{t.rank}</span>
-        </button>
-        <button onClick={() => setTab('winner')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'winner' ? 'text-fan-primary scale-110' : 'text-slate-400'}`}>
-          <Trophy className="w-6 h-6" />
-          <span className="text-[10px] font-bold uppercase">{t.winnerTab}</span>
-        </button>
-        {user.role === 'admin' && (
-          <button onClick={() => setTab('admin')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'admin' ? 'text-red-600 scale-110' : 'text-slate-400'}`}>
-            <ShieldCheck className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase">{t.admin}</span>
-          </button>
-        )}
-      </nav>
+        <CompetitionBottomNav active={tab} onSelect={setTab} items={[
+          { id: 'matches', label: t.matches },
+          { id: 'results', label: t.results },
+          { id: 'leaderboard', label: t.rank },
+          { id: 'winner', label: t.winnerTab },
+          ...(user.role === 'admin' ? [{ id: 'admin' as const, label: t.admin }] : [])
+        ]} />
       )}
     </div>
   );

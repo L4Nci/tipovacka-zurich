@@ -11,6 +11,8 @@ export type Player = {
   // TODO: Legacy (profiles.tournament_winner_id) - no longer used in new longterm_predictions logic
   tournament_winner_id?: string;
   winner_flag?: string;
+  match_points?: number;
+  longterm_points?: number;
   total_points?: number;
   exact_hits?: number;
   outcome_hits?: number;
@@ -73,6 +75,10 @@ export type Prediction = {
   avatar_emoji?: string | null;
   avatar_bg?: string | null;
   winner_flag?: string;
+  home_score?: number | null;
+  away_score?: number | null;
+  start_time_utc?: string;
+  tournament_id?: string;
 };
 
 export type Tournament = {

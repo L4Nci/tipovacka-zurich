@@ -3,6 +3,7 @@ import React, { Dispatch, SetStateAction, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, ChevronDown, ChevronUp, Trophy, Trophy as TrophyIcon, X } from 'lucide-react';
 import { Player, Team } from '../types.ts';
+import { hasAwardedTournamentWinner, resolveLeaderboardPickTeam } from '../lib/leaderboard.ts';
 import PlayerProfileDialog from './PlayerProfileDialog.tsx';
 
 type TeamFlagComponent = React.ComponentType<{
@@ -156,8 +157,8 @@ export default function LeaderboardScreen({
       ) : (
         <div className="space-y-3">
           {leaderboardWithStreaks.map((p, i) => {
-            const pTeamInfo = teams.find(tm => tm.id === p.tournament_winner_id) || winnerPickerTeams.find(tm => tm.id === p.tournament_winner_id);
-            const hasCorrectChampionPick = Boolean(officialWinnerTeam && p.tournament_winner_id === officialWinnerTeam.id);
+            const pTeamInfo = resolveLeaderboardPickTeam(p, teams, winnerPickerTeams);
+            const hasCorrectChampionPick = hasAwardedTournamentWinner(p, officialWinnerTeam?.id);
             const rankTone = i === 0 ? 'bg-yellow-400 text-yellow-900' :
               i === 1 ? 'bg-slate-300 text-slate-700' :
               i === 2 ? 'bg-amber-600 text-amber-50' :

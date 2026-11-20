@@ -1,5 +1,7 @@
 export type SportId = 'football' | 'hockey';
 
+export const TOURNAMENT_WINNER_POINTS = 10;
+
 export const calculatePoints = (
   ph: number,
   pa: number,

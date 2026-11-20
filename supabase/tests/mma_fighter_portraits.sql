@@ -8,6 +8,7 @@ SELECT set_config('portrait_test.id',(SELECT f.fighter_a_id::text FROM public.mm
     AND e.status IN('announced','scheduled','live') ORDER BY f.id LIMIT 1),true);
 SELECT set_config('portrait_test.facts',(SELECT jsonb_build_object('id',f.id,'name',f.name,'country_code',f.country_code)::text
   FROM public.mma_fighters f WHERE f.id=current_setting('portrait_test.id')::bigint),true);
+UPDATE public.mma_fighters SET portrait=NULL WHERE id=current_setting('portrait_test.id')::bigint;
 SELECT set_config('portrait_test.sample',jsonb_build_object(
   'url','https://d33t2v9cbr12gb.cloudfront.net/commons/'||repeat('a',64)||'.webp',
   'width',520,'height',679,'artist','Rollback author','license','CC BY 3.0',
@@ -74,9 +75,22 @@ DO $$ BEGIN
   IF NOT EXISTS(SELECT 1 FROM tipovacka_private.mma_portrait_sync_state WHERE fighter_id=current_setting('portrait_test.id')::bigint
     AND next_attempt_at=now()+interval '30 days') THEN RAISE EXCEPTION 'Success did not cache for 30 days'; END IF;
 END $$;
--- Failed profile lookup retains the previous photo and waits one day.
+-- An existing portrait is reused even if its old refresh window expired.
 UPDATE tipovacka_private.mma_portrait_sync_state SET next_attempt_at=now()-interval '1 day',last_attempt_at=now()-interval '1 minute'
   WHERE fighter_id=current_setting('portrait_test.id')::bigint;
+SET LOCAL ROLE service_role;
+DO $$ BEGIN
+  IF EXISTS(SELECT 1 FROM public.claim_mma_fighter_portrait(current_setting('portrait_test.id')::bigint)) THEN
+    RAISE EXCEPTION 'Cached portrait consumed a provider request';
+  END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS(SELECT 1 FROM tipovacka_private.mma_api_budget WHERE month=date_trunc('month',now() AT TIME ZONE 'UTC')::date
+    AND reserved_requests=1 AND portrait_reserved_requests=1) THEN RAISE EXCEPTION 'Cached portrait changed counters'; END IF;
+END $$;
+-- Failed lookup on a missing portrait waits one day.
+UPDATE public.mma_fighters SET portrait=NULL WHERE id=current_setting('portrait_test.id')::bigint;
 SET LOCAL ROLE service_role;
 DO $$ DECLARE lease record; BEGIN
   SELECT * INTO lease FROM public.claim_mma_fighter_portrait(current_setting('portrait_test.id')::bigint);
@@ -85,9 +99,9 @@ DO $$ DECLARE lease record; BEGIN
 END $$;
 RESET ROLE;
 DO $$ BEGIN
-  IF NOT EXISTS(SELECT 1 FROM public.mma_fighters WHERE id=current_setting('portrait_test.id')::bigint AND portrait IS NOT NULL)
+  IF NOT EXISTS(SELECT 1 FROM public.mma_fighters WHERE id=current_setting('portrait_test.id')::bigint AND portrait IS NULL)
     OR NOT EXISTS(SELECT 1 FROM tipovacka_private.mma_portrait_sync_state WHERE fighter_id=current_setting('portrait_test.id')::bigint
-      AND next_attempt_at=now()+interval '1 day') THEN RAISE EXCEPTION 'Failure discarded old photo or retried immediately'; END IF;
+      AND next_attempt_at=now()+interval '1 day') THEN RAISE EXCEPTION 'Failure changed the photo or retried immediately'; END IF;
 END $$;
 -- Expired worker cannot clear a newer response. Confirmed absence is cached too.
 UPDATE tipovacka_private.mma_portrait_sync_state SET next_attempt_at=now()-interval '1 day',last_attempt_at=now()-interval '1 minute',
@@ -106,12 +120,23 @@ END $$;
 RESET ROLE;
 UPDATE tipovacka_private.mma_portrait_sync_state SET next_attempt_at=now()-interval '1 day',last_attempt_at=now()-interval '1 minute'
   WHERE fighter_id=current_setting('portrait_test.id')::bigint;
-UPDATE tipovacka_private.mma_api_budget SET reserved_requests=100,portrait_reserved_requests=100
+UPDATE tipovacka_private.mma_api_budget SET reserved_requests=149,portrait_reserved_requests=149
   WHERE month=date_trunc('month',now() AT TIME ZONE 'UTC')::date;
 SET LOCAL ROLE service_role;
-DO $$ DECLARE n integer; BEGIN
-  SELECT count(*) INTO n FROM public.claim_mma_fighter_portrait(current_setting('portrait_test.id')::bigint);
-  IF n<>0 THEN RAISE EXCEPTION 'Portrait monthly sub-budget bypassed'; END IF;
+DO $$ BEGIN
+  IF NOT EXISTS(SELECT 1 FROM public.claim_mma_fighter_portrait(current_setting('portrait_test.id')::bigint)) THEN
+    RAISE EXCEPTION 'The last safe portrait reservation was denied';
+  END IF;
+END $$;
+RESET ROLE;
+UPDATE tipovacka_private.mma_portrait_sync_state SET next_attempt_at=now()-interval '1 day',
+  last_attempt_at=now()-interval '1 minute',claim_token=NULL,lease_until=NULL
+  WHERE fighter_id=current_setting('portrait_test.id')::bigint;
+SET LOCAL ROLE service_role;
+DO $$ BEGIN
+  IF EXISTS(SELECT 1 FROM public.claim_mma_fighter_portrait(current_setting('portrait_test.id')::bigint)) THEN
+    RAISE EXCEPTION 'Portrait monthly sub-budget bypassed';
+  END IF;
 END $$;
 RESET ROLE;
 UPDATE tipovacka_private.mma_api_budget SET reserved_requests=800,portrait_reserved_requests=1
