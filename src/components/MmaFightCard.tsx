@@ -51,20 +51,19 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
       </div>
       <fieldset disabled={!open || busy} className="grid grid-cols-2 gap-3">
         <legend className="sr-only">{translate(lang, "mmaFightCard.pickTheBoutWinner")}</legend>
-        {[a, b].map((person, index) => <button key={index} type="button" aria-pressed={Boolean(person && selected === person.id)}
-          aria-label={person?.name || translate(lang, 'mmaFightCard.opponentToBeConfirmed')}
-          onClick={() => person && setSelected(person.id)}
-          className={'min-h-24 rounded-2xl border-2 p-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-default ' +
-            (person && selected === person.id ? (index === 0 ? 'border-[#ce1126] bg-red-50 text-slate-950' : 'border-[#006847] bg-emerald-50 text-slate-950')
-              : 'border-slate-100 bg-slate-50 text-slate-700')}>
-          <MmaFighterPortrait fighter={person} />
-          <span className="block text-sm font-black leading-snug">{person?.name || (translate(lang, "mmaFightCard.opponentToBeConfirmed"))}</span>
-        </button>)}
+        {[a, b].map((person, index) => <div key={index} className="relative min-w-0">
+          <button type="button" aria-pressed={Boolean(person && selected === person.id)}
+            aria-label={person?.name || translate(lang, 'mmaFightCard.opponentToBeConfirmed')}
+            onClick={() => person && setSelected(person.id)}
+            className={'h-full min-h-24 w-full rounded-2xl border-2 p-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-default ' +
+              (person && selected === person.id ? (index === 0 ? 'border-[#ce1126] bg-red-50 text-slate-950' : 'border-[#006847] bg-emerald-50 text-slate-950')
+                : 'border-slate-100 bg-slate-50 text-slate-700')}>
+            <MmaFighterPortrait fighter={person} />
+            <span className="block text-sm font-black leading-snug">{person?.name || translate(lang, 'mmaFightCard.opponentToBeConfirmed')}</span>
+          </button>
+          <MmaPortraitCredit fighter={person} lang={lang} />
+        </div>)}
       </fieldset>
-      <div className="mt-2 grid grid-cols-2 gap-3">
-        <MmaPortraitCredit fighter={a} lang={lang} />
-        <MmaPortraitCredit fighter={b} lang={lang} />
-      </div>
       <div className="mt-5">
         <PredictionDistribution homeLabel={a?.name || 'TBA'} awayLabel={b?.name || 'TBA'}
           homePercent={community.homePercent} awayPercent={community.awayPercent} lang={lang} />
