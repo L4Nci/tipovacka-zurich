@@ -105,6 +105,64 @@ export default function ProfileCommunityPanel({
 
   return (
     <>
+      {communityEnabled && profile?.stats && (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label={translate(lang, "profileCommunityPanel.stats")} role="group">
+          {[
+            [translate(lang, "playerProfileDialog.predictions"), profile.stats.predictions_total],
+            [translate(lang, "leaderboardScreen.exact"), profile.stats.exact_predictions],
+            [translate(lang, "profileCommunityPanel.points"), profile.stats.match_points + profile.stats.longterm_points],
+            [translate(lang, "profileCommunityPanel.competitions"), profile.stats.completed_tournaments]
+          ].map(([label, value]) => (
+            <div key={String(label)} className="rounded-xl bg-slate-50 px-3 py-2">
+              <p className="text-[9px] font-black uppercase text-slate-400">{label}</p>
+              <p className="mt-1 text-lg font-black text-slate-900">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {badgesEnabled && (
+        <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+          <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
+            <Award className="h-4 w-4" />
+            {translate(lang, "profileCommunityPanel.badges")}
+          </h3>
+          {loading ? (
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {[0, 1, 2].map(item => <div key={item} className="h-24 animate-pulse rounded-2xl bg-slate-100 motion-reduce:animate-none" />)}
+            </div>
+          ) : badges.badges.length === 0 ? (
+            <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-5 text-center text-xs font-semibold text-slate-500">
+              {translate(lang, "profileCommunityPanel.startPredictingYourFirstBadgeFollowsYourFirstStep")}
+            </p>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {badges.badges.map(badge => {
+                const featured = Boolean(badge.id && featuredIds.includes(badge.id));
+                return (
+                  <button
+                    key={`${badge.key}:${badge.context_id}`}
+                    type="button"
+                    disabled={saving}
+                    onClick={() => void toggleFeatured(badge.id)}
+                    className={`relative min-h-28 rounded-2xl border p-3 text-left transition-colors ${featured ? 'border-amber-300 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}
+                  >
+                    {featured && <Check className="absolute right-2 top-2 h-4 w-4 text-amber-600" />}
+                    <span className="text-2xl" aria-hidden="true">{badge.icon}</span>
+                    <p className="mt-2 text-xs font-black text-slate-900">{badge.name}</p>
+                    <p className="mt-1 text-[10px] leading-snug text-slate-500">{badge.description}</p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <p className="mt-3 flex items-center gap-2 text-[10px] font-semibold text-slate-400">
+            <BarChart3 className="h-3.5 w-3.5" />
+            {translate(lang, "profileCommunityPanel.tapToFeatureUpTo3Badges")}
+          </p>
+        </section>
+      )}
+
       {communityEnabled && (
         <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
@@ -147,64 +205,7 @@ export default function ProfileCommunityPanel({
               </button>
             </div>
           )}
-          {profile?.stats && (
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {[
-                [translate(lang, "playerProfileDialog.predictions"), profile.stats.predictions_total],
-                [translate(lang, "leaderboardScreen.exact"), profile.stats.exact_predictions],
-                [translate(lang, "profileCommunityPanel.points"), profile.stats.match_points + profile.stats.longterm_points],
-                [translate(lang, "profileCommunityPanel.competitions"), profile.stats.completed_tournaments]
-              ].map(([label, value]) => (
-                <div key={String(label)} className="rounded-xl bg-slate-50 px-3 py-2">
-                  <p className="text-[9px] font-black uppercase text-slate-400">{label}</p>
-                  <p className="mt-1 text-lg font-black text-slate-900">{value}</p>
-                </div>
-              ))}
-            </div>
-          )}
           {message && <div className="mt-3"><InlineNotice tone={message.tone}>{message.text}</InlineNotice></div>}
-        </section>
-      )}
-
-      {badgesEnabled && (
-        <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-slate-400">
-            <Award className="h-4 w-4" />
-            {translate(lang, "profileCommunityPanel.badges")}
-          </h3>
-          {loading ? (
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              {[0, 1, 2].map(item => <div key={item} className="h-24 animate-pulse rounded-2xl bg-slate-100 motion-reduce:animate-none" />)}
-            </div>
-          ) : badges.badges.length === 0 ? (
-            <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-5 text-center text-xs font-semibold text-slate-500">
-              {translate(lang, "profileCommunityPanel.startPredictingYourFirstBadgeFollowsYourFirstStep")}
-            </p>
-          ) : (
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {badges.badges.map(badge => {
-                const featured = Boolean(badge.id && featuredIds.includes(badge.id));
-                return (
-                  <button
-                    key={`${badge.key}:${badge.context_id}`}
-                    type="button"
-                    disabled={saving}
-                    onClick={() => void toggleFeatured(badge.id)}
-                    className={`relative min-h-28 rounded-2xl border p-3 text-left transition-colors ${featured ? 'border-amber-300 bg-amber-50' : 'border-slate-100 bg-slate-50'}`}
-                  >
-                    {featured && <Check className="absolute right-2 top-2 h-4 w-4 text-amber-600" />}
-                    <span className="text-2xl" aria-hidden="true">{badge.icon}</span>
-                    <p className="mt-2 text-xs font-black text-slate-900">{badge.name}</p>
-                    <p className="mt-1 text-[10px] leading-snug text-slate-500">{badge.description}</p>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <p className="mt-3 flex items-center gap-2 text-[10px] font-semibold text-slate-400">
-            <BarChart3 className="h-3.5 w-3.5" />
-            {translate(lang, "profileCommunityPanel.tapToFeatureUpTo3Badges")}
-          </p>
         </section>
       )}
     </>

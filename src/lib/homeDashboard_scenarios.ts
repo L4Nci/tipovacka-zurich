@@ -4,6 +4,8 @@ import {
   formatTipsterCount,
   getAttentionHomeDashboardSummaries,
   getLobbyPredictionAttention,
+  getLobbyAttentionCount,
+  getLobbyScheduleStatusKey,
   getLobbyCompetitionStatus,
   getPrimaryHomeDashboardSummaryForLobby,
   isUntippedMatchForDisplay,
@@ -74,6 +76,12 @@ const partlyPublishedSchedule = summarizeHomeDashboardContext(
 assert.equal(partlyPublishedSchedule.schedule_state, 'ready');
 assert.equal(partlyPublishedSchedule.all_known_unlocked_predicted, true);
 assert.equal(classifyHomeDashboardSummary(partlyPublishedSchedule), 'all_predicted');
+assert.equal(getLobbyScheduleStatusKey(partlyPublishedSchedule), 'homeDashboard.viewMatches');
+assert.equal(getLobbyScheduleStatusKey(undefined), 'homeDashboard.viewMatches');
+assert.equal(getLobbyScheduleStatusKey(pending), 'lobbyView.schedulePending');
+assert.equal(getLobbyAttentionCount({ ...actionable, missing_match_count: 71 }, true), 1);
+assert.equal(getLobbyAttentionCount({ ...later, missing_match_count: 71 }, true), 0);
+assert.equal(getLobbyAttentionCount({ ...later, missing_match_count: 71 }, false), 71);
 
 const completed = summarizeHomeDashboardContext(
   { ...context, actual_tournament_winner_id: 'football-esp' },

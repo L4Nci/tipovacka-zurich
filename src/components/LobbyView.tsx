@@ -2,7 +2,8 @@ import { translate, type Locale } from '../i18n/index.ts';
 import { formatMatchKickoff } from '../lib/matchTime.ts';
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { CalendarClock, Users, Trophy, ChevronRight, History, Hash, PlusCircle, Pencil, Trash2, X, Check, LockKeyhole, Settings2, Share2 } from 'lucide-react';
+import { CalendarClock, Users, Trophy, ChevronRight, History, PlusCircle, Pencil, Trash2, X, Check, LockKeyhole, Settings2, Share2 } from 'lucide-react';
+import { formatTipsterCount, getLobbyScheduleStatusKey, type HomeDashboardSummary } from '../lib/homeDashboard.ts';
 import { Lobby, LobbyMember, Player as AppUser, type HallOfFameEntry, type LobbyJoinRequest } from '../types';
 import {
   addTournamentToLobby,
@@ -74,6 +75,7 @@ interface LobbyViewProps {
   onMembershipEnded?: (lobbyId: string) => void;
   onMembershipMutation?: () => Promise<void> | void;
   membersCount?: number;
+  competitionSummaries?: HomeDashboardSummary[];
   communityProfilesEnabled: boolean;
   shareEnabled: boolean;
   tournamentManagementEnabled: boolean;
@@ -104,6 +106,7 @@ export function LobbyView({
   onMembershipEnded,
   onMembershipMutation,
   membersCount,
+  competitionSummaries = [],
   communityProfilesEnabled,
   shareEnabled,
   tournamentManagementEnabled,
@@ -367,10 +370,10 @@ export function LobbyView({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6 max-w-2xl mx-auto pb-20"
+      className="space-y-4 max-w-2xl mx-auto pb-20"
     >
       {/* 1. LOBBY HEADER */}
-      <div className="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors">
+      <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-100 transition-colors">
         <div className="flex-1 w-full">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
             {translate(lang, "lobbyView.yourLobby")}
@@ -431,7 +434,7 @@ export function LobbyView({
               </div>
             </div>
           ) : (
-            <div className="mt-2 flex items-start gap-2">
+            <div className="mt-1 flex items-center gap-2">
               <p className={`min-w-0 flex-1 text-sm font-semibold ${lobby.short_description ? 'text-slate-500' : 'text-slate-300 italic'}`}>
                 {lobby.short_description || (translate(lang, "lobbyView.noShortDescription"))}
               </p>
@@ -447,28 +450,28 @@ export function LobbyView({
             </p>
           )}
           
-          <div className="flex flex-wrap items-center gap-3 mt-3">
-             <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-500 rounded-lg border border-slate-100">
-               <Hash className="w-3.5 h-3.5" />
-               <span className="text-xs font-bold tracking-widest">{lobby.join_code}</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-600 rounded-lg border border-blue-100">
-                <Users className="w-3.5 h-3.5" />
-	                <span className="text-xs font-bold font-mono">{membersCount ?? '…'}</span>
-              </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-600">
+              <Users aria-hidden="true" className="h-4 w-4" />
+              {activeMemberCount == null ? '…' : formatTipsterCount(activeMemberCount, lang)}
+            </div>
+            {canEditLobby && shareEnabled ? (
+              <button
+                type="button"
+                onClick={() => setShowInviteDialog(true)}
+                className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-xs font-bold text-white transition-transform duration-150 active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none"
+              >
+                <Share2 aria-hidden="true" className="h-4 w-4" />
+                {translate(lang, "lobbyView.invite")}
+              </button>
+            ) : lobby.join_code ? (
+              <details className="text-xs font-bold text-slate-600">
+                <summary className="cursor-pointer py-2">{translate(lang, "inviteShareDialog.lobbyCode")}</summary>
+                <code className="break-all">{lobby.join_code}</code>
+              </details>
+            ) : null}
           </div>
         </div>
-
-        {canEditLobby && shareEnabled && (
-          <button
-            type="button"
-            onClick={() => setShowInviteDialog(true)}
-            className="flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-[10px] font-black uppercase text-white transition-transform duration-150 active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none"
-          >
-            <Share2 className="h-4 w-4" />
-            {translate(lang, "lobbyView.invite")}
-          </button>
-        )}
       </div>
 
       {privateLobbyPrizesEnabled && (
@@ -491,24 +494,22 @@ export function LobbyView({
         {/* LEFT COLUMN */}
         <div className="space-y-6">
           {/* 2. AKTIVNÍ SOUTĚŽE */}
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm border border-slate-100">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
               {translate(lang, "lobbyView.activeTournaments")}
             </h2>
             <div className="space-y-3">
               {activeTournaments.length > 0 ? activeTournaments.map(t => {
-                const stats = tournamentStats[t.id] || { total: 0, scheduled: 0, finished: 0, nextStart: null };
-                const isCompleted = Boolean(stats.isCompleted);
-                const progress = isCompleted ? 100 : (stats.total > 0 ? Math.round((stats.finished / stats.total) * 100) : 0);
-                const statusLabel = isCompleted
-                  ? (translate(lang, "lobbyView.completed"))
-                  : stats.nextStart
-                  ? formatMatchKickoff(stats.nextStart, lang)
-                  : (translate(lang, "lobbyView.schedulePending"));
-                const statusDetail = isCompleted
-                  ? (stats.championShortName || stats.championName || null)
-                  : (stats.nextMatchLabel || null);
+                const summary = competitionSummaries.find(row => row.tournament_id === t.id);
+                const stats = tournamentStats[t.id];
+                const total = summary?.total_match_count ?? stats?.total;
+                const finished = summary?.settled_match_count ?? stats?.finished;
+                const progress = total && finished != null ? Math.round(finished / total * 100) : null;
+                const nextStart = stats?.nextStart && Date.parse(stats.nextStart) > Date.now() ? stats.nextStart : null;
+                const statusLabel = nextStart
+                  ? formatMatchKickoff(nextStart, lang)
+                  : translate(lang, getLobbyScheduleStatusKey(summary));
 
                 return (
                   <button
@@ -518,7 +519,7 @@ export function LobbyView({
                   >
                     <div className="relative z-10 flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-black text-slate-700 group-hover:text-white transition-colors uppercase">
+                        <p className="break-words text-sm font-black text-slate-700 group-hover:text-white transition-colors uppercase">
                           {t.name}
                         </p>
                         {t.description && (
@@ -532,27 +533,12 @@ export function LobbyView({
                       </div>
                     </div>
 
-                    <div className="relative z-10 mt-4 grid grid-cols-3 gap-2">
-                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{translate(lang, "matches")}</p>
-                        <p className="text-sm font-black text-slate-800 group-hover:text-white">{stats.total}</p>
-                      </div>
-                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">{translate(lang, "lobbyView.done")}</p>
-                        <p className="text-sm font-black text-slate-800 group-hover:text-white">{progress}%</p>
-                      </div>
-                      <div className="rounded-xl bg-white/80 group-hover:bg-white/10 px-2 py-2 border border-white/80 group-hover:border-white/10 min-w-0">
-                        <p className="text-[8px] font-black uppercase text-slate-400 group-hover:text-slate-300">
-                          {isCompleted ? (translate(lang, "lobbyView.status")) : (translate(lang, "lobbyView.next"))}
-                        </p>
-                        {statusDetail && (
-                          <p className="text-[10px] font-black text-slate-800 group-hover:text-white truncate">{statusDetail}</p>
-                        )}
-                        <p className={`${statusDetail ? 'text-[9px]' : 'text-[10px]'} font-black text-slate-500 group-hover:text-slate-300 truncate`}>{statusLabel}</p>
-                      </div>
+                    <div className="relative z-10 mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs font-semibold text-slate-600 group-hover:text-slate-200">
+                      <span className="min-w-0 break-words">{statusLabel}</span>
+                      {progress != null && <span>{finished}/{total} · {progress}%</span>}
                     </div>
 
-                    {stats.total > 0 && (
+                    {progress != null && (
                       <div className="relative z-10 mt-3 h-1.5 rounded-full bg-white overflow-hidden group-hover:bg-white/10">
                         <div className="h-full bg-red-600 group-hover:bg-white transition-all" style={{ width: `${progress}%` }} />
                       </div>

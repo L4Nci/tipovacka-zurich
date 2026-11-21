@@ -16,23 +16,36 @@ export default function InviteShareDialog({
 }) {
   const inviteUrl = buildInviteUrl(joinCode, window.location.origin);
   const [qrDataUrl, setQrDataUrl] = useState('');
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrFailed, setQrFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!qrOpen || qrDataUrl || qrFailed) return;
     let current = true;
     void createQrDataUrl(inviteUrl)
       .then(url => {
         if (current) setQrDataUrl(url);
       })
       .catch(() => {
-        if (current) setError(translate(lang, "inviteShareDialog.qrCodeCouldNotBeCreated"));
+        if (current) setQrFailed(true);
       });
     return () => {
       current = false;
     };
-  }, [inviteUrl, lang]);
+  }, [inviteUrl, qrOpen, qrDataUrl, qrFailed]);
+
+  const copyLink = async () => {
+    setError('');
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+    } catch {
+      setError(translate(lang, "inviteShareDialog.sharingFailed"));
+    }
+  };
 
   const share = async () => {
     setBusy(true);
@@ -85,21 +98,23 @@ export default function InviteShareDialog({
           <button type="button" onClick={onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-500" aria-label={translate(lang, "homeDashboard.close")}><X className="h-4 w-4" /></button>
         </div>
         <p className="mt-1 text-sm font-semibold text-slate-500">{lobbyName}</p>
-        <div className="mt-4 flex min-h-64 items-center justify-center rounded-2xl bg-slate-50 p-4">
-          {qrDataUrl
-            ? <img src={qrDataUrl} alt={translate(lang, "inviteShareDialog.lobbyInvitationQr")} className="aspect-square w-full max-w-56 rounded-xl" />
-            : <div className="h-48 w-48 animate-pulse rounded-xl bg-slate-200 motion-reduce:animate-none" />}
-        </div>
-        <div className="mt-3 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2">
-          <code className="min-w-0 flex-1 truncate px-2 text-xs font-bold text-slate-600">{inviteUrl}</code>
-          <button type="button" onClick={() => void navigator.clipboard.writeText(inviteUrl).then(() => setCopied(true))} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600" aria-label={translate(lang, "inviteShareDialog.copyLink")}>
-            {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => void copyLink()} disabled={busy} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-fan-primary px-3 py-2 text-xs font-black text-fan-snow disabled:opacity-50">
+            {copied ? <Check aria-hidden="true" className="h-4 w-4 shrink-0" /> : <Copy aria-hidden="true" className="h-4 w-4 shrink-0" />}
+            <span aria-live="polite">{translate(lang, copied ? "officialEventSeasonResult.linkCopied" : "inviteShareDialog.copyLink")}</span>
           </button>
+          <button type="button" onClick={share} disabled={busy} className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 disabled:opacity-50"><Share2 className="h-4 w-4 shrink-0" /> {translate(lang, "inviteShareDialog.share")}</button>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" onClick={share} disabled={busy} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-red-600 px-3 text-xs font-black uppercase text-white disabled:opacity-50"><Share2 className="h-4 w-4" /> {translate(lang, "inviteShareDialog.share")}</button>
-          <button type="button" onClick={downloadCard} disabled={busy} className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 text-xs font-black uppercase text-white disabled:opacity-50"><Download className="h-4 w-4" /> {translate(lang, "inviteShareDialog.card")}</button>
-        </div>
+        <p className="mt-3 text-xs font-semibold text-slate-600">{translate(lang, "inviteShareDialog.lobbyCode")}: <code className="break-all font-bold">{joinCode}</code></p>
+        <details className="mt-3 rounded-xl bg-slate-50 px-3" onToggle={event => setQrOpen(event.currentTarget.open)}>
+          <summary className="min-h-11 cursor-pointer py-3 text-xs font-bold text-slate-700">{translate(lang, "inviteShareDialog.lobbyInvitationQr")}</summary>
+          {qrDataUrl
+            ? <img src={qrDataUrl} alt={translate(lang, "inviteShareDialog.lobbyInvitationQr")} className="mx-auto mb-3 aspect-square w-full max-w-56 rounded-xl" />
+            : qrFailed
+              ? <p role="alert" className="pb-3 text-xs text-red-700">{translate(lang, "inviteShareDialog.qrCodeCouldNotBeCreated")}</p>
+              : <div className="mx-auto mb-3 aspect-square w-full max-w-56 animate-pulse rounded-xl bg-slate-200 motion-reduce:animate-none" />}
+        </details>
+        <button type="button" onClick={downloadCard} disabled={busy} className="mt-2 flex min-h-11 items-center gap-2 rounded-xl px-3 text-xs font-bold text-slate-700 disabled:opacity-50"><Download className="h-4 w-4 shrink-0" /> {translate(lang, "inviteShareDialog.card")}</button>
         {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{error}</p>}
       </section>
     </div>

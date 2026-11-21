@@ -117,27 +117,6 @@ export default function ProfileScreen({
           </button>
         </div>
         <h2 className="text-xl font-black text-slate-900 uppercase transition-colors">{user.username}</h2>
-        <form className="mt-4 w-full space-y-3" onSubmit={async event => {
-          event.preventDefault();
-          if (profileSavingRef.current) return;
-          profileSavingRef.current = true;
-          setProfileSaving(true);
-          setProfileError('');
-          setProfileMessage('');
-          try {
-            await onSaveProfileName(displayName);
-            setProfileMessage(translate(lang, "profileScreen.nameSaved"));
-          } catch (failure: unknown) {
-            setProfileError(failure instanceof Error ? failure.message : (translate(lang, "profileScreen.unableToSaveName")));
-          } finally { profileSavingRef.current = false; setProfileSaving(false); }
-        }}>
-          <label className="block text-xs font-bold text-slate-500">{translate(lang, "authScreen.displayName")}
-            <input required minLength={2} maxLength={40} autoComplete="nickname" value={displayName} onChange={event => setDisplayName(event.target.value)} className="mt-2 w-full rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-red-600" />
-          </label>
-          <button type="submit" disabled={profileSaving} className="min-h-11 w-full rounded-2xl bg-slate-900 text-xs font-bold text-white disabled:opacity-60">{profileSaving ? (translate(lang, "authScreen.saving")) : (translate(lang, "profileScreen.saveName"))}</button>
-          {profileMessage ? <p className="text-center text-xs text-green-700" role="status">{profileMessage}</p> : null}
-          {profileError ? <p className="text-center text-xs text-red-600" role="alert">{profileError}</p> : null}
-        </form>
         {(currentUserStats.currentStreak ?? 0) >= 3 && (
           <div className="mt-2 flex items-center gap-1 text-orange-500 font-black italic text-sm">
             <Flame className="w-4 h-4 fill-current" />
@@ -298,6 +277,28 @@ export default function ProfileScreen({
       </div>
         </>
       )}
+
+      <form className="space-y-3 rounded-3xl border border-slate-100 bg-white p-5 shadow-sm" onSubmit={async event => {
+        event.preventDefault();
+        if (profileSavingRef.current) return;
+        profileSavingRef.current = true;
+        setProfileSaving(true);
+        setProfileError('');
+        setProfileMessage('');
+        try {
+          await onSaveProfileName(displayName);
+          setProfileMessage(translate(lang, "profileScreen.nameSaved"));
+        } catch (failure: unknown) {
+          setProfileError(failure instanceof Error ? failure.message : (translate(lang, "profileScreen.unableToSaveName")));
+        } finally { profileSavingRef.current = false; setProfileSaving(false); }
+      }}>
+        <label className="block text-xs font-bold text-slate-500">{translate(lang, "authScreen.displayName")}
+          <input required minLength={2} maxLength={40} autoComplete="nickname" value={displayName} onChange={event => setDisplayName(event.target.value)} className="mt-2 w-full rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-red-600" />
+        </label>
+        <button type="submit" disabled={profileSaving} className="min-h-11 w-full rounded-2xl bg-slate-900 text-xs font-bold text-white disabled:opacity-60">{profileSaving ? (translate(lang, "authScreen.saving")) : (translate(lang, "profileScreen.saveName"))}</button>
+        {profileMessage ? <p className="text-center text-xs text-green-700" role="status">{profileMessage}</p> : null}
+        {profileError ? <p className="text-center text-xs text-red-600" role="alert">{profileError}</p> : null}
+      </form>
 
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 transition-colors">
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">

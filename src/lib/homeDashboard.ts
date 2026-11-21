@@ -222,6 +222,20 @@ export const getLobbyPredictionAttention = (lobbyId: string, summaries: HomeDash
   };
 };
 
+export function getLobbyAttentionCount(summary: HomeDashboardSummary, urgent: boolean) {
+  return urgent ? summary.actionable_match_count : (summary.missing_match_count ?? summary.actionable_match_count);
+}
+
+export function getLobbyScheduleStatusKey(summary?: HomeDashboardSummary) {
+  switch (summary?.schedule_state) {
+    case 'schedule_pending': return 'lobbyView.schedulePending';
+    case 'waiting_results': return 'homeDashboard.waitingForResults';
+    case 'completion_pending': return 'homeDashboard.waitingForTournamentClose';
+    case 'completed': return 'lobbyView.completed';
+    default: return 'homeDashboard.viewMatches';
+  }
+}
+
 export const sortHomeDashboardSummaries = (summaries: HomeDashboardSummary[]) => {
   const priority: Record<HomeDashboardCardState, number> = {
     actionable: 0,

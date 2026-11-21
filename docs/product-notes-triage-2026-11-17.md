@@ -10,6 +10,7 @@ authorize deployment or product-scope changes.
 | --- | --- | --- |
 | Tournament rules feel crowded | Keep one read-only tournament-rules text block. Remove the duplicate generic rules explanation and nested panel. | `src/components/LobbyView.tsx` |
 | Home says a schedule is pending although known matches exist | The current classifier already treats a partly published schedule as ready. Keep that behavior protected by a regression scenario. | `src/lib/homeDashboard_scenarios.ts` |
+| Lobby detail shows zero matches or a pending schedule while its matches are available | The local design follow-up uses the existing Home schedule state in the lobby list. If no summary exists, show the route to matches, not a fabricated zero or pending schedule. The Home headline and visible sport counts use the same time window. | `src/components/LobbyView.tsx`, `src/lib/homeDashboard_scenarios.ts` |
 | Wrong team, bonus or champion in tournament standings | Use each player's stored pick and awarded points, and resolve the champion only within the selected tournament. A finished primary tournament must not supply a champion to another tournament. | `src/lib/db.ts`, `src/lib/leaderboard.test.ts` |
 
 ## Already implemented or superseded

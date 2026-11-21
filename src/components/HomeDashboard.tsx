@@ -18,6 +18,7 @@ import {
   formatTipsterCount,
   getPrimaryHomeDashboardSummaryForLobby,
   getLobbyPredictionAttention,
+  getLobbyAttentionCount,
   type HomeDashboardCardState,
   type HomeDashboardSummary
 } from '../lib/homeDashboard.ts';
@@ -363,6 +364,8 @@ const LobbyWorldCard = ({
   const tournamentLabel = summary?.tournament_name || (
     translate(lang, "homeDashboard.noActiveTournament")
   );
+  const urgent = attention.urgentCount > 0;
+  const visibleContexts = attention.contexts.filter(context => getLobbyAttentionCount(context, urgent) > 0).slice(0, 2);
   const statusLabel = loading
     ? null
     : error
@@ -429,10 +432,10 @@ const LobbyWorldCard = ({
           </p>
         </div>
 
-        <div className="mt-4 flex max-w-[88%] items-start gap-2 text-xs font-bold leading-snug text-slate-600">
+        {tournamentLabel.trim().toLowerCase() !== lobby.name.trim().toLowerCase() && <div className="mt-3 flex max-w-[88%] items-start gap-2 text-xs font-bold leading-snug text-slate-600">
           <Trophy className="h-4 w-4 shrink-0 text-slate-400" />
           <span className="break-words">{tournamentLabel}</span>
-        </div>
+        </div>}
 
         <div className="mt-auto pt-6">
           {loading ? (
@@ -446,17 +449,22 @@ const LobbyWorldCard = ({
                 {statusLabel}
               </p>
               {timeLabel && <p className="mt-1 text-xs font-semibold text-slate-500">{timeLabel}</p>}
-              {!error && attention.contexts.length > 1 && <div className="pointer-events-auto mt-3 space-y-2">
-                {attention.contexts.map(context => <button key={context.tournament_id} type="button"
+              {!error && attention.contexts.length > 1 && <div className="pointer-events-auto mt-3 space-y-1.5">
+                {visibleContexts.map(context => <button key={context.tournament_id} type="button"
                   onClick={event => { event.stopPropagation(); onOpenContext(context, true, 'matches'); }}
                   aria-label={(translate(lang, "homeDashboard.predict_ada658")) + lobby.name + ' · ' + context.tournament_name}
                   className="flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-left text-xs font-bold text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fan-primary">
                   <span className="min-w-0 break-words">{context.tournament_name}</span>
                   <span className="flex shrink-0 items-center gap-1 text-red-600">
-                    {context.actionable_match_count || context.missing_match_count || 0}
+                    {getLobbyAttentionCount(context, urgent)}
                     <ChevronRight className="h-3 w-3" />
                   </span>
                 </button>)}
+                {attention.contexts.length > visibleContexts.length && <button type="button"
+                  onClick={() => onOpenLobby(lobby)}
+                  className="min-h-11 px-2 text-left text-xs font-bold text-slate-700 underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fan-primary">
+                  {translate(lang, "lobbyView.activeTournaments")}
+                </button>}
               </div>}
             </>
           )}

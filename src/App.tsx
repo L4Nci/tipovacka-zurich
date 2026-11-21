@@ -3032,6 +3032,7 @@ export default function App() {
                 onMembershipMutation={refreshHomeAfterMembershipMutation}
                 membersCount={activeLobby.member_count ?? (deferredLoading ? undefined : leaderboard.length)}
                 tournamentStats={tournamentStats}
+                competitionSummaries={homeDashboardSummaries.filter(summary => summary.lobby_id === activeLobby.id)}
                 communityProfilesEnabled={isProductFeatureEnabled(productFeatureFlags, 'public_profiles_enabled')}
                 shareEnabled={isProductFeatureEnabled(productFeatureFlags, 'share_cards_enabled')}
                 tournamentManagementEnabled={isProductFeatureEnabled(productFeatureFlags, 'tournament_management_enabled')}
