@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterMmaSeason, mmaEventStandings } from './mmaSeason.ts';
+import { filterMmaSeason, mmaEventStandings, mmaResultEvents } from './mmaSeason.ts';
 import { isMmaTournament, mmaTournamentId, type MmaEvent, type MmaFight, type MmaPrediction } from './mma.ts';
 
 const now = Date.parse('2026-11-08T12:00:00Z');
@@ -23,6 +23,19 @@ test('season filters preserve card identity, show stale picks as missing and exc
   assert.deepEqual(filterMmaSeason(events, fights, picks, 'b', 'results', now).map(f => f.id), ['b1']);
   assert.deepEqual(filterMmaSeason(events, fights, picks, 'b', 'missing', now), []);
   assert.deepEqual(filterMmaSeason(events, fights, [], 'a', 'missing', Date.parse(events[0].lock_time_utc)), []);
+});
+test('result options and groups use newest completed card first, regardless of feed order', () => {
+  const cards = [
+    { tournament_id: 'qatar', starts_at: '2026-11-21T16:00:00Z', status: 'completed' },
+    { tournament_id: 'next', starts_at: '2026-12-05T16:00:00Z', status: 'scheduled' },
+    { tournament_id: '334', starts_at: '2026-11-15T00:00:00Z', status: 'completed' },
+    { tournament_id: 'live', starts_at: '2026-11-22T18:00:00Z', status: 'live' },
+    { tournament_id: 'prior', starts_at: '2026-11-07T18:00:00Z', status: 'completed' },
+  ] as MmaEvent[];
+  const bouts = cards.map(event => ({ tournament_id: event.tournament_id,
+    status: event.status === 'scheduled' ? 'scheduled' : 'finished' }) as MmaFight);
+  assert.deepEqual(mmaResultEvents(cards, bouts).map(event => event.tournament_id), ['qatar', '334', 'prior', 'live']);
+  assert.deepEqual(cards.map(event => event.tournament_id), ['qatar', 'next', '334', 'live', 'prior']);
 });
 test('event ranking counts each stored pick once and never leaks points from another card/lobby/nonmember', () => {
   const members = [{ user_id: 'me', username: 'Me', points: 100, predictions_count: 10, avatar_emoji: null, avatar_bg: null },

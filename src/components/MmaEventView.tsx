@@ -2,7 +2,7 @@ import { translate, type Locale } from '../i18n/index.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Clock, Info, RefreshCw, Trophy } from 'lucide-react';
 import { canPredictMmaFight, isMmaSeason, mmaEventName, type MmaFighter, type MmaFight, type MmaPrediction, type MmaMethod } from '../lib/mma.ts';
-import { filterMmaSeason, mmaEventStandings } from '../lib/mmaSeason.ts';
+import { filterMmaSeason, mmaEventStandings, mmaResultEvents } from '../lib/mmaSeason.ts';
 import { fetchMmaLobby, saveMmaPrediction, type MmaLobbyData, type MmaStanding } from '../lib/mmaDb.ts';
 import { summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
 import { MmaFightCard } from './MmaFightCard.tsx';
@@ -62,14 +62,17 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
   const missing = (fight: MmaFight) => events.has(fight.tournament_id)
     && canPredictMmaFight(events.get(fight.tournament_id)!, fight, now)
     && picks.get(fight.id)?.lineup_version !== fight.lineup_version;
-  const rows = useMemo(() => data ? filterMmaSeason(data.events, data.fights, data.predictions, eventFilter, filter, now) : [],
-    [data, eventFilter, filter, now]);
-  const groups = (data?.events ?? []).map(event => ({ event, fights: rows.filter(fight => fight.tournament_id === event.tournament_id) }))
+  const resultEvents = useMemo(() => data ? mmaResultEvents(data.events, data.fights) : [], [data]);
+  const visibleEvents = filter === 'results' ? resultEvents : data?.events ?? [];
+  const visibleEventFilter = filter === 'results' && !resultEvents.some(event => event.tournament_id === eventFilter)
+    ? 'all' : eventFilter;
+  const rows = useMemo(() => data ? filterMmaSeason(data.events, data.fights, data.predictions, visibleEventFilter, filter, now) : [],
+    [data, visibleEventFilter, filter, now]);
+  const groups = visibleEvents.map(event => ({ event, fights: rows.filter(fight => fight.tournament_id === event.tournament_id) }))
     .filter(group => group.fights.length > 0);
-  if (filter === 'results') groups.reverse();
   const title = isMmaSeason(tournamentId) ? 'UFC ' + tournamentId.slice(-4)
     : data?.events[0] ? mmaEventName(data.events[0]) : 'UFC';
-  const selectedEvent = eventFilter === 'all' ? (isMmaSeason(tournamentId) ? null : data?.events[0]) : events.get(eventFilter);
+  const selectedEvent = visibleEventFilter === 'all' ? (isMmaSeason(tournamentId) ? null : data?.events[0]) : events.get(visibleEventFilter);
   const standings = useMemo(() => !data ? [] : eventFilter === 'all' || seasonStandings ? data.standings
     : mmaEventStandings(lobbyId, eventFilter, data.standings, data.fights, data.lobbyPredictions), [data, eventFilter, seasonStandings, lobbyId]);
   const missingCount = (data?.fights ?? []).filter(fight => (eventFilter === 'all' || fight.tournament_id === eventFilter) && missing(fight)).length;
@@ -104,10 +107,10 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
     <main className="space-y-4 p-4">
       {data && <label className="block space-y-2 text-xs font-bold text-slate-500">
         <span>{translate(lang, 'mmaSeason.eventFilter')}</span>
-        <select value={eventFilter} onChange={event => { setEventFilter(event.target.value); setSeasonStandings(false); }}
+        <select value={visibleEventFilter} onChange={event => { setEventFilter(event.target.value); setSeasonStandings(false); }}
           className="min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800">
           <option value="all">{translate(lang, 'mmaSeason.allEvents')}</option>
-          {data.events.map(event => <option key={event.tournament_id} value={event.tournament_id}>{mmaEventName(event)}</option>)}
+          {visibleEvents.map(event => <option key={event.tournament_id} value={event.tournament_id}>{mmaEventName(event)}</option>)}
         </select>
       </label>}
       <div className="flex flex-wrap items-center gap-2">

@@ -366,6 +366,8 @@ export const cs = {
   "mmaFightCard.savePrediction": "Uložit tip",
   "mmaFightCard.predictionsAreLocked": "Tipování je uzamčené.",
   "mmaFightCard.yourPick": "Tvůj tip: ",
+  "mmaFightCard.correctPick": "Správně",
+  "mmaFightCard.incorrectPick": "Nesprávně",
   "mmaFightCard.pts": " b.",
   "mmaFightCard.hideOtherPicks": "Skrýt tipy ostatních",
   "mmaFightCard.showOtherPicks": "Zobrazit tipy ostatních",

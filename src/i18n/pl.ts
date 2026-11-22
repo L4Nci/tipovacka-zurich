@@ -368,6 +368,8 @@ export const pl: Record<MessageKey, string> = {
   "mmaFightCard.savePrediction": "Zapisz typ",
   "mmaFightCard.predictionsAreLocked": "Typy są zablokowane.",
   "mmaFightCard.yourPick": "Twój typ: ",
+  "mmaFightCard.correctPick": "Poprawnie",
+  "mmaFightCard.incorrectPick": "Niepoprawnie",
   "mmaFightCard.pts": " pkt",
   "mmaFightCard.hideOtherPicks": "Ukryj pozostałe typy",
   "mmaFightCard.showOtherPicks": "Pokaż pozostałe typy",

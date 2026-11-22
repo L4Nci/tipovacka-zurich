@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mmaMethodGroup, mmaPredictionPoints, type MmaFight, type MmaPrediction } from './mma.ts';
-import { summarizeMmaMethods, summarizeMmaPredictions } from './mmaPredictions.ts';
+import { mmaPickFeedback, summarizeMmaMethods, summarizeMmaPredictions } from './mmaPredictions.ts';
 import { formatMmaMethod } from '../i18n/sports.ts';
 
 test('normalized finishes collapse to three options without guessing unknown, DQ or void outcomes', () => {
@@ -39,6 +39,43 @@ test('historical v1 stays one point; unfinished/void outcomes and invalid lineup
   for (const status of ['scheduled', 'draw', 'void', 'cancelled', 'awaiting_result'] as const) {
     assert.equal(mmaPredictionPoints('mma-winner-method-v2', 1, null, status, 1, 1, 'ko_tko', 'ko_tko'), 0);
   }
+});
+test('results mark the winner and finish independently without using the stored point total', () => {
+  const fight = { id: 'bout', status: 'finished', winner_fighter_id: 1, lineup_version: 2,
+    method_normalized: 'decision_unanimous' } as MmaFight;
+  const pick = { fight_id: fight.id, lineup_version: 2, predicted_winner_id: 1,
+    predicted_method: 'ko_tko', points_earned: 3 } as MmaPrediction;
+  const v2 = 'mma-winner-method-v2';
+  assert.deepEqual(mmaPickFeedback(fight, pick, v2), { winner: 'correct', method: 'incorrect' });
+  assert.deepEqual(mmaPickFeedback(fight, { ...pick, predicted_winner_id: 2, predicted_method: 'decision' }, v2),
+    { winner: 'incorrect', method: 'correct' });
+  assert.deepEqual(mmaPickFeedback(fight, { ...pick, predicted_method: 'decision' }, v2), { winner: 'correct', method: 'correct' });
+  assert.deepEqual(mmaPickFeedback(fight, { ...pick, predicted_winner_id: 2 }, v2), { winner: 'incorrect', method: 'incorrect' });
+});
+test('unconfirmed, missing and unsupported finishes do not get negative feedback', () => {
+  const fight = { id: 'bout', status: 'finished', winner_fighter_id: 1, lineup_version: 2 } as MmaFight;
+  const pick = { fight_id: fight.id, lineup_version: 2, predicted_winner_id: 1, predicted_method: 'ko_tko' } as MmaPrediction;
+  const v2 = 'mma-winner-method-v2';
+  for (const method_normalized of [null, 'dq', 'other'] as const) {
+    assert.deepEqual(mmaPickFeedback({ ...fight, method_normalized }, pick, v2), { winner: 'correct', method: null });
+  }
+  const confirmed = { ...fight, method_normalized: 'ko_tko' } as const;
+  assert.deepEqual(mmaPickFeedback(confirmed, { ...pick, predicted_method: null }, v2), { winner: 'correct', method: null });
+  assert.deepEqual(mmaPickFeedback(confirmed, pick, 'mma-winner-v1'), { winner: 'correct', method: null });
+});
+test('open, unresolved, void and stale picks are not marked correct or incorrect', () => {
+  const fight = { id: 'bout', status: 'finished', winner_fighter_id: 1, lineup_version: 2,
+    method_normalized: 'ko_tko' } as MmaFight;
+  const pick = { fight_id: fight.id, lineup_version: 2, predicted_winner_id: 1, predicted_method: 'ko_tko' } as MmaPrediction;
+  const v2 = 'mma-winner-method-v2';
+  const neutral = { winner: null, method: null };
+  for (const status of ['scheduled', 'awaiting_result', 'void', 'draw', 'cancelled'] as const) {
+    assert.deepEqual(mmaPickFeedback({ ...fight, status }, pick, v2), neutral);
+  }
+  assert.deepEqual(mmaPickFeedback(fight, { ...pick, lineup_version: 1 }, v2), neutral);
+  assert.deepEqual(mmaPickFeedback(fight, { ...pick, fight_id: 'other' }, v2), neutral);
+  assert.deepEqual(mmaPickFeedback({ ...fight, winner_fighter_id: null }, pick, v2), neutral);
+  assert.deepEqual(mmaPickFeedback(fight, undefined, v2), neutral);
 });
 test('method shares exclude skipped methods and use exact integer totals, including thirds', () => {
   const pick = (method: any) => ({ predicted_method: method }) as MmaPrediction;
