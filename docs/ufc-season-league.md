@@ -22,6 +22,8 @@ Results only offer cards with result rows. The newest completed card appears
 first in the list and selector, followed by older completed cards and any
 remaining cards with result rows. Winner and optional finish picks are marked
 independently when confirmed; displayed points still come from the saved pick.
+Event and season standings count those same two hits independently. The finish
+stat is shown only for standings that include cards with finish predictions.
 The home dashboard shows one annual row and the combined missing count per lobby.
 Cancelled, draw and no-contest bouts remain zero points. The approved
 [optional method extension](mma-finish-methods.md) uses 5/3/1/0 under

@@ -103,6 +103,29 @@ test('leaderboard total uses awarded points instead of recalculating them in the
   assert.equal(row.exact_hits, 1);
 });
 
+test('football keeps the four scoring categories separate', () => {
+  const draw = { ...match, id: 'draw', home_score: 1, away_score: 1 };
+  const [row] = buildLeaderboardWithStreaks([player('alpha', 'team-a', 0)], [
+    prediction('alpha', 2, 1, 5),
+    { ...prediction('alpha', 3, 2, 3), match_id: 'margin' },
+    { ...prediction('alpha', 3, 1, 2), match_id: 'winner' },
+    { ...prediction('alpha', 2, 2, 2), match_id: draw.id, home_score: 1, away_score: 1 },
+  ], [match, draw], 'football');
+  assert.deepEqual([row.exact_hits, row.goal_difference_hits, row.winner_hits, row.draw_hits], [1, 1, 1, 1]);
+  assert.equal(row.total_points, 12);
+});
+
+test('hockey counts non-exact winner hits without a goal-difference category', () => {
+  const [row] = buildLeaderboardWithStreaks([player('alpha', 'team-a', 0)], [
+    prediction('alpha', 2, 1, 5),
+    { ...prediction('alpha', 3, 2, 2), match_id: 'same-margin' },
+    { ...prediction('alpha', 3, 1, 2), match_id: 'other-margin' },
+    { ...prediction('alpha', 1, 1, 0), match_id: 'draw-tip' },
+  ], [match], 'hockey');
+  assert.deepEqual([row.exact_hits, row.winner_hits, row.goal_difference_hits, row.draw_hits], [1, 2, 0, 0]);
+  assert.equal(row.total_points, 9);
+});
+
 test('team badges resolve per player and the winner badge requires an awarded pick', () => {
   const teams = [
     { id: 'team-a', name: 'Team A', flag_code: 'A', group_name: 'A' },

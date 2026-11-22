@@ -116,7 +116,9 @@ export const buildLeaderboardWithStreaks = (
       } else if (classifiedPoints > 0) {
         stats.outcomeHits++;
 
-        if (sport !== 'hockey') {
+        if (sport === 'hockey') {
+          if (matchHome !== matchAway) stats.winnerHits++;
+        } else {
           const isActualDraw = matchHome === matchAway;
           const isPredictedDraw = prediction.predicted_home_score === prediction.predicted_away_score;
           const correctWinner = (
