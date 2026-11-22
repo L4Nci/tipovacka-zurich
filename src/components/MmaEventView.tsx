@@ -130,11 +130,11 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
       {section !== 'leaderboard' && data && groups.map(({ event, fights }) => <section key={event.tournament_id} className="space-y-4" aria-label={mmaEventName(event)}>
         <div className="space-y-1 px-1 pt-3">
           <h2 className="text-sm font-black text-slate-800">{mmaEventName(event)}</h2>
-          <p className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+          {section === 'matches' && <p className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
             <Clock className="h-3 w-3 shrink-0" />{translate(lang, 'mmaEventView.cardDeadline')}{formatMmaEventTime(event.lock_time_utc, lang)}
-          </p>
+          </p>}
         </div>
-        {fights.map(fight => <MmaFightCard key={fight.id} fight={fight} eventLabel={mmaEventName(event)} fighters={people} prediction={picks.get(fight.id)}
+        {fights.map(fight => <MmaFightCard key={fight.id} fight={fight} fighters={people} prediction={picks.get(fight.id)}
         community={communityByFight.get(fight.id)} members={members} userId={userId}
         open={canPredictMmaFight(event, fight, now)} busy={saving !== null} lang={lang} rulesVersion={event.rules_version}
         onSave={(winner, method) => save(fight, winner, method)} />)}

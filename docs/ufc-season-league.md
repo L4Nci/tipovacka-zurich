@@ -16,7 +16,8 @@ a separate player-enrollment system. Each lobby keeps independent picks.
 
 The year has an aggregate leaderboard; selecting an event shows that event's
 leaderboard, with a button back to the full year. Upcoming, missing and results
-filters combine with the event selector. Each bout retains a visible event label.
+filters combine with the event selector. Each group of bouts has one event
+heading. The card deadline is shown in Matches, not in Results.
 Results only offer cards with result rows. The newest completed card appears
 first in the list and selector, followed by older completed cards and any
 remaining cards with result rows. Winner and optional finish picks are marked
