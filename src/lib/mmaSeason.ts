@@ -1,5 +1,6 @@
 import { canPredictMmaFight, type MmaEvent, type MmaFight, type MmaPrediction } from './mma.ts';
-import type { MmaStanding } from './mmaLobbyData.ts';
+import type { MmaLobbyData } from './mmaLobbyData.ts';
+import { mmaPickFeedback } from './mmaPredictions.ts';
 
 const hasMmaResultRow = (fight: MmaFight) => fight.status !== 'scheduled';
 
@@ -25,19 +26,39 @@ export function filterMmaSeason(events: readonly MmaEvent[], fights: readonly Mm
   });
 }
 
-export function mmaEventStandings(lobbyId: string, eventId: string, members: readonly MmaStanding[],
-  fights: readonly MmaFight[], predictions: readonly MmaPrediction[]): MmaStanding[] {
-  const fightById = new Map(fights.filter(fight => fight.tournament_id === eventId).map(fight => [fight.id, fight]));
-  const byUser = new Map(members.map(member => [member.user_id, { ...member, points: 0, predictions_count: 0 }]));
+export function buildMmaStandings(lobbyId: string, eventId: string | null,
+  { events, fights, lobbyPredictions, standings }: Pick<MmaLobbyData, 'events' | 'fights' | 'lobbyPredictions' | 'standings'>) {
+  const eventsInScope = eventId ? events.filter(event => event.tournament_id === eventId) : events;
+  const rulesByEvent = new Map(eventsInScope.map(event => [event.tournament_id, event.rules_version]));
+  const showFinishHits = eventsInScope.some(event => event.rules_version === 'mma-winner-method-v2');
+  const fightById = new Map(fights.filter(fight => !eventId || fight.tournament_id === eventId).map(fight => [fight.id, fight]));
+  const byUser = new Map(standings.map(member => [member.user_id, {
+    ...member,
+    points: eventId ? 0 : member.points,
+    predictions_count: eventId ? 0 : member.predictions_count,
+    winnerHits: 0,
+    finishHits: 0,
+  }]));
   const seen = new Set<string>();
-  for (const pick of predictions) {
+  for (const pick of lobbyPredictions) {
     const fight = fightById.get(pick.fight_id);
     const member = byUser.get(pick.user_id);
     const key = pick.user_id + ':' + pick.fight_id;
     if (!fight || !member || pick.lobby_id !== lobbyId || seen.has(key)) continue;
     seen.add(key);
-    member.predictions_count++;
-    member.points += pick.points_earned;
+    if (eventId) {
+      member.predictions_count++;
+      member.points += pick.points_earned;
+    }
+
+    const rules = rulesByEvent.get(fight.tournament_id);
+    if (!rules || (pick.predicted_winner_id !== fight.fighter_a_id && pick.predicted_winner_id !== fight.fighter_b_id)) continue;
+    const feedback = mmaPickFeedback(fight, pick, rules);
+    if (feedback.winner === 'correct') member.winnerHits++;
+    if (feedback.method === 'correct') member.finishHits++;
   }
-  return [...byUser.values()].sort((a, b) => b.points - a.points || a.username.localeCompare(b.username) || a.user_id.localeCompare(b.user_id));
+  const rows = [...byUser.values()];
+  // Only the event view sorts here; overall standings retain the RPC's order and points.
+  if (eventId) rows.sort((a, b) => b.points - a.points || a.username.localeCompare(b.username) || a.user_id.localeCompare(b.user_id));
+  return { rows, showFinishHits };
 }

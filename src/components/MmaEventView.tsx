@@ -2,7 +2,7 @@ import { translate, type Locale } from '../i18n/index.ts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Clock, Info, RefreshCw, Trophy } from 'lucide-react';
 import { canPredictMmaFight, isMmaSeason, mmaEventName, type MmaFighter, type MmaFight, type MmaPrediction, type MmaMethod } from '../lib/mma.ts';
-import { filterMmaSeason, mmaEventStandings, mmaResultEvents } from '../lib/mmaSeason.ts';
+import { buildMmaStandings, filterMmaSeason, mmaResultEvents } from '../lib/mmaSeason.ts';
 import { fetchMmaLobby, saveMmaPrediction, type MmaLobbyData, type MmaStanding } from '../lib/mmaDb.ts';
 import { summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
 import { MmaFightCard } from './MmaFightCard.tsx';
@@ -73,8 +73,10 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
   const title = isMmaSeason(tournamentId) ? 'UFC ' + tournamentId.slice(-4)
     : data?.events[0] ? mmaEventName(data.events[0]) : 'UFC';
   const selectedEvent = visibleEventFilter === 'all' ? (isMmaSeason(tournamentId) ? null : data?.events[0]) : events.get(visibleEventFilter);
-  const standings = useMemo(() => !data ? [] : eventFilter === 'all' || seasonStandings ? data.standings
-    : mmaEventStandings(lobbyId, eventFilter, data.standings, data.fights, data.lobbyPredictions), [data, eventFilter, seasonStandings, lobbyId]);
+  const rulesEvent = section === 'leaderboard' && seasonStandings ? null : selectedEvent;
+  const standings = useMemo(() => data && section === 'leaderboard'
+    ? buildMmaStandings(lobbyId, eventFilter === 'all' || seasonStandings ? null : eventFilter, data) : null,
+    [data, eventFilter, seasonStandings, lobbyId, section]);
   const missingCount = (data?.fights ?? []).filter(fight => (eventFilter === 'all' || fight.tournament_id === eventFilter) && missing(fight)).length;
   const hasOpenFights = (data?.fights ?? []).some(fight => (eventFilter === 'all' || fight.tournament_id === eventFilter)
     && events.has(fight.tournament_id) && canPredictMmaFight(events.get(fight.tournament_id)!, fight, now));
@@ -100,9 +102,9 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
         </button>
       </div>
     </header>
-    <MmaRulesDialog open={showRules} event={selectedEvent} lang={lang}
-      rulesVersion={selectedEvent?.rules_version ?? (data?.events.some(event => event.rules_version === 'mma-winner-method-v2') ? 'mma-winner-method-v2' : 'mma-winner-v1')}
-      mixedRules={!selectedEvent && new Set(data?.events.map(event => event.rules_version)).size > 1}
+    <MmaRulesDialog open={showRules} event={rulesEvent} lang={lang}
+      rulesVersion={rulesEvent?.rules_version ?? (data?.events.some(event => event.rules_version === 'mma-winner-method-v2') ? 'mma-winner-method-v2' : 'mma-winner-v1')}
+      mixedRules={!rulesEvent && new Set(data?.events.map(event => event.rules_version)).size > 1}
       onClose={() => setShowRules(false)} />
     <main className="space-y-4 p-4">
       {data && <label className="block space-y-2 text-xs font-bold text-slate-500">
@@ -139,7 +141,7 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
         open={canPredictMmaFight(event, fight, now)} busy={saving !== null} lang={lang} rulesVersion={event.rules_version}
         onSave={(winner, method) => save(fight, winner, method)} />)}
       </section>)}
-      {section === 'leaderboard' && data && <section className="rounded-2xl border border-slate-100 bg-white p-4">
+      {standings && <section className="rounded-2xl border border-slate-100 bg-white p-4">
         <h2 className="mb-4 flex items-center gap-2 text-sm font-black text-slate-900"><Trophy className="h-4 w-4" />
           {translate(lang, isMmaSeason(tournamentId) && (eventFilter === 'all' || seasonStandings) ? 'mmaSeason.seasonStandings' : 'mmaSeason.eventStandings')}
         </h2>
@@ -147,10 +149,21 @@ export default function MmaEventView({ lobbyId, lobbyName, tournamentId, userId,
           className="mb-4 min-h-10 rounded-full bg-slate-50 px-3 text-xs font-bold text-slate-600">
           {translate(lang, seasonStandings ? 'mmaSeason.showEventStandings' : 'mmaSeason.showSeasonStandings')}
         </button>}
-        <ol className="space-y-3">{standings.map((person, index) => <li key={person.user_id}
-          className="flex items-center justify-between gap-3 text-sm">
-          <span className="min-w-0 truncate font-bold text-slate-700">{index + 1}. {person.avatar_emoji || ''} {person.username}{person.user_id === userId ? (translate(lang, "mmaEventView.you")) : ''}</span>
-          <strong className="shrink-0 text-slate-950">{person.points} {translate(lang, "mmaEventView.pts")}</strong>
+        <ol className="divide-y divide-slate-100">{standings.rows.map((person, index) => <li key={person.user_id} className="py-2.5 first:pt-0 last:pb-0">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate font-bold text-slate-700">{index + 1}. {person.avatar_emoji || ''} {person.username}{person.user_id === userId ? translate(lang, 'mmaEventView.you') : ''}</span>
+            <strong className="shrink-0 text-slate-950">{person.points} {translate(lang, 'mmaEventView.pts')}</strong>
+          </div>
+          <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+            <div className="flex items-baseline gap-1.5">
+              <dt>{translate(lang, 'mmaRulesDialog.correctWinner')}</dt>
+              <dd className="font-bold tabular-nums text-slate-800">{person.winnerHits}</dd>
+            </div>
+            {standings.showFinishHits && <div className="flex items-baseline gap-1.5">
+              <dt>{translate(lang, 'mmaEventView.correctFinish')}</dt>
+              <dd className="font-bold tabular-nums text-slate-800">{person.finishHits}</dd>
+            </div>}
+          </dl>
         </li>)}</ol>
         <p className="mt-4 text-[10px] text-slate-400">{translate(lang, "mmaEventView.resultsAndPointsUpdateAutomatically")}</p>
       </section>}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterMmaSeason, mmaEventStandings, mmaResultEvents } from './mmaSeason.ts';
+import { buildMmaStandings, filterMmaSeason, mmaResultEvents } from './mmaSeason.ts';
 import { isMmaTournament, mmaTournamentId, type MmaEvent, type MmaFight, type MmaPrediction } from './mma.ts';
 
 const now = Date.parse('2026-11-08T12:00:00Z');
@@ -41,11 +41,43 @@ test('event ranking counts each stored pick once and never leaks points from ano
   const members = [{ user_id: 'me', username: 'Me', points: 100, predictions_count: 10, avatar_emoji: null, avatar_bg: null },
     { user_id: 'friend', username: 'Friend', points: 3, predictions_count: 3, avatar_emoji: null, avatar_bg: null }];
   const valid = pick('b1', { points_earned: 1 });
-  const result = mmaEventStandings('kobra', 'b', members, fights,
-    [valid, valid, pick('a1', { points_earned: 1 }), pick('b1', { points_earned: 1, lobby_id: 'private' }),
-      pick('b1', { points_earned: 1, user_id: 'outsider' })]);
+  const { rows: result } = buildMmaStandings('kobra', 'b', { events, fights, standings: members,
+    lobbyPredictions: [valid, valid, pick('a1', { points_earned: 1 }), pick('b1', { points_earned: 1, lobby_id: 'private' }),
+      pick('b1', { points_earned: 1, user_id: 'outsider' })] });
   assert.equal(result[0].points, 1); assert.equal(result[0].predictions_count, 1);
   assert.equal(result[1].points, 0); assert.equal(members[0].points, 100);
+});
+test('MMA hits count independently under the selected card rules without replacing stored points', () => {
+  const data = {
+    events: [{ ...events[0], rules_version: 'mma-winner-v1' }, { ...events[1], rules_version: 'mma-winner-method-v2' }] as MmaEvent[],
+    standings: [{ user_id: 'me', username: 'Me', points: 42, predictions_count: 8, avatar_emoji: null, avatar_bg: null }],
+    fights: [
+      { ...fights[0], status: 'finished', winner_fighter_id: 1, method_normalized: 'ko_tko' },
+      { ...fights[2], winner_fighter_id: 2, method_normalized: 'ko_tko' },
+      { ...fights[2], id: 'decision', winner_fighter_id: 1, method_normalized: 'decision_unanimous' },
+      { ...fights[2], id: 'winner-only', winner_fighter_id: 1, method_normalized: null },
+      { ...fights[2], id: 'stale', winner_fighter_id: 1, method_normalized: 'ko_tko', lineup_version: 2 },
+      { ...fights[2], id: 'void', status: 'void', winner_fighter_id: 1, method_normalized: 'no_contest' },
+      { ...fights[2], id: 'foreign', winner_fighter_id: 1, method_normalized: 'ko_tko' },
+    ] as MmaFight[],
+    lobbyPredictions: [
+      pick('a1', { predicted_method: 'ko_tko', points_earned: 1 }),
+      pick('b1', { predicted_method: 'ko_tko', points_earned: 1 }),
+      pick('b1', { predicted_method: 'ko_tko', points_earned: 1 }),
+      pick('decision', { predicted_method: 'decision', points_earned: 5 }),
+      pick('winner-only', { predicted_method: 'ko_tko', points_earned: 3 }),
+      pick('stale', { predicted_method: 'ko_tko' }),
+      pick('void', { predicted_method: 'ko_tko' }),
+      pick('foreign', { predicted_method: 'ko_tko', lobby_id: 'private' }),
+    ],
+  };
+  const stats = (eventId: string | null) => {
+    const { rows: [row], showFinishHits } = buildMmaStandings('kobra', eventId, data);
+    return [row.points, row.winnerHits, row.finishHits, showFinishHits];
+  };
+  assert.deepEqual(stats('a'), [1, 1, 0, false]);
+  assert.deepEqual(stats('b'), [9, 2, 2, true]);
+  assert.deepEqual(stats(null), [42, 3, 2, true]);
 });
 test('annual and dynamically discovered MMA contexts route correctly while preserving pilot identities', () => {
   assert.equal(isMmaTournament('ufc-2026'), true); assert.equal(isMmaTournament('ufcal-event-2562'), true);

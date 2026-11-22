@@ -3182,6 +3182,7 @@ export default function App() {
                 <LazyLeaderboardScreen
                   t={t}
                   lang={lang}
+                  sport={isHockey ? 'hockey' : 'football'}
                   user={user}
                   leaderboardWithStreaks={leaderboardWithStreaks}
                   teams={teams}

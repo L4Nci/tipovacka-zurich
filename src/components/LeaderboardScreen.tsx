@@ -4,7 +4,20 @@ import { AnimatePresence, motion } from 'motion/react';
 import { CheckCircle2, ChevronDown, ChevronUp, Trophy, Trophy as TrophyIcon, X } from 'lucide-react';
 import { Player, Team } from '../types.ts';
 import { hasAwardedTournamentWinner, resolveLeaderboardPickTeam } from '../lib/leaderboard.ts';
+import { TOURNAMENT_WINNER_POINTS, type SportId } from '../lib/scoring.ts';
 import PlayerProfileDialog from './PlayerProfileDialog.tsx';
+
+const exactScoreStat = { field: 'exact_hits', label: 'leaderboardScreen.exactScore', points: 5 } as const;
+const winnerStat = { field: 'winner_hits', label: 'mmaRulesDialog.correctWinner', points: 2 } as const;
+const scoringStats = {
+  football: [
+    exactScoreStat,
+    { field: 'goal_difference_hits', label: 'leaderboardScreen.winnerGoalDifference', points: 3 },
+    winnerStat,
+    { field: 'draw_hits', label: 'leaderboardScreen.correctDraw', points: 2 },
+  ],
+  hockey: [exactScoreStat, winnerStat],
+} as const;
 
 type TeamFlagComponent = React.ComponentType<{
   code: string | null | undefined;
@@ -25,6 +38,7 @@ type LeaderboardPlayer = Player & {
 type LeaderboardScreenProps = {
   t: any;
   lang: Locale;
+  sport: SportId;
   user: Player;
   leaderboardWithStreaks: LeaderboardPlayer[];
   teams: Team[];
@@ -44,6 +58,7 @@ type LeaderboardScreenProps = {
 export default function LeaderboardScreen({
   t,
   lang,
+  sport,
   user,
   leaderboardWithStreaks,
   teams,
@@ -60,6 +75,7 @@ export default function LeaderboardScreen({
   communityProfilesEnabled
 }: LeaderboardScreenProps) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const stats = scoringStats[sport];
 
   return (
     <motion.div
@@ -114,16 +130,13 @@ export default function LeaderboardScreen({
               </div>
               <div className="space-y-1.5">
                 {[
-                  [translate(lang, "leaderboardScreen.exactScore"), '5 b'],
-                  [translate(lang, "leaderboardScreen.winnerGoalDifference"), '3 b'],
-                  [translate(lang, "mmaRulesDialog.correctWinner"), '2 b'],
-                  [translate(lang, "leaderboardScreen.correctDraw"), '2 b'],
-                  [translate(lang, "leaderboardScreen.tournamentWinner"), '10 b']
-                ].map(([label, points]) => (
+                  ...stats,
+                  { label: 'leaderboardScreen.tournamentWinner' as const, points: TOURNAMENT_WINNER_POINTS },
+                ].map(({ label, points }) => (
                   <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
-                    <span className="text-xs font-bold text-slate-700">{label}</span>
+                    <span className="text-xs font-bold text-slate-700">{translate(lang, label)}</span>
                     <span className="shrink-0 rounded-lg bg-slate-900 px-2 py-1 text-[10px] font-black text-white">
-                      {points}
+                      {points} {translate(lang, 'mmaEventView.pts')}
                     </span>
                   </div>
                 ))}
@@ -224,36 +237,16 @@ export default function LeaderboardScreen({
                     <p className="text-[9px] font-black uppercase text-slate-400 mt-1">{t.pts}</p>
                   </div>
                 </div>
-                <div className="mt-2.5 grid grid-cols-4 gap-1.5">
-                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                      <span className="block">{translate(lang, "leaderboardScreen.exact")}</span>
-                      <span className="block">{translate(lang, "leaderboardScreen.score")}</span>
-                    </p>
-                    <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.exact_hits ?? 0}</p>
-                  </div>
-                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                      <span className="block">{translate(lang, "leaderboardScreen.goal")}</span>
-                      <span className="block">{translate(lang, "leaderboardScreen.difference")}</span>
-                    </p>
-                    <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.goal_difference_hits ?? 0}</p>
-                  </div>
-                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                      <span className="block">{translate(lang, "leaderboardScreen.correct")}</span>
-                      <span className="block">{translate(lang, "winner")}</span>
-                    </p>
-                    <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.winner_hits ?? 0}</p>
-                  </div>
-                  <div className="min-w-0 rounded-xl bg-slate-50 px-1.5 py-1.5">
-                    <p className="text-[9px] font-black uppercase leading-none text-slate-400">
-                      <span className="block">{translate(lang, "leaderboardScreen.inexact")}</span>
-                      <span className="block">{translate(lang, "leaderboardScreen.draw")}</span>
-                    </p>
-                    <p className="mt-0.5 text-sm font-black leading-none text-slate-800">{p.draw_hits ?? 0}</p>
-                  </div>
-                </div>
+                <dl className={`mt-2.5 grid gap-1.5 ${sport === 'hockey' ? 'grid-cols-2' : 'grid-cols-4'}`}>
+                  {stats.map(({ field, label }) => (
+                    <div key={field} className="flex min-w-0 flex-col justify-between gap-1 rounded-xl bg-slate-50 p-1.5">
+                      <dt className="text-[9px] font-black uppercase leading-tight text-slate-600 [overflow-wrap:anywhere]">
+                        {translate(lang, label)}
+                      </dt>
+                      <dd className="text-sm font-black leading-none text-slate-800">{p[field] ?? 0}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
             );
           })}
