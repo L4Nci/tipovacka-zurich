@@ -366,6 +366,8 @@ export const en: Record<MessageKey, string> = {
   "mmaFightCard.savePrediction": "Save prediction",
   "mmaFightCard.predictionsAreLocked": "Predictions are locked.",
   "mmaFightCard.yourPick": "Your pick: ",
+  "mmaFightCard.correctPick": "Correct",
+  "mmaFightCard.incorrectPick": "Incorrect",
   "mmaFightCard.pts": " pts",
   "mmaFightCard.hideOtherPicks": "Hide other picks",
   "mmaFightCard.showOtherPicks": "Show other picks",

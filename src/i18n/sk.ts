@@ -368,6 +368,8 @@ export const sk: Record<MessageKey, string> = {
   "mmaFightCard.savePrediction": "Uložiť tip",
   "mmaFightCard.predictionsAreLocked": "Tipy sú uzamknuté.",
   "mmaFightCard.yourPick": "Tvoj tip: ",
+  "mmaFightCard.correctPick": "Správne",
+  "mmaFightCard.incorrectPick": "Nesprávne",
   "mmaFightCard.pts": " b.",
   "mmaFightCard.hideOtherPicks": "Skryť ostatné tipy",
   "mmaFightCard.showOtherPicks": "Zobraziť ostatné tipy",

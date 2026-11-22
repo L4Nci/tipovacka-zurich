@@ -1,13 +1,28 @@
 import { translate, pluralMessage, type Locale } from '../i18n/index.ts';
 import { formatMmaMethod, formatMmaWeightClass } from '../i18n/sports.ts';
 import { useEffect, useId, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, CheckCircle2, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { MMA_METHODS, mmaMethodGroup, type MmaFight, type MmaPrediction, type MmaFighter, type MmaMethod, type MmaRulesVersion } from '../lib/mma.ts';
 import type { MmaStanding } from '../lib/mmaLobbyData.ts';
-import { summarizeMmaMethods, type summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
+import { mmaPickFeedback, summarizeMmaMethods, type MmaPickMark, type summarizeMmaPredictions } from '../lib/mmaPredictions.ts';
 import { PredictionDistribution } from './PredictionDistribution.tsx';
 import { MmaFighterPortrait, MmaPortraitCredit } from './MmaFighterPortrait.tsx';
 import { MmaMethodDistribution } from './MmaMethodDistribution.tsx';
+
+const pickResultStyle = {
+  correct: 'border-emerald-600 bg-emerald-50 text-emerald-800',
+  incorrect: 'border-red-600 bg-red-50 text-red-800',
+};
+
+function MmaPickOutcome({ label, mark, lang }: { label: string; mark: MmaPickMark; lang: Locale }) {
+  if (!mark) return <span>{label}</span>;
+  const Icon = mark === 'correct' ? Check : X;
+  return <span className={'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 ' + pickResultStyle[mark]}>
+    <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+    <span className="sr-only">{translate(lang, mark === 'correct' ? 'mmaFightCard.correctPick' : 'mmaFightCard.incorrectPick')}: </span>
+    {label}
+  </span>;
+}
 
 export function MmaFightCard({ fight, fighters, prediction, community, members, userId, open, busy, lang, eventLabel, rulesVersion = 'mma-winner-v1', onSave }: {
   key?: string; fight: MmaFight; fighters: Map<number, MmaFighter>; prediction?: MmaPrediction;
@@ -33,6 +48,9 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
   const methodLabel = (method: MmaMethod) => formatMmaMethod(method, lang);
   const resultGroup = mmaMethodGroup(fight.method_normalized);
   const resultMethod = fight.method || (resultGroup ? methodLabel(resultGroup) : null);
+  const feedback = mmaPickFeedback(fight, prediction, rulesVersion);
+  const shownWinner = open ? selected : validPick ? prediction?.predicted_winner_id : null;
+  const shownMethod = open ? selectedMethod : validPick ? prediction?.predicted_method : null;
   const otherCount = community.predictions.filter(pick => pick.user_id !== userId).length;
   const methodDistribution = useMemo(() => summarizeMmaMethods(community.predictions), [community.predictions]);
   const section = fight.card_section === 'main' ? (translate(lang, "mmaFightCard.mainCard"))
@@ -51,20 +69,21 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
       </div>
       <fieldset disabled={!open || busy} className="grid grid-cols-2 gap-3">
         <legend className="sr-only">{translate(lang, "mmaFightCard.pickTheBoutWinner")}</legend>
-        {[a, b].map((person, index) => <button key={index} type="button" aria-pressed={Boolean(person && selected === person.id)}
-          aria-label={person?.name || translate(lang, 'mmaFightCard.opponentToBeConfirmed')}
-          onClick={() => person && setSelected(person.id)}
-          className={'min-h-24 rounded-2xl border-2 p-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-default ' +
-            (person && selected === person.id ? (index === 0 ? 'border-[#ce1126] bg-red-50 text-slate-950' : 'border-[#006847] bg-emerald-50 text-slate-950')
-              : 'border-slate-100 bg-slate-50 text-slate-700')}>
-          <MmaFighterPortrait fighter={person} />
-          <span className="block text-sm font-black leading-snug">{person?.name || (translate(lang, "mmaFightCard.opponentToBeConfirmed"))}</span>
-        </button>)}
+        {[a, b].map((person, index) => <div key={index} className="relative min-w-0">
+          <button type="button" aria-pressed={Boolean(person && shownWinner === person.id)}
+            aria-label={person?.name || translate(lang, 'mmaFightCard.opponentToBeConfirmed')}
+            onClick={() => person && setSelected(person.id)}
+            className={'h-full min-h-24 w-full rounded-2xl border-2 p-3 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-default ' +
+              (person && shownWinner === person.id ? (feedback.winner ? pickResultStyle[feedback.winner]
+                : fight.status !== 'scheduled' ? 'border-slate-500 bg-slate-100 text-slate-950'
+                  : index === 0 ? 'border-[#ce1126] bg-red-50 text-slate-950' : 'border-[#006847] bg-emerald-50 text-slate-950')
+                : 'border-slate-100 bg-slate-50 text-slate-700')}>
+            <MmaFighterPortrait fighter={person} />
+            <span className="block text-sm font-black leading-snug">{person?.name || translate(lang, 'mmaFightCard.opponentToBeConfirmed')}</span>
+          </button>
+          <MmaPortraitCredit fighter={person} lang={lang} />
+        </div>)}
       </fieldset>
-      <div className="mt-2 grid grid-cols-2 gap-3">
-        <MmaPortraitCredit fighter={a} lang={lang} />
-        <MmaPortraitCredit fighter={b} lang={lang} />
-      </div>
       <div className="mt-5">
         <PredictionDistribution homeLabel={a?.name || 'TBA'} awayLabel={b?.name || 'TBA'}
           homePercent={community.homePercent} awayPercent={community.awayPercent} lang={lang} />
@@ -72,11 +91,12 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
       {methodEnabled && <div className="mt-4 space-y-3">
         <fieldset disabled={!open || busy} className="grid grid-cols-3 gap-2">
           <legend className="mb-2 text-xs font-bold text-slate-500">{translate(lang, 'mmaMethod.optional')}</legend>
-          {MMA_METHODS.map(method => <button key={method} type="button" aria-pressed={selectedMethod === method}
-            title={selectedMethod === method ? translate(lang, 'mmaMethod.clear') : undefined}
+          {MMA_METHODS.map(method => <button key={method} type="button" aria-pressed={shownMethod === method}
+            title={open && shownMethod === method ? translate(lang, 'mmaMethod.clear') : undefined}
             onClick={() => setSelectedMethod(current => current === method ? null : method)}
             className={'min-h-11 rounded-xl border-2 px-1.5 py-2 text-[11px] font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 disabled:cursor-default '
-              + (selectedMethod === method ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-100 bg-slate-50 text-slate-600')}>
+              + (shownMethod === method ? (feedback.method ? pickResultStyle[feedback.method] : 'border-slate-900 bg-slate-900 text-white')
+                : 'border-slate-100 bg-slate-50 text-slate-600')}>
             {methodLabel(method)}
           </button>)}
         </fieldset>
@@ -94,10 +114,11 @@ export function MmaFightCard({ fight, fighters, prediction, community, members, 
         {busy ? (translate(lang, "authScreen.saving")) : saved ? (translate(lang, "mmaFightCard.predictionSaved"))
           : prediction ? (translate(lang, "mmaFightCard.updatePrediction")) : (translate(lang, "mmaFightCard.savePrediction"))}
       </button> : <p className="mt-4 text-xs font-semibold text-slate-500">{translate(lang, "mmaFightCard.predictionsAreLocked")}</p>}
-      {prediction && fight.status !== 'scheduled' && <p className="mt-3 text-xs font-bold text-slate-500">
-        {translate(lang, "mmaFightCard.yourPick")}{fighters.get(prediction.predicted_winner_id)?.name || '—'}
-        {methodEnabled && prediction.predicted_method && ' · ' + methodLabel(prediction.predicted_method)}
-        {' · ' + prediction.points_earned + (translate(lang, "mmaFightCard.pts"))}
+      {prediction && fight.status !== 'scheduled' && <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-slate-500">
+        <span>{translate(lang, 'mmaFightCard.yourPick')}</span>
+        <MmaPickOutcome label={fighters.get(prediction.predicted_winner_id)?.name || '—'} mark={feedback.winner} lang={lang} />
+        {methodEnabled && prediction.predicted_method && <MmaPickOutcome label={methodLabel(prediction.predicted_method)} mark={feedback.method} lang={lang} />}
+        <span>{prediction.points_earned}{translate(lang, 'mmaFightCard.pts')}</span>
       </p>}
       {methodEnabled && validPick && prediction?.predicted_method && fight.status === 'finished' && fight.method_normalized == null
         && <p className="mt-2 text-xs text-slate-400">{translate(lang, 'mmaMethod.pendingResult')}</p>}

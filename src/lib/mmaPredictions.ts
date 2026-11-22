@@ -1,4 +1,22 @@
-import { MMA_METHODS, type MmaFight, type MmaPrediction } from './mma.ts';
+import { MMA_METHODS, mmaMethodGroup, type MmaFight, type MmaPrediction, type MmaRulesVersion } from './mma.ts';
+
+export type MmaPickMark = 'correct' | 'incorrect' | null;
+
+export function mmaPickFeedback(fight: MmaFight, pick: MmaPrediction | undefined, rules: MmaRulesVersion):
+  { winner: MmaPickMark; method: MmaPickMark } {
+  if (!pick || pick.fight_id !== fight.id || pick.lineup_version !== fight.lineup_version
+    || fight.status !== 'finished' || fight.winner_fighter_id === null
+    || fight.method_normalized === 'draw' || fight.method_normalized === 'no_contest') {
+    return { winner: null, method: null };
+  }
+
+  const method = mmaMethodGroup(fight.method_normalized);
+  return {
+    winner: pick.predicted_winner_id === fight.winner_fighter_id ? 'correct' : 'incorrect',
+    method: rules === 'mma-winner-method-v2' && pick.predicted_method && method
+      ? (pick.predicted_method === method ? 'correct' : 'incorrect') : null,
+  };
+}
 
 export function summarizeMmaPredictions(lobbyId: string, fight: MmaFight,
   predictions: readonly MmaPrediction[], activeMemberIds: ReadonlySet<string>) {

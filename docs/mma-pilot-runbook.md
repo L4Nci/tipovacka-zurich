@@ -137,8 +137,8 @@ Nevolá poskytovatele po hráčích ani lobby. Soubory jsou obsloužené z provi
 Commons CDN a ukládají se do běžné browser/CDN cache; vlastní Storage ani placené
 transformace nejsou potřeba. Neznámý host, neprůkazná licence nebo chybějící autor
 znamenají náhradní zobrazení. Známé CC BY/BY-SA, CC0 a public domain metadata se
-ověřují serverově i před vykreslením. Viditelný kredit pod daným bojovníkem uvádí
-autora, licenci, odkaz na původní soubor a označení CSS ořezu. Aplikace nemění
+ověřují serverově i před vykreslením. Kredit se otevře ikonou informací přímo
+u fotografie a uvádí autora, licenci, odkaz na původní soubor a označení CSS ořezu. Aplikace nemění
 originální obrázek a neposílá na CDN/API klíč ani referrer. API vrací pouze fotky
 z Commons, nikoli oficiální promo fotografie; podmínky §6 uvádějí pravidla kreditů.
 

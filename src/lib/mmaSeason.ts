@@ -1,6 +1,16 @@
 import { canPredictMmaFight, type MmaEvent, type MmaFight, type MmaPrediction } from './mma.ts';
 import type { MmaStanding } from './mmaLobbyData.ts';
 
+const hasMmaResultRow = (fight: MmaFight) => fight.status !== 'scheduled';
+
+export function mmaResultEvents(events: readonly MmaEvent[], fights: readonly MmaFight[]) {
+  const eventIds = new Set(fights.filter(hasMmaResultRow).map(fight => fight.tournament_id));
+  return events.filter(event => eventIds.has(event.tournament_id)).sort((a, b) =>
+    Number(b.status === 'completed') - Number(a.status === 'completed')
+    || Date.parse(b.starts_at) - Date.parse(a.starts_at)
+    || a.tournament_id.localeCompare(b.tournament_id));
+}
+
 export function filterMmaSeason(events: readonly MmaEvent[], fights: readonly MmaFight[], picks: readonly MmaPrediction[],
   eventId: string, filter: 'all' | 'missing' | 'results', now: number) {
   const eventById = new Map(events.map(event => [event.tournament_id, event]));
@@ -8,7 +18,7 @@ export function filterMmaSeason(events: readonly MmaEvent[], fights: readonly Mm
   return fights.filter(fight => {
     const event = eventById.get(fight.tournament_id);
     if (!event || (eventId !== 'all' && eventId !== event.tournament_id)) return false;
-    if (filter === 'results') return fight.status !== 'scheduled';
+    if (filter === 'results') return hasMmaResultRow(fight);
     if (filter === 'missing') return canPredictMmaFight(event, fight, now)
       && byFight.get(fight.id)?.lineup_version !== fight.lineup_version;
     return fight.status === 'scheduled' && !['completed', 'cancelled'].includes(event.status);

@@ -368,6 +368,8 @@ export const de: Record<MessageKey, string> = {
   "mmaFightCard.savePrediction": "Tipp speichern",
   "mmaFightCard.predictionsAreLocked": "Die Tipps sind gesperrt.",
   "mmaFightCard.yourPick": "Dein Tipp: ",
+  "mmaFightCard.correctPick": "Richtig",
+  "mmaFightCard.incorrectPick": "Falsch",
   "mmaFightCard.pts": " Pkt.",
   "mmaFightCard.hideOtherPicks": "Andere Tipps ausblenden",
   "mmaFightCard.showOtherPicks": "Andere Tipps anzeigen",
